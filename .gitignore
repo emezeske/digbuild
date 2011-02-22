@@ -1,0 +1,4 @@
+*.o
+.sconsign.dblite
+digbuild
+tags
