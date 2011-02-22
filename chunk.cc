@@ -10,24 +10,24 @@ Chunk::Chunk()
 {
 }
 
-void Chunk::add_block_to_column( const Vector2i column, const Block& block )
+void Chunk::add_block_to_column( const Vector2i index, const Block& block )
 {
-    assert( column[0] >= 0 );
-    assert( column[1] >= 0 );
-    assert( column[0] < BLOCKS_PER_EDGE );
-    assert( column[1] < BLOCKS_PER_EDGE );
+    assert( index[0] >= 0 );
+    assert( index[1] >= 0 );
+    assert( index[0] < BLOCKS_PER_EDGE );
+    assert( index[1] < BLOCKS_PER_EDGE );
 
     // TODO: Check for block intersections.
     // TODO: Ensure height-sorted order.
-    columns_[column[0]][column[1]].push_back( block );
+    columns_[index[0]][index[1]].push_back( block );
 }
 
-const BlockV& Chunk::get_column( const Vector2i column ) const
+const BlockV& Chunk::get_column( const Vector2i index ) const
 {
-    assert( column[0] >= 0 );
-    assert( column[1] >= 0 );
-    assert( column[0] < BLOCKS_PER_EDGE );
-    assert( column[1] < BLOCKS_PER_EDGE );
+    assert( index[0] >= 0 );
+    assert( index[1] >= 0 );
+    assert( index[0] < BLOCKS_PER_EDGE );
+    assert( index[1] < BLOCKS_PER_EDGE );
 
-    return columns_[column[0]][column[1]];
+    return columns_[index[0]][index[1]];
 }

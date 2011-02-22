@@ -10,9 +10,9 @@ struct Chunk
 
     Chunk();
 
-    void add_block_to_column( const Vector2i column, const Block& block );
+    void add_block_to_column( const Vector2i index, const Block& block );
 
-    const BlockV& get_column( const Vector2i column ) const;
+    const BlockV& get_column( const Vector2i index ) const;
 
 protected:
 
