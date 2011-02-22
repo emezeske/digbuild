@@ -44,7 +44,7 @@ void SDL_GL_Window::create_window()
         SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
         SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
         SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 8 );
-        SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 16 );
+        SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
         SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
 
         // SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 ); // TODO: Doesn't seem to work.

@@ -15,6 +15,27 @@
 
 namespace {
 
+// TODO: Just using simple colors for materials right now, for testing.  Add textures,
+//       bump maps, specular maps, magic, etc.
+struct MaterialInfo
+{
+    GLfloat r_, g_, b_;
+};
+
+// FIXME: This is pretty nasty -- the elements of this lookup array have to be in the same order
+//        that the BlockMaterial enumerations are defined.  But it's fast, and lookups into this
+//        table are a per-block operation...
+//
+//        Could probably get the same performance with a constant std::vector, and correct
+//        BlockMaterial mappings could be ensured.  Do that.
+MaterialInfo MATERIAL_INFO[] =
+{
+    { 0.00f, 0.60f, 0.30f }, // BLOCK_MATERIAL_GRASS
+    { 0.40f, 0.20f, 0.00f }, // BLOCK_MATERIAL_DIRT
+    { 0.84f, 0.42f, 0.00f }, // BLOCK_MATERIAL_CLAY
+    { 0.64f, 0.64f, 0.64f }  // BLOCK_MATERIAL_STONE
+};
+
 const Vector3f
     NORTH_NORMAL(  0,  0,  1 ),
     SOUTH_NORMAL(  0,  0, -1 ),
@@ -35,15 +56,17 @@ enum FaceDirection
 
 struct BlockVertex
 {
-    BlockVertex( const Vector3f position, const Vector3f normal ) :
+    BlockVertex( const Vector3f position, const Vector3f normal, const MaterialInfo& material_info ) :
         x_( position[0] ), y_( position[1] ), z_( position[2] ),
-        nx_( normal[0] ), ny_( normal[1] ), nz_( normal[2] )
+        nx_( normal[0] ), ny_( normal[1] ), nz_( normal[2] ),
+        r_( material_info.r_ ), g_( material_info.g_ ), b_( material_info.b_ )
     {
 
     }
 
     GLfloat x_, y_, z_;
     GLfloat nx_, ny_, nz_;
+    GLfloat r_, g_, b_;
 } __attribute__((packed));
 
 typedef std::vector<BlockVertex> BlockVertexV;
@@ -115,6 +138,7 @@ void add_visible_block_vertex(
     const Vector2i column_world_position,
     uint8_t block_bottom, 
     uint8_t block_top, 
+    const BlockMaterial material,
     const FaceDirection direction,
     BlockVertexV& vertices
 )
@@ -126,7 +150,10 @@ void add_visible_block_vertex(
     );
     const Scalar height = Scalar( block_top - block_bottom );
 
-    #define V( a, b, c, n ) do { vertices.push_back( BlockVertex( block_world_position + Vector3f( a, b, c ), n ) ); } while ( false )
+    assert( material >= 0 && material < int( sizeof( MATERIAL_INFO ) / sizeof( MaterialInfo ) ) );
+    const MaterialInfo& material_info = MATERIAL_INFO[material];
+
+    #define V( x, y, z, n ) do { vertices.push_back( BlockVertex( block_world_position + Vector3f( x, y, z ), n, material_info ) ); } while ( false )
     switch ( direction )
     {
         case FACE_DIRECTION_NORTH:
@@ -179,15 +206,15 @@ void add_visible_block_vertex(
 
 void add_visible_block_faces(
     const Vector2i column_world_position,
-    const uint8_t block_bottom,
-    const uint8_t block_top,
+    const Block& block,
     BlockV::const_iterator adjacent_it,
     const BlockV::const_iterator adjacent_end,
     const FaceDirection direction,
     BlockVertexV& vertices
 )
 {
-    uint8_t sliding_bottom = block_bottom;
+    const uint8_t block_top = uint8_t( block.position_ + block.height_ );
+    uint8_t sliding_bottom = block.position_;
 
     while ( adjacent_it != adjacent_end )
     {
@@ -199,9 +226,11 @@ void add_visible_block_faces(
 
         if ( adjacent_bottom < block_top && adjacent_top > sliding_bottom )
         {
-            if ( adjacent_bottom > sliding_bottom )
+            // Create individual faces for each unit block, instead of one big face for the whole
+            // block, to avoid the T-junctions that might otherwise occur (and cause seams).
+            for ( uint8_t b = sliding_bottom; b < adjacent_bottom; ++b )
             {
-                add_visible_block_vertex( column_world_position, sliding_bottom, adjacent_bottom, direction, vertices );
+                add_visible_block_vertex( column_world_position, b, uint8_t( b + 1 ), block.material(), direction, vertices );
             }
 
             if ( adjacent_top < block_top )
@@ -222,9 +251,9 @@ void add_visible_block_faces(
         ++adjacent_it;
     }
 
-    if ( sliding_bottom < block_top )
+    for ( uint8_t b = sliding_bottom; b < block_top; ++b )
     {
-        add_visible_block_vertex( column_world_position, sliding_bottom, block_top, direction, vertices );
+        add_visible_block_vertex( column_world_position, b, uint8_t( b + 1 ), block.material(), direction, vertices );
     }
 }
 
@@ -303,10 +332,6 @@ void Renderer::render( const RegionV& regions )
     glCullFace( GL_BACK );
     glEnable( GL_CULL_FACE );
 
-    // TODO: The algorithm below creates T junctions, which cause seams, which is bad.  A simple
-    //       solution would be to generate a face for every Block.  I'm not yet sure how many faces
-    //       that would add -- if it doesn't add many, it's probably a fine solution.
-
     for ( RegionV::const_iterator region_it = regions.begin(); region_it != regions.end(); ++region_it )
     {
         for ( int chunk_x = 0; chunk_x < Region::CHUNKS_PER_EDGE; ++chunk_x )
@@ -345,7 +370,7 @@ void Renderer::render_chunk(
     if ( !vertex_buffer.initialized_ )
     {
         BlockVertexV vertices;
-        vertices.reserve( Chunk::BLOCKS_PER_EDGE * Chunk::BLOCKS_PER_EDGE * 4 ); // TODO: Refine this estimate.
+        vertices.reserve( Chunk::BLOCKS_PER_EDGE * Chunk::BLOCKS_PER_EDGE * 4 ); // TODO: Measure & refine this estimate.
 
         for ( int cx = 0; cx < Chunk::BLOCKS_PER_EDGE; ++cx )
         {
@@ -380,14 +405,14 @@ void Renderer::render_chunk(
                 {
                     assert( block_it->position_ + block_it->height_ <= Block::MAX_HEIGHT );
 
+                    add_visible_block_faces( column_world_position, *block_it, north_it, north_end, FACE_DIRECTION_NORTH, vertices );
+                    add_visible_block_faces( column_world_position, *block_it, south_it, south_end, FACE_DIRECTION_SOUTH, vertices );
+                    add_visible_block_faces( column_world_position, *block_it, east_it,  east_end,  FACE_DIRECTION_EAST,  vertices );
+                    add_visible_block_faces( column_world_position, *block_it, west_it,  west_end,  FACE_DIRECTION_WEST,  vertices );
+
                     const uint8_t
                         bottom = block_it->position_,
                         top = uint8_t( block_it->position_ + block_it->height_ );
-
-                    add_visible_block_faces( column_world_position, bottom, top, north_it, north_end, FACE_DIRECTION_NORTH, vertices );
-                    add_visible_block_faces( column_world_position, bottom, top, south_it, south_end, FACE_DIRECTION_SOUTH, vertices );
-                    add_visible_block_faces( column_world_position, bottom, top, east_it,  east_end,  FACE_DIRECTION_EAST,  vertices );
-                    add_visible_block_faces( column_world_position, bottom, top, west_it,  west_end,  FACE_DIRECTION_WEST,  vertices );
 
                     bool
                         bottom_cap = false,
@@ -419,10 +444,10 @@ void Renderer::render_chunk(
                     else top_cap = true;
 
                     if ( bottom_cap )
-                        add_visible_block_vertex( column_world_position, bottom, bottom, FACE_DIRECTION_DOWN, vertices ); 
+                        add_visible_block_vertex( column_world_position, bottom, bottom, block_it->material(), FACE_DIRECTION_DOWN, vertices ); 
 
                     if ( top_cap )
-                        add_visible_block_vertex( column_world_position, top, top, FACE_DIRECTION_UP, vertices ); 
+                        add_visible_block_vertex( column_world_position, top, top, block_it->material(), FACE_DIRECTION_UP, vertices ); 
                 }
             }
         }
@@ -447,12 +472,15 @@ void Renderer::render_chunk(
 
     glEnableClientState( GL_VERTEX_ARRAY );
     glEnableClientState( GL_NORMAL_ARRAY );
+    glEnableClientState( GL_COLOR_ARRAY );
 
     glVertexPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 0 ) );
     glNormalPointer( GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 12 ) );
+    glColorPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
 
     glDrawElements( GL_QUADS, vertex_buffer.vertex_count_, GL_UNSIGNED_INT, 0 );
 
+    glDisableClientState( GL_COLOR_ARRAY );
     glDisableClientState( GL_NORMAL_ARRAY );
     glDisableClientState( GL_VERTEX_ARRAY );
 }

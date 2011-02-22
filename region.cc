@@ -178,12 +178,18 @@ Region::Region( const uint64_t world_seed, const Vector2i position ) :
             height = std::max( height, Scalar( Block::MIN_HEIGHT ) );
             height = std::min( height, Scalar( Block::MAX_HEIGHT ) );
 
-            const Block block( 0, uint8_t( gmtl::Math::round( height * 0.25 ) ) );
+            Chunk& chunk = chunks_[x / Chunk::BLOCKS_PER_EDGE][z / Chunk::BLOCKS_PER_EDGE];
             const Vector2i column( x % Chunk::BLOCKS_PER_EDGE, z % Chunk::BLOCKS_PER_EDGE );
-            chunks_[x / Chunk::BLOCKS_PER_EDGE][z / Chunk::BLOCKS_PER_EDGE].add_block_to_column( column, block );
 
-            const Block block2( uint8_t( gmtl::Math::round( height * 0.75 ) ), uint8_t( gmtl::Math::round( height ) ) );
-            chunks_[x / Chunk::BLOCKS_PER_EDGE][z / Chunk::BLOCKS_PER_EDGE].add_block_to_column( column, block2 );
+            const Block block( 0, uint8_t( gmtl::Math::round( height * 0.25 ) ), BLOCK_MATERIAL_STONE );
+            const Block block2( uint8_t( 32 + gmtl::Math::round( height ) ), uint8_t( 16 ), BLOCK_MATERIAL_CLAY );
+            const Block block3( uint8_t( 48 + gmtl::Math::round( height ) ), uint8_t( 16 ), BLOCK_MATERIAL_DIRT );
+            const Block block4( uint8_t( 64 + gmtl::Math::round( height ) ), uint8_t( 16 ), BLOCK_MATERIAL_GRASS );
+
+            chunk.add_block_to_column( column, block );
+            chunk.add_block_to_column( column, block2 );
+            chunk.add_block_to_column( column, block3 );
+            chunk.add_block_to_column( column, block4 );
         }
     }
 }
