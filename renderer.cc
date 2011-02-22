@@ -33,7 +33,8 @@ MaterialInfo MATERIAL_INFO[] =
     { 0.00f, 0.60f, 0.30f }, // BLOCK_MATERIAL_GRASS
     { 0.40f, 0.20f, 0.00f }, // BLOCK_MATERIAL_DIRT
     { 0.84f, 0.42f, 0.00f }, // BLOCK_MATERIAL_CLAY
-    { 0.64f, 0.64f, 0.64f }  // BLOCK_MATERIAL_STONE
+    { 0.64f, 0.64f, 0.64f }, // BLOCK_MATERIAL_STONE
+    { 0.34f, 0.34f, 0.34f }  // BLOCK_MATERIAL_BEDROCK
 };
 
 const Vector3f
@@ -71,6 +72,7 @@ struct BlockVertex
 
 typedef std::vector<BlockVertex> BlockVertexV;
 
+// TODO: Consider using a position_ map for the regions instead of a vector.
 RegionV::const_iterator find_region( const RegionV& regions, const Vector2i position )
 {
     for ( RegionV::const_iterator region_it = regions.begin(); region_it != regions.end(); ++region_it )
@@ -84,51 +86,55 @@ RegionV::const_iterator find_region( const RegionV& regions, const Vector2i posi
     return regions.end();
 }
 
+// TODO: Now that all position coordinates are global and use block units, it might be possible
+//       to make these find_neighboring_* functions less bizarre.
+
 const Chunk* find_neighboring_chunk(
     const RegionV& regions,
     const Region& region,
-    const Vector2i& chunk_position,
+    const Vector2i& chunk_index,
     const Vector2i& neighbor_offset
 )
 {
-    Vector2i neighbor_position = chunk_position + neighbor_offset;
+    Vector2i neighbor_index = chunk_index + neighbor_offset;
 
-    if ( neighbor_position[0] >= 0 &&
-         neighbor_position[1] >= 0 &&
-         neighbor_position[0] < Region::CHUNKS_PER_EDGE &&
-         neighbor_position[1] < Region::CHUNKS_PER_EDGE )
+    if ( neighbor_index[0] >= 0 &&
+         neighbor_index[1] >= 0 &&
+         neighbor_index[0] < Region::CHUNKS_PER_EDGE &&
+         neighbor_index[1] < Region::CHUNKS_PER_EDGE )
     {
-        return &region.get_chunk( neighbor_position );
+        return &region.get_chunk( neighbor_index );
     }
     else
     {
-        RegionV::const_iterator region_it = find_region( regions, region.position_ + neighbor_offset );
+        const Vector2i neighbor_region_position = region.position_  + neighbor_offset * int( Region::BLOCKS_PER_EDGE );
+        RegionV::const_iterator region_it = find_region( regions, neighbor_region_position );
 
         if ( region_it != regions.end() )
         {
-            neighbor_position[0] = ( Region::CHUNKS_PER_EDGE + neighbor_position[0] ) % Region::CHUNKS_PER_EDGE;
-            neighbor_position[1] = ( Region::CHUNKS_PER_EDGE + neighbor_position[1] ) % Region::CHUNKS_PER_EDGE;
-            return &region_it->get_chunk( neighbor_position );
+            neighbor_index[0] = ( Region::CHUNKS_PER_EDGE + neighbor_index[0] ) % Region::CHUNKS_PER_EDGE;
+            neighbor_index[1] = ( Region::CHUNKS_PER_EDGE + neighbor_index[1] ) % Region::CHUNKS_PER_EDGE;
+            return &region_it->get_chunk( neighbor_index );
         }
     }
 
     return 0;
 }
 
-const BlockV* find_neighboring_column( const Chunk& chunk, const Chunk* neighbor_chunk, Vector2i neighbor_position )
+const BlockV* find_neighboring_column( const Chunk& chunk, const Chunk* neighbor_chunk, Vector2i neighbor_index )
 {
-    if ( neighbor_position[0] >= 0 &&
-         neighbor_position[1] >= 0 &&
-         neighbor_position[0] < Chunk::BLOCKS_PER_EDGE &&
-         neighbor_position[1] < Chunk::BLOCKS_PER_EDGE )
+    if ( neighbor_index[0] >= 0 &&
+         neighbor_index[1] >= 0 &&
+         neighbor_index[0] < Chunk::BLOCKS_PER_EDGE &&
+         neighbor_index[1] < Chunk::BLOCKS_PER_EDGE )
     {
-        return &chunk.get_column( neighbor_position );
+        return &chunk.get_column( neighbor_index );
     }
     else if ( neighbor_chunk )
     {
-        neighbor_position[0] = ( Chunk::BLOCKS_PER_EDGE + neighbor_position[0] ) % Chunk::BLOCKS_PER_EDGE;
-        neighbor_position[1] = ( Chunk::BLOCKS_PER_EDGE + neighbor_position[1] ) % Chunk::BLOCKS_PER_EDGE;
-        return &neighbor_chunk->get_column( neighbor_position );
+        neighbor_index[0] = ( Chunk::BLOCKS_PER_EDGE + neighbor_index[0] ) % Chunk::BLOCKS_PER_EDGE;
+        neighbor_index[1] = ( Chunk::BLOCKS_PER_EDGE + neighbor_index[1] ) % Chunk::BLOCKS_PER_EDGE;
+        return &neighbor_chunk->get_column( neighbor_index );
     }
     
     return 0;
@@ -213,37 +219,30 @@ void add_visible_block_faces(
     BlockVertexV& vertices
 )
 {
-    const uint8_t block_top = uint8_t( block.position_ + block.height_ );
-    uint8_t sliding_bottom = block.position_;
+    uint8_t sliding_bottom = block.bottom_;
 
     while ( adjacent_it != adjacent_end )
     {
-        assert( adjacent_it->position_ + adjacent_it->height_ <= Block::MAX_HEIGHT );
-
-        const uint8_t
-            adjacent_bottom = adjacent_it->position_,
-            adjacent_top = uint8_t( adjacent_it->position_ + adjacent_it->height_ );
-
-        if ( adjacent_bottom < block_top && adjacent_top > sliding_bottom )
+        if ( adjacent_it->bottom_ < block.top_ && adjacent_it->top_ > sliding_bottom )
         {
             // Create individual faces for each unit block, instead of one big face for the whole
             // block, to avoid the T-junctions that might otherwise occur (and cause seams).
-            for ( uint8_t b = sliding_bottom; b < adjacent_bottom; ++b )
+            for ( uint8_t b = sliding_bottom; b < adjacent_it->bottom_; ++b )
             {
                 add_visible_block_vertex( column_world_position, b, uint8_t( b + 1 ), block.material(), direction, vertices );
             }
 
-            if ( adjacent_top < block_top )
+            if ( adjacent_it->top_ < block.top_ )
             {
-                sliding_bottom = adjacent_top;
+                sliding_bottom = adjacent_it->top_;
             }
             else
             {
-                sliding_bottom = block_top;
+                sliding_bottom = block.top_;
                 break;
             }
         }
-        else if ( adjacent_bottom > block_top )
+        else if ( adjacent_it->bottom_ > block.top_ )
         {
             break;
         }
@@ -251,7 +250,7 @@ void add_visible_block_faces(
         ++adjacent_it;
     }
 
-    for ( uint8_t b = sliding_bottom; b < block_top; ++b )
+    for ( uint8_t b = sliding_bottom; b < block.top_; ++b )
     {
         add_visible_block_vertex( column_world_position, b, uint8_t( b + 1 ), block.material(), direction, vertices );
     }
@@ -289,32 +288,21 @@ void VertexBuffer::bind()
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for Renderer::GlobalChunkPosition:
+// Function definitions for Renderer::ComparableChunkPosition:
 //////////////////////////////////////////////////////////////////////////////////
 
-Renderer::GlobalChunkPosition::GlobalChunkPosition( const Vector2i& region_position, const Vector2i& chunk_position ) :
-    region_position_( region_position ),
-    chunk_position_( chunk_position )
+Renderer::ComparableChunkPosition::ComparableChunkPosition( const Vector2i& position ) :
+    position_( position )
 {
 }
 
-bool Renderer::GlobalChunkPosition::operator<( const Renderer::GlobalChunkPosition& other ) const
+bool Renderer::ComparableChunkPosition::operator<( const Renderer::ComparableChunkPosition& other ) const
 {
-    // TODO FIXME: This is super ugly.
-
-    if ( region_position_[0] < other.region_position_[0] )
+    if ( position_[0] < other.position_[0] )
         return true;
-    if ( region_position_[0] > other.region_position_[0] )
+    if ( position_[0] > other.position_[0] )
         return false;
-    if ( region_position_[1] < other.region_position_[1] )
-        return true;
-    if ( region_position_[1] > other.region_position_[1] )
-        return false;
-    if ( chunk_position_[0] < other.chunk_position_[0] )
-        return true;
-    if ( chunk_position_[0] > other.chunk_position_[0] )
-        return false;
-    if ( chunk_position_[1] < other.chunk_position_[1] )
+    if ( position_[1] < other.position_[1] )
         return true;
     return false;
 }
@@ -338,22 +326,22 @@ void Renderer::render( const RegionV& regions )
         {
             for ( int chunk_z = 0; chunk_z < Region::CHUNKS_PER_EDGE; ++chunk_z )
             {
-                const Vector2i chunk_position( chunk_x, chunk_z );
-                const Chunk& chunk = region_it->get_chunk( chunk_position );
+                const Vector2i chunk_index( chunk_x, chunk_z );
+                const Chunk& chunk = region_it->get_chunk( chunk_index );
 
-                const Chunk* chunk_north = find_neighboring_chunk( regions, *region_it, chunk_position, Vector2i(  0,  1 ) );
-                const Chunk* chunk_south = find_neighboring_chunk( regions, *region_it, chunk_position, Vector2i(  0, -1 ) ); 
-                const Chunk* chunk_east  = find_neighboring_chunk( regions, *region_it, chunk_position, Vector2i(  1,  0 ) );
-                const Chunk* chunk_west  = find_neighboring_chunk( regions, *region_it, chunk_position, Vector2i( -1,  0 ) );
+                const Chunk* chunk_north = find_neighboring_chunk( regions, *region_it, chunk_index, Vector2i(  0,  1 ) );
+                const Chunk* chunk_south = find_neighboring_chunk( regions, *region_it, chunk_index, Vector2i(  0, -1 ) ); 
+                const Chunk* chunk_east  = find_neighboring_chunk( regions, *region_it, chunk_index, Vector2i(  1,  0 ) );
+                const Chunk* chunk_west  = find_neighboring_chunk( regions, *region_it, chunk_index, Vector2i( -1,  0 ) );
 
-                render_chunk( region_it->position_, chunk_position, chunk, chunk_north, chunk_south, chunk_east, chunk_west );
+                const Vector2i chunk_position = region_it->position_ + Vector2i( chunk_x * Chunk::BLOCKS_PER_EDGE, chunk_z * Chunk::BLOCKS_PER_EDGE );
+                render_chunk( chunk_position, chunk, chunk_north, chunk_south, chunk_east, chunk_west );
             }
         }
     }
 }
 
 void Renderer::render_chunk(
-    const Vector2i& region_position,
     const Vector2i& chunk_position,
     const Chunk& chunk,
     const Chunk* chunk_north,
@@ -364,8 +352,7 @@ void Renderer::render_chunk(
 {
     // TODO: Decompose this function a bit more.
 
-    const GlobalChunkPosition global_position( region_position, chunk_position );
-    VertexBuffer& vertex_buffer = chunk_vbos_[global_position];
+    VertexBuffer& vertex_buffer = chunk_vbos_[ComparableChunkPosition( chunk_position )];
 
     if ( !vertex_buffer.initialized_ )
     {
@@ -396,23 +383,14 @@ void Renderer::render_chunk(
                     west_it   = column_west  ? column_west->begin()  : empty.end(),
                     west_end  = column_west  ? column_west->end()    : empty.end();
 
-                const Vector2i column_world_position(
-                    region_position[0] * Region::BLOCKS_PER_EDGE + chunk_position[0] * Chunk::BLOCKS_PER_EDGE + cx,
-                    region_position[1] * Region::BLOCKS_PER_EDGE + chunk_position[1] * Chunk::BLOCKS_PER_EDGE + cz
-                );
+                const Vector2i column_world_position( chunk_position[0] + cx, chunk_position[1] + cz );
 
                 for ( BlockV::const_iterator block_it = column.begin(); block_it < column.end(); ++block_it )
                 {
-                    assert( block_it->position_ + block_it->height_ <= Block::MAX_HEIGHT );
-
                     add_visible_block_faces( column_world_position, *block_it, north_it, north_end, FACE_DIRECTION_NORTH, vertices );
                     add_visible_block_faces( column_world_position, *block_it, south_it, south_end, FACE_DIRECTION_SOUTH, vertices );
                     add_visible_block_faces( column_world_position, *block_it, east_it,  east_end,  FACE_DIRECTION_EAST,  vertices );
                     add_visible_block_faces( column_world_position, *block_it, west_it,  west_end,  FACE_DIRECTION_WEST,  vertices );
-
-                    const uint8_t
-                        bottom = block_it->position_,
-                        top = uint8_t( block_it->position_ + block_it->height_ );
 
                     bool
                         bottom_cap = false,
@@ -422,12 +400,12 @@ void Renderer::render_chunk(
                     {
                         const BlockV::const_iterator lower_block = block_it - 1;
 
-                        if ( bottom > lower_block->position_ + lower_block->height_ )
+                        if ( block_it->bottom_ > lower_block->top_ )
                         {
                             bottom_cap = true;
                         }
                     }
-                    else if ( bottom != 0 ) // Don't bother drawing bottom caps for the bottom-most blocks.
+                    else if ( block_it->bottom_ != 0 ) // Don't bother drawing bottom caps for the bottom-most blocks.
                     {
                         bottom_cap = true;
                     }
@@ -436,7 +414,7 @@ void Renderer::render_chunk(
                     {
                         const BlockV::const_iterator upper_block = block_it + 1;
 
-                        if ( top < upper_block->position_ )
+                        if ( block_it->top_ < upper_block->bottom_ )
                         {
                             top_cap = true;
                         }
@@ -444,10 +422,10 @@ void Renderer::render_chunk(
                     else top_cap = true;
 
                     if ( bottom_cap )
-                        add_visible_block_vertex( column_world_position, bottom, bottom, block_it->material(), FACE_DIRECTION_DOWN, vertices ); 
+                        add_visible_block_vertex( column_world_position, block_it->bottom_, block_it->bottom_, block_it->material(), FACE_DIRECTION_DOWN, vertices ); 
 
                     if ( top_cap )
-                        add_visible_block_vertex( column_world_position, top, top, block_it->material(), FACE_DIRECTION_UP, vertices ); 
+                        add_visible_block_vertex( column_world_position, block_it->top_, block_it->top_, block_it->material(), FACE_DIRECTION_UP, vertices ); 
                 }
             }
         }

@@ -33,7 +33,6 @@ struct Renderer
 protected:
 
     void render_chunk(
-        const Vector2i& region_position,
         const Vector2i& chunk_position,
         const Chunk& chunk,
         const Chunk* chunk_north,
@@ -42,18 +41,16 @@ protected:
         const Chunk* chunk_west
     );
 
-    struct GlobalChunkPosition
+    struct ComparableChunkPosition
     {
-        GlobalChunkPosition( const Vector2i& region_position, const Vector2i& chunk_position );
+        ComparableChunkPosition( const Vector2i& position );
 
-        bool operator<( const GlobalChunkPosition& other ) const; 
+        bool operator<( const ComparableChunkPosition& other ) const; 
 
-        const Vector2i
-            region_position_,
-            chunk_position_;
+        const Vector2i position_;
     };
 
-    typedef std::map<GlobalChunkPosition, VertexBuffer> ChunkVertexBufferMap;
+    typedef std::map<ComparableChunkPosition, VertexBuffer> ChunkVertexBufferMap;
 
     ChunkVertexBufferMap chunk_vbos_;
 };

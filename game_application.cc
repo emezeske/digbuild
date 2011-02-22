@@ -55,7 +55,7 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     {
         for ( int y = 0; y < 8; ++y )
         {
-            regions_.push_back( Region( world_seed, Vector2i( x, y ) ) );
+            regions_.push_back( Region( world_seed, Vector2i( x * Region::BLOCKS_PER_EDGE, y * Region::BLOCKS_PER_EDGE ) ) );
         }
     }
 }

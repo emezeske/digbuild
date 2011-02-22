@@ -7,17 +7,6 @@
 #include "chunk.h"
 #include "math.h"
 
-struct RegionCorner
-{
-    RegionCorner( const uint64_t world_seed, const Vector2i position );
-
-    Scalar
-        height_,
-        dx_,
-        dz_,
-        dxz_;
-};
-
 struct Region
 {
     enum
@@ -28,19 +17,13 @@ struct Region
 
     Region( const uint64_t world_seed, const Vector2i position );
 
-    const Chunk& get_chunk( const Vector2i chunk ) const;
+    const Chunk& get_chunk( const Vector2i index ) const;
 
     Vector2i position_;
 
 protected:
 
     Chunk chunks_[CHUNKS_PER_EDGE][CHUNKS_PER_EDGE];
-
-    RegionCorner
-        corner_a_,
-        corner_b_,
-        corner_c_,
-        corner_d_;
 };
 
 typedef std::vector<Region> RegionV;
