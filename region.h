@@ -15,7 +15,7 @@ struct Region
         CHUNKS_PER_EDGE = BLOCKS_PER_EDGE / Chunk::BLOCKS_PER_EDGE
     };
 
-    Region( const uint64_t world_seed, const Vector2i position );
+    Region( const uint64_t base_seed, const Vector2i position );
 
     const Chunk& get_chunk( const Vector2i index ) const;
 

@@ -39,22 +39,26 @@ gmtl::Matrix<Scalar, 16, 16> make_a_inverse()
 
 const gmtl::Matrix<Scalar, 16, 16> A_INVERSE = make_a_inverse();
 
-uint64_t get_seed_for_coordinates( const uint64_t world_seed, const Vector2i position )
+uint64_t get_seed_for_coordinates( const uint64_t base_seed, const Vector2i position )
 {
-    return world_seed ^ ( position[0] * 91387 + position[1] * 75181 ); // TODO: Are these prime numbers good?
+    return base_seed ^ ( position[0] * 91387 + position[1] * 75181 ); // TODO: Are these prime numbers good?
 }
 
 struct BicubicPatchCorner
 {
-    BicubicPatchCorner( const uint64_t world_seed, const Vector2i position )
+    BicubicPatchCorner( const uint64_t base_seed, const Vector2i& position, const BicubicPatchCornerFeatures& features )
     {
-        boost::rand48 generator( get_seed_for_coordinates( world_seed, position ) );
-        boost::uniform_real<> distribution( 1, 128 );
-        boost::variate_generator<boost::rand48&, boost::uniform_real<> > random( generator, distribution );
-        height_ = Scalar( random() );
-        dx_ = Scalar( random() );
-        dz_ = Scalar( random() );
-        dxz_ = Scalar( random() );
+        boost::rand48 generator( get_seed_for_coordinates( base_seed, position ) );
+        boost::variate_generator<boost::rand48&, boost::uniform_real<> >
+            height_random( generator, boost::uniform_real<>( features.height_range_[0], features.height_range_[1] ) ),
+            dx_random    ( generator, boost::uniform_real<>( features.dx_range_[0],     features.dx_range_[1]     ) ),
+            dz_random    ( generator, boost::uniform_real<>( features.dz_range_[0],     features.dz_range_[1]     ) ),
+            dxz_random   ( generator, boost::uniform_real<>( features.dxz_range_[0],    features.dxz_range_[1]    ) );
+
+        height_ = Scalar( height_random() );
+        dx_ = Scalar( dx_random() );
+        dz_ = Scalar( dz_random() );
+        dxz_ = Scalar( dxz_random() );
     }
 
     Scalar
@@ -67,16 +71,58 @@ struct BicubicPatchCorner
 } // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for BicubicPatchCornerFeatures:
+//////////////////////////////////////////////////////////////////////////////////
+
+BicubicPatchCornerFeatures::BicubicPatchCornerFeatures
+(
+    const Vector2f& height_range,
+    const Vector2f& dx_range,
+    const Vector2f& dz_range,
+    const Vector2f& dxz_range
+) :
+    height_range_( height_range ),
+    dx_range_( dx_range ),
+    dz_range_( dz_range ),
+    dxz_range_( dxz_range )
+{
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for BicubicPatchFeatures:
+//////////////////////////////////////////////////////////////////////////////////
+
+BicubicPatchFeatures::BicubicPatchFeatures
+(
+    const BicubicPatchCornerFeatures features_ll,
+    const BicubicPatchCornerFeatures features_lr,
+    const BicubicPatchCornerFeatures features_ul,
+    const BicubicPatchCornerFeatures features_ur
+) :
+    features_ll_( features_ll ),
+    features_lr_( features_lr ),
+    features_ul_( features_ul ),
+    features_ur_( features_ur )
+{
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for BicubicPatch:
 //////////////////////////////////////////////////////////////////////////////////
 
-BicubicPatch::BicubicPatch( const uint64_t world_seed, const Vector2i position, const Vector2i size )
+BicubicPatch::BicubicPatch
+(
+    const uint64_t base_seed,
+    const Vector2i position,
+    const Vector2i size,
+    const BicubicPatchFeatures& features
+)
 {
     const BicubicPatchCorner
-        corner_a( world_seed, position + Vector2i( 0,       0       ) ),
-        corner_b( world_seed, position + Vector2i( size[0], 0       ) ),
-        corner_c( world_seed, position + Vector2i( 0,       size[1] ) ),
-        corner_d( world_seed, position + Vector2i( size[0], size[1] ) );
+        corner_ll( base_seed, position + Vector2i( 0,       0       ), features.features_ll_ ),
+        corner_lr( base_seed, position + Vector2i( size[0], 0       ), features.features_lr_ ),
+        corner_ul( base_seed, position + Vector2i( 0,       size[1] ), features.features_ul_ ),
+        corner_ur( base_seed, position + Vector2i( size[0], size[1] ), features.features_ur_ );
 
     // Ultimately, to determine the coefficients for the bicubic equation, we use the surface
     // equations P(0,0), P(1,0), P(1,1), and P(0,1) (and similarly, their derivatives in both
@@ -88,10 +134,10 @@ BicubicPatch::BicubicPatch( const uint64_t world_seed, const Vector2i position, 
 
     const float x_data[] =
     {
-        corner_a.height_, corner_b.height_, corner_c.height_, corner_d.height_,
-        corner_a.dx_, corner_b.dx_, corner_c.dx_, corner_d.dx_,
-        corner_a.dz_, corner_b.dz_, corner_c.dz_, corner_d.dz_,
-        corner_a.dxz_, corner_b.dxz_, corner_c.dxz_, corner_d.dxz_
+        corner_ll.height_, corner_lr.height_, corner_ul.height_, corner_ur.height_,
+        corner_ll.dx_,     corner_lr.dx_,     corner_ul.dx_,     corner_ur.dx_,
+        corner_ll.dz_,     corner_lr.dz_,     corner_ul.dz_,     corner_ur.dz_,
+        corner_ll.dxz_,    corner_lr.dxz_,    corner_ul.dxz_,    corner_ur.dxz_
     };
 
     gmtl::Matrix<Scalar, 16, 1> x;

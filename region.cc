@@ -7,10 +7,44 @@
 // Function definitions for Region:
 //////////////////////////////////////////////////////////////////////////////////
 
-Region::Region( const uint64_t world_seed, const Vector2i position ) :
+Region::Region( const uint64_t base_seed, const Vector2i position ) :
     position_( position )
 {
-    const BicubicPatch fundamental_patch( world_seed, position_, Vector2i( BLOCKS_PER_EDGE, BLOCKS_PER_EDGE ) );
+    // TODO: Clean this up; lots of weird stuff here just for testing.
+
+    const BicubicPatchCornerFeatures fundamental_corner_features
+    (
+        Vector2f( 0.0f, 128.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f )
+    );
+
+    const BicubicPatchFeatures fundamental_features
+    (
+        fundamental_corner_features,
+        fundamental_corner_features,
+        fundamental_corner_features,
+        fundamental_corner_features
+    );
+
+    const BicubicPatchCornerFeatures octave_corner_features
+    (
+        Vector2f( 0.0f, 32.0f ),
+        Vector2f( -32.0f, 32.0f ),
+        Vector2f( -32.0f, 32.0f ),
+        Vector2f( -32.0f, 32.0f )
+    );
+
+    const BicubicPatchFeatures octave_features
+    (
+        octave_corner_features,
+        octave_corner_features,
+        octave_corner_features,
+        octave_corner_features
+    );
+
+    const BicubicPatch fundamental_patch( base_seed, position_, Vector2i( BLOCKS_PER_EDGE, BLOCKS_PER_EDGE ), fundamental_features );
 
     const int octave_harmonic = 2;
     const int octave_edge = BLOCKS_PER_EDGE / octave_harmonic;
@@ -20,13 +54,15 @@ Region::Region( const uint64_t world_seed, const Vector2i position ) :
         // TODO: Somehow move the ultimate seeds being used here into a different space
         //       than those used for the fundamental patch.  Otherwise, the corners shared
         //       by the fundamental and octave patches will have the same attributes (boring).
+        //
+        //       FIXME: using base_seed * 3547 for now, but I'm not sure if I like it
         {
-            BicubicPatch( world_seed, position_ + Vector2i( 0, 0           ), octave_size ),
-            BicubicPatch( world_seed, position_ + Vector2i( 0, octave_edge ), octave_size ),
+            BicubicPatch( base_seed * 3547, position_ + Vector2i( 0, 0           ), octave_size, octave_features ),
+            BicubicPatch( base_seed * 3547, position_ + Vector2i( 0, octave_edge ), octave_size, octave_features ),
         },
         {
-            BicubicPatch( world_seed, position_ + Vector2i( octave_edge, 0           ), octave_size ),
-            BicubicPatch( world_seed, position_ + Vector2i( octave_edge, octave_edge ), octave_size )
+            BicubicPatch( base_seed * 3547, position_ + Vector2i( octave_edge, 0           ), octave_size, octave_features ),
+            BicubicPatch( base_seed * 3547, position_ + Vector2i( octave_edge, octave_edge ), octave_size, octave_features )
         }
     };
 
@@ -39,18 +75,12 @@ Region::Region( const uint64_t world_seed, const Vector2i position ) :
                 static_cast<Scalar>( z ) / BLOCKS_PER_EDGE
             );
 
-            const Scalar octave_height = octave_patches[x < octave_edge][z < octave_edge].interpolate(
+            const Scalar octave_height = octave_patches[x / octave_edge][z / octave_edge].interpolate(
                 static_cast<Scalar>( x % octave_edge ) / octave_edge,
                 static_cast<Scalar>( z % octave_edge ) / octave_edge
-
-                // FIXME: WT-effersons: this fixes patch continuity WITHIN the fundamental
-                //        patch but not with neighboring fundamental patches ~_~
-                //
-                // static_cast<Scalar>( octave_edge - x % octave_edge ) / octave_edge,
-                // static_cast<Scalar>( octave_edge - z % octave_edge ) / octave_edge
             );
 
-            const Scalar height = /* FIXME fundamental_height + */ octave_height / octave_harmonic;
+            const Scalar height = fundamental_height + octave_height / octave_harmonic;
 
             Chunk& chunk = chunks_[x / Chunk::BLOCKS_PER_EDGE][z / Chunk::BLOCKS_PER_EDGE];
             const Vector2i column( x % Chunk::BLOCKS_PER_EDGE, z % Chunk::BLOCKS_PER_EDGE );
