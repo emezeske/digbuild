@@ -41,7 +41,8 @@ struct BicubicPatchFeatures
 
 struct BicubicPatch
 {
-    BicubicPatch(
+    BicubicPatch
+    (
         const uint64_t base_seed,
         const Vector2i position,
         const Vector2i size,

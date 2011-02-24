@@ -28,29 +28,20 @@ struct Renderer
 {
     Renderer();
 
-    void render( const RegionV& regions );
+    void render( const RegionMap& regions );
 
 protected:
 
     void render_chunk(
-        const Vector2i& chunk_position,
-        const Chunk& chunk,
-        const Chunk* chunk_north,
-        const Chunk* chunk_south,
-        const Chunk* chunk_east,
-        const Chunk* chunk_west
+        const Vector2i& chunk_index,
+        const Region& region,
+        const Region* region_north,
+        const Region* region_south,
+        const Region* region_east,
+        const Region* region_west
     );
 
-    struct ComparableChunkPosition
-    {
-        ComparableChunkPosition( const Vector2i& position );
-
-        bool operator<( const ComparableChunkPosition& other ) const; 
-
-        const Vector2i position_;
-    };
-
-    typedef std::map<ComparableChunkPosition, VertexBuffer> ChunkVertexBufferMap;
+    typedef std::map<Vector2i, VertexBuffer, Vector2LexicographicLess<Vector2i> > ChunkVertexBufferMap;
 
     ChunkVertexBufferMap chunk_vbos_;
 };

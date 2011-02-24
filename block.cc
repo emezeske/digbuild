@@ -7,6 +7,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 Block::Block( const uint8_t bottom, const uint8_t top, const BlockMaterial _material ) :
+    next_( 0 ),
     bottom_( bottom ),
     top_( top ),
     material_( _material )

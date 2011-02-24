@@ -154,6 +154,8 @@ BicubicPatch::BicubicPatch
 
 Scalar BicubicPatch::interpolate( const Scalar px, const Scalar py ) const
 {
+    assert( px >= 0.0f && px <= 1.0f && py >= 0.0f && py <= 1.0f );
+
     // This is simply the expansion of the bicubic equation using the coefficients obtained above.
 
     const Scalar

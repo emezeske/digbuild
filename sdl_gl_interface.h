@@ -41,7 +41,7 @@ struct SDL_GL_Interface
 
 protected:
 
-    virtual void process_events( const bool doHandle );
+    virtual void process_events();
     virtual void handle_event( SDL_Event& event );
 
     virtual void handle_key_down_event( const int key, const int mod ) {}
@@ -49,12 +49,10 @@ protected:
     virtual void handle_mouse_motion_event( const int button, const int x, const int y, const int xrel, const int yrel ) {}
     virtual void handle_mouse_down_event( const int button, const int x, const int y, const int xrel, const int yrel ) {}
     virtual void handle_mouse_up_event( const int button, const int x, const int y, const int xrel, const int yrel ) {}
-    virtual void do_one_step( float stepTime ) = 0;
+    virtual void do_one_step( float step_time ) = 0;
     virtual void render() = 0;
 
     bool run_;
-
-    long last_step_time_;
 
     int fps_limit_;
 

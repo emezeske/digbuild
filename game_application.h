@@ -37,7 +37,7 @@ protected:
 
     Camera camera_;
 
-    RegionV regions_;
+    RegionMap regions_;
 };
 
 #endif // GAME_APPLICATION_H

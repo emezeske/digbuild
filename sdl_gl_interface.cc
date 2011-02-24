@@ -1,6 +1,8 @@
 #include <SDL/SDL_opengl.h>
 
 #include <stdexcept>
+#include <time.h>
+#include <assert.h>
 
 #include "sdl_gl_interface.h"
 #include "log.h"
@@ -116,11 +118,14 @@ void SDL_GL_Interface::toggle_fullscreen()
     }
 }
 
-void SDL_GL_Interface::process_events( const bool doHandle )
+void SDL_GL_Interface::process_events()
 {
     SDL_Event event;
 
-    while( SDL_PollEvent( &event ) ) if ( doHandle ) handle_event( event );
+    while( SDL_PollEvent( &event ) ) 
+    {
+        handle_event( event );
+    }
 }
 
 void SDL_GL_Interface::handle_event( SDL_Event &event )
@@ -161,22 +166,38 @@ void SDL_GL_Interface::main_loop()
 {
     run_ = true;
 
-    last_step_time_ = SDL_GetTicks();
+    // TODO: Pull the high-resolution clock stuff below out into a class, and add
+    //       similar calculations for Windows using QueryPerformanceTimer.
+
+    timespec
+        resolution,
+        last_time,
+        current_time;
+
+    int result = clock_getres( CLOCK_MONOTONIC_RAW, &resolution );
+    if ( result == -1 )
+        throw std::runtime_error( "Unable to determine clock resolution" );
+
+    result = clock_gettime( CLOCK_MONOTONIC_RAW, &last_time );
+    if ( result == -1 )
+        throw std::runtime_error( "Unable to read clock" );
 
     while ( run_ )
     {
-        const long current_time = SDL_GetTicks();
-        const long step_time = current_time - last_step_time_;
-        const float 
-            step_time_seconds = static_cast<float>( step_time ) * 0.001f,
-            fps = 1.0f / step_time_seconds;
+        result = clock_gettime( CLOCK_MONOTONIC_RAW, &current_time );
+        if ( result == -1 )
+            throw std::runtime_error( "Unable to read clock" );
 
-        if ( ( fps_limit_ == 0 && step_time > 0 ) || fps <= fps_limit_ )
+        const double step_time_seconds = 
+            double( current_time.tv_sec - last_time.tv_sec ) +
+            double( current_time.tv_nsec - last_time.tv_nsec ) / 1000000000.0;
+
+        if ( step_time_seconds > 1.0 / fps_limit_ )
         {
-            last_step_time_ = current_time;
+            last_time = current_time;
             
-            process_events( true );
-            do_one_step( step_time_seconds );
+            process_events();
+            do_one_step( float( step_time_seconds ) );
             
             glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
             glMatrixMode( GL_MODELVIEW );

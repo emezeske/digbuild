@@ -1,5 +1,6 @@
 #include <GL/gl.h>
 
+#include "sdl_utilities.h"
 #include "game_application.h"
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -51,13 +52,17 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     const long ticks = SDL_GetTicks();
     const uint64_t world_seed = time( NULL ) * 91387 + ticks * 75181;
 
+    SCOPE_TIMER_BEGIN
     for ( int x = 0; x < 8; ++x )
     {
         for ( int y = 0; y < 8; ++y )
         {
-            regions_.push_back( Region( world_seed, Vector2i( x * Region::BLOCKS_PER_EDGE, y * Region::BLOCKS_PER_EDGE ) ) );
+            const Vector2i position( x * Region::REGION_SIZE, y * Region::REGION_SIZE );
+            RegionSP region( new Region( world_seed, position ) );
+            regions_[position] = region;
         }
     }
+    SCOPE_TIMER_END
 }
 
 GameApplication::~GameApplication()
@@ -183,5 +188,15 @@ void GameApplication::do_one_step( float step_time )
 void GameApplication::render()
 {
     camera_.render(); // Perform camera based translation and rotation.
-    renderer_.render( regions_ );
+
+    static bool first_time = true;
+
+    if ( first_time )
+    {
+        SCOPE_TIMER_BEGIN
+        renderer_.render( regions_ );
+        SCOPE_TIMER_END
+        first_time = false;
+    }
+    else renderer_.render( regions_ );
 }
