@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <string.h>
 
+#include <boost/tuple/tuple.hpp>
+
 #include "region.h"
 #include "bicubic_patch.h"
 #include "trilinear_box.h"
@@ -15,165 +17,225 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
 {
     memset( columns_, 0, sizeof( columns_ ) ); 
 
-    // TODO: Clean this up; lots of weird stuff here just for testing.
+    // TODO: Clean this up; there's lots of weird stuff here just for testing, and the function
+    //       is obviously way too huge (and crazy).
 
-    // const BicubicPatchCornerFeatures fundamental_corner_features
-    // (
-    //     Vector2f( 0.0f, 128.0f ),
-    //     Vector2f( -64.0f, 64.0f ),
-    //     Vector2f( -64.0f, 64.0f ),
-    //     Vector2f( -64.0f, 64.0f )
-    // );
+    const BicubicPatchCornerFeatures fundamental_corner_features
+    (
+        Vector2f( 0.0f, 128.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f )
+    );
 
-    // const BicubicPatchFeatures fundamental_features
-    // (
-    //     fundamental_corner_features,
-    //     fundamental_corner_features,
-    //     fundamental_corner_features,
-    //     fundamental_corner_features
-    // );
+    const BicubicPatchFeatures fundamental_features
+    (
+        fundamental_corner_features,
+        fundamental_corner_features,
+        fundamental_corner_features,
+        fundamental_corner_features
+    );
 
-    // const BicubicPatchCornerFeatures octave_corner_features
-    // (
-    //     Vector2f( 0.0f, 32.0f ),
-    //     Vector2f( -32.0f, 32.0f ),
-    //     Vector2f( -32.0f, 32.0f ),
-    //     Vector2f( -32.0f, 32.0f )
-    // );
+    const BicubicPatchCornerFeatures octave_corner_features
+    (
+        Vector2f( 0.0f, 32.0f ),
+        Vector2f( -32.0f, 32.0f ),
+        Vector2f( -32.0f, 32.0f ),
+        Vector2f( -32.0f, 32.0f )
+    );
 
-    // const BicubicPatchFeatures octave_features
-    // (
-    //     octave_corner_features,
-    //     octave_corner_features,
-    //     octave_corner_features,
-    //     octave_corner_features
-    // );
+    const BicubicPatchFeatures octave_features
+    (
+        octave_corner_features,
+        octave_corner_features,
+        octave_corner_features,
+        octave_corner_features
+    );
 
-    // const BicubicPatch fundamental_patch( base_seed, position_, Vector2i( REGION_SIZE, REGION_SIZE ), fundamental_features );
+    const BicubicPatch fundamental_patch( base_seed, position_, Vector2i( REGION_SIZE, REGION_SIZE ), fundamental_features );
 
-    // const int octave_harmonic = 2;
-    // const int octave_edge = REGION_SIZE / octave_harmonic;
-    // const Vector2i octave_size( octave_edge, octave_edge );
-    // const BicubicPatch octave_patches[2][2] =
-    // {
-    //     // TODO: Somehow move the ultimate seeds being used here into a different space
-    //     //       than those used for the fundamental patch.  Otherwise, the corners shared
-    //     //       by the fundamental and octave patches will have the same attributes (boring).
-    //     //
-    //     //       FIXME: using base_seed * 3547 for now, but I'm not sure if I like it
-    //     {
-    //         BicubicPatch( base_seed * 3547, position_ + Vector2i( 0, 0           ), octave_size, octave_features ),
-    //         BicubicPatch( base_seed * 3547, position_ + Vector2i( 0, octave_edge ), octave_size, octave_features ),
-    //     },
-    //     {
-    //         BicubicPatch( base_seed * 3547, position_ + Vector2i( octave_edge, 0           ), octave_size, octave_features ),
-    //         BicubicPatch( base_seed * 3547, position_ + Vector2i( octave_edge, octave_edge ), octave_size, octave_features )
-    //     }
-    // };
+    const int octave_harmonic = 2;
+    const int octave_edge = REGION_SIZE / octave_harmonic;
+    const Vector2i octave_size( octave_edge, octave_edge );
+    const BicubicPatch octave_patches[2][2] =
+    {
+        // TODO: Somehow move the ultimate seeds being used here into a different space
+        //       than those used for the fundamental patch.  Otherwise, the corners shared
+        //       by the fundamental and octave patches will have the same attributes (boring).
+        //
+        //       FIXME: using base_seed ^ 0xfea873529eaf for now, but I'm not sure if I like it
+        {
+            BicubicPatch( base_seed ^ 0xfea873529eaf, position_ + Vector2i( 0, 0           ), octave_size, octave_features ),
+            BicubicPatch( base_seed ^ 0xfea873529eaf, position_ + Vector2i( 0, octave_edge ), octave_size, octave_features ),
+        },
+        {
+            BicubicPatch( base_seed ^ 0xfea873529eaf, position_ + Vector2i( octave_edge, 0           ), octave_size, octave_features ),
+            BicubicPatch( base_seed ^ 0xfea873529eaf, position_ + Vector2i( octave_edge, octave_edge ), octave_size, octave_features )
+        }
+    };
 
-    // for ( int x = 0; x < REGION_SIZE; ++x )
-    // {
-    //     for ( int z = 0; z < REGION_SIZE; ++z )
-    //     {
-    //         const Scalar fundamental_height = fundamental_patch.interpolate( 
-    //             static_cast<Scalar>( x ) / REGION_SIZE,
-    //             static_cast<Scalar>( z ) / REGION_SIZE
-    //         );
+    // The geometry generated by slicing up a single TrilinearBox by value ranges tends to be sheet-like,
+    // which is not ideal for cave networks.  However, by taking the intersection of a value range in two
+    // TrilinearBoxes, the resulting geometry is very stringy and tunnel-like.
 
-    //         const Scalar octave_height = octave_patches[x / octave_edge][z / octave_edge].interpolate(
-    //             static_cast<Scalar>( x % octave_edge ) / octave_edge,
-    //             static_cast<Scalar>( z % octave_edge ) / octave_edge
-    //         );
+    // TODO: get this from somewhere sane
+    const int trilinear_box_height = 256;
 
-    //         const Scalar height = fundamental_height + octave_height / octave_harmonic;
-
-    //         std::vector<Scalar> layer_heights;
-    //         layer_heights.reserve( 8 );
-    //         layer_heights.push_back( 0 );
-    //         layer_heights.push_back( 1.0f  + ( height + 0.0f  ) * 0.25f );
-    //         layer_heights.push_back( 1.0f  + ( height + 16.0f ) * 0.45f );
-    //         layer_heights.push_back( 32.0f + ( height + 16.0f ) * 0.65f );
-    //         layer_heights.push_back( 32.0f + ( height + 16.0f ) * 0.75f );
-    //         layer_heights.push_back( 32.0f + ( height + 16.0f ) * 1.00f );
-    //         layer_heights.push_back( 32.0f + ( height + 16.0f ) * 1.00f );
-
-    //         std::vector<uint8_t> clamped_layer_heights;
-    //         clamped_layer_heights.reserve( 8 );
-
-    //         for ( size_t i = 0; i < layer_heights.size(); ++i )
-    //         {
-    //             // Enforce a minimum layer thickness of 1.
-    //             const Scalar minimum = ( i == 0 ? 0.0f : Scalar( clamped_layer_heights.back() ) + 1.0f );
-    //             Scalar clamped = std::max( layer_heights[i], minimum );
-    //             clamped = std::min( clamped, Scalar( std::numeric_limits<uint8_t>::max() ) );
-    //             clamped_layer_heights.push_back( uint8_t( gmtl::Math::round( clamped ) ) );
-    //         }
-
-    //         Block* blocks[] =
-    //         {
-    //             new ( block_pool_.malloc() ) Block( clamped_layer_heights[0], clamped_layer_heights[1], BLOCK_MATERIAL_BEDROCK ),
-    //             new ( block_pool_.malloc() ) Block( clamped_layer_heights[2], clamped_layer_heights[3], BLOCK_MATERIAL_STONE ),
-    //             new ( block_pool_.malloc() ) Block( clamped_layer_heights[3], clamped_layer_heights[4], BLOCK_MATERIAL_CLAY ),
-    //             new ( block_pool_.malloc() ) Block( clamped_layer_heights[4], clamped_layer_heights[5], BLOCK_MATERIAL_DIRT ),
-    //             new ( block_pool_.malloc() ) Block( clamped_layer_heights[5], clamped_layer_heights[6], BLOCK_MATERIAL_GRASS )
-    //         };
-
-    //         for ( size_t i = 0; i < sizeof( blocks ) / sizeof( Block* ); ++i )
-    //         {
-    //             add_block_to_column( Vector2i( x, z ), blocks[i] );
-    //         }
-    //     }
-    // }
-
-    TrilinearBox box
+    TrilinearBox boxA
     (
         base_seed,
         Vector3i( position_[0], 0, position_[1] ),
-        Vector3i( REGION_SIZE, REGION_SIZE, REGION_SIZE ),
-        16
+        Vector3i( REGION_SIZE, trilinear_box_height, REGION_SIZE ),
+        32
     );
 
-    TrilinearBox box2
+    TrilinearBox boxB
     (
+        // FIXME: using base_seed ^ 0x313535f3235 for now, but I'm not sure if I like it
         base_seed ^ 0x313535f3235,
         Vector3i( position_[0], 0, position_[1] ),
-        Vector3i( REGION_SIZE, REGION_SIZE, REGION_SIZE ),
-        16
+        Vector3i( REGION_SIZE, trilinear_box_height, REGION_SIZE ),
+        32
     );
-
-    // TODO: Only check density function for blocks that are created by the heightmap function above.
 
     for ( int x = 0; x < REGION_SIZE; ++x )
     {
-        for ( int y = 0; y < REGION_SIZE; ++y )
+        for ( int z = 0; z < REGION_SIZE; ++z )
         {
-            for ( int z = 0; z < REGION_SIZE; ++z )
+            const Scalar fundamental_height = fundamental_patch.interpolate( 
+                static_cast<Scalar>( x ) / REGION_SIZE,
+                static_cast<Scalar>( z ) / REGION_SIZE
+            );
+
+            const Scalar octave_height = octave_patches[x / octave_edge][z / octave_edge].interpolate(
+                static_cast<Scalar>( x % octave_edge ) / octave_edge,
+                static_cast<Scalar>( z % octave_edge ) / octave_edge
+            );
+
+            const Scalar total_height = fundamental_height + octave_height / octave_harmonic;
+
+            const std::pair<Scalar, BlockMaterial> layers[] = 
             {
-                const Scalar density = box.interpolate( 
-                    static_cast<Scalar>( x ) / REGION_SIZE,
-                    static_cast<Scalar>( y ) / REGION_SIZE,
-                    static_cast<Scalar>( z ) / REGION_SIZE
-                );
+                std::make_pair( 1.0f  + ( total_height + 0.0f  ) * 0.25f, BLOCK_MATERIAL_BEDROCK ),
+                std::make_pair( 1.0f  + ( total_height + 16.0f ) * 0.45f, BLOCK_MATERIAL_NONE ),
+                std::make_pair( 32.0f + ( total_height + 16.0f ) * 0.65f, BLOCK_MATERIAL_STONE ),
+                std::make_pair( 32.0f + ( total_height + 16.0f ) * 0.75f, BLOCK_MATERIAL_CLAY ),
+                std::make_pair( 32.0f + ( total_height + 16.0f ) * 1.00f, BLOCK_MATERIAL_DIRT )
+            };
 
-                const Scalar density2 = box2.interpolate( 
-                    static_cast<Scalar>( x ) / REGION_SIZE,
-                    static_cast<Scalar>( y ) / REGION_SIZE,
-                    static_cast<Scalar>( z ) / REGION_SIZE
-                );
+            const int layer_heights_size = sizeof( layers ) / sizeof( std::pair<Scalar, BlockMaterial> );
+            const Vector2i column_index( x, z );
+            uint8_t bottom = 0;
+            Block* top_block = 0;
 
-                if ( density >= 0.45 && density <= 0.55 && density2 >= 0.45 && density2 <= 0.55 )
-                    add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_GRASS ) );
-                // else if ( density <= 0.30 )
-                //     add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_STONE ) );
-                // else if ( density <= 0.60 )
-                //     add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_CLAY ) );
-                // else if ( density <= 0.80 )
-                //     add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_DIRT ) );
-                // else
-                //     add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_GRASS ) );
+            for ( int i = 0; i < layer_heights_size; ++i )
+            {
+                const Scalar height = layers[i].first;
+                const BlockMaterial material = layers[i].second;
+                Scalar adjusted_height = std::max( height, Scalar( bottom + 1 ) );
+                adjusted_height = std::min( adjusted_height, Scalar( std::numeric_limits<uint8_t>::max() ) );
+                const uint8_t top = uint8_t( gmtl::Math::round( adjusted_height ) );
+
+                if ( material != BLOCK_MATERIAL_NONE )
+                {
+                    uint8_t sliding_bottom = bottom;
+
+                    if ( material != BLOCK_MATERIAL_BEDROCK )
+                    {
+                        for ( uint8_t y = sliding_bottom; y <= top; ++y )
+                        {
+                            const Scalar densityA = boxA.interpolate( 
+                                static_cast<Scalar>( x ) / REGION_SIZE,
+                                static_cast<Scalar>( y ) / trilinear_box_height,
+                                static_cast<Scalar>( z ) / REGION_SIZE
+                            );
+
+                            const Scalar densityB = boxB.interpolate( 
+                                static_cast<Scalar>( x ) / REGION_SIZE,
+                                static_cast<Scalar>( y ) / trilinear_box_height,
+                                static_cast<Scalar>( z ) / REGION_SIZE
+                            );
+
+                            if ( densityA > 0.40 && densityA < 0.60 && densityB > 0.40 && densityB < 0.60 )
+                            {
+                                if ( y - sliding_bottom > 1 )
+                                {
+                                    Block* block = new ( block_pool_.malloc() ) Block( sliding_bottom, y, material );
+                                    top_block = block;
+                                    add_block_to_column( column_index, block );
+                                }
+
+                                sliding_bottom = y;
+                            }
+                        }
+                    }
+
+                    if ( sliding_bottom < top )
+                    {
+                        Block* block = new ( block_pool_.malloc() ) Block( sliding_bottom, top, material );
+                        top_block = block;
+                        add_block_to_column( column_index, block );
+                    }
+                }
+
+                bottom = top;
+            }
+
+            if ( top_block && top_block->material_ == BLOCK_MATERIAL_DIRT )
+            {
+                if ( top_block->top_ - top_block->bottom_ > 1 )
+                {
+                    --top_block->top_;
+                    Block* block = new ( block_pool_.malloc() ) Block( top_block->top_, uint8_t( top_block->top_ + 1 ), BLOCK_MATERIAL_GRASS );
+                    add_block_to_column( column_index, block );
+                }
             }
         }
     }
+
+    // TODO: For tuning the box intersection ranges:
+    //
+    // TrilinearBox boxA
+    // (
+    //     base_seed,
+    //     Vector3i( position_[0], 0, position_[1] ),
+    //     Vector3i( REGION_SIZE, REGION_SIZE, REGION_SIZE ),
+    //     16
+    // );
+
+    // TrilinearBox boxB
+    // (
+    //     base_seed ^ 0x313535f3235,
+    //     Vector3i( position_[0], 0, position_[1] ),
+    //     Vector3i( REGION_SIZE, REGION_SIZE, REGION_SIZE ),
+    //     16
+    // );
+
+    // // TODO: Only check density function for blocks that are created by the heightmap function above.
+
+    // for ( int x = 0; x < REGION_SIZE; ++x )
+    // {
+    //     for ( int y = 0; y < REGION_SIZE; ++y )
+    //     {
+    //         for ( int z = 0; z < REGION_SIZE; ++z )
+    //         {
+    //             const Scalar density = boxA.interpolate( 
+    //                 static_cast<Scalar>( x ) / REGION_SIZE,
+    //                 static_cast<Scalar>( y ) / REGION_SIZE,
+    //                 static_cast<Scalar>( z ) / REGION_SIZE
+    //             );
+
+    //             const Scalar density2 = boxB.interpolate( 
+    //                 static_cast<Scalar>( x ) / REGION_SIZE,
+    //                 static_cast<Scalar>( y ) / REGION_SIZE,
+    //                 static_cast<Scalar>( z ) / REGION_SIZE
+    //             );
+
+    //             if ( density >= 0.47 && density <= 0.53 && density2 >= 0.47 && density2 <= 0.53 )
+    //                 add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_GRASS ) );
+    //         }
+    //     }
+    // }
 }
 
 void Region::add_block_to_column( const Vector2i index, Block* block )
@@ -182,6 +244,7 @@ void Region::add_block_to_column( const Vector2i index, Block* block )
     assert( index[1] >= 0 );
     assert( index[0] < REGION_SIZE );
     assert( index[1] < REGION_SIZE );
+    assert( block );
 
     // TODO: Check for block intersections.
     // TODO: Ensure height-sorted order.

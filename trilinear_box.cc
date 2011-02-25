@@ -37,12 +37,16 @@ TrilinearBox::TrilinearBox
 
     vertex_field_.resize( vertex_field_index( vertex_field_size_ ) + 1 );
 
-    // FIXME: This generator needs to be in the loop below to ensure continuity
-    //        between contiguous TrilinearBoxes.  However, putting it there also
-    //        results in boring similarity...
-    boost::rand48 generator( get_seed_for_coordinates( base_seed, position ) );
+    // The PRNG seed for values on the edges of the box need to each be seeded with
+    // the positions of the values, to ensure that adjacent TrilinearBoxes will line
+    // up seamlessly.  However, seeding things this way results in similarities between
+    // neighbors.  Thus, the interior points are not individually seeded -- they use one
+    // seed and then successive values from the same PRNG, which yields a better random look.
+
+    boost::uniform_real<> distribution( 0.0f, 1.0f );
+    boost::rand48 interior_generator( get_seed_for_coordinates( base_seed, position ) );
     boost::variate_generator<boost::rand48&, boost::uniform_real<> >
-        random( generator, boost::uniform_real<>( 0.0f, 1.0f ) );
+        interior_random( interior_generator, distribution );
 
     for ( int x = 0; x < vertex_field_size_[0]; ++x )
     {
@@ -51,10 +55,21 @@ TrilinearBox::TrilinearBox
             for ( int z = 0; z < vertex_field_size_[2]; ++z )
             {
                 const Vector3i index( x, y, z );
-                // boost::rand48 generator( get_seed_for_coordinates( base_seed, position + index * period ) );
-                // boost::variate_generator<boost::rand48&, boost::uniform_real<> >
-                //     random( generator, boost::uniform_real<>( 0.0f, 1.0f ) );
-                get_vertex( index ) = Scalar( random() );
+                Scalar value;
+
+                if ( x == 0 || y == 0 || z == 0     ||
+                     x == vertex_field_size_[0] - 1 ||
+                     y == vertex_field_size_[1] - 1 ||
+                     z == vertex_field_size_[2] - 1 )
+                {
+                    boost::rand48 exterior_generator( get_seed_for_coordinates( base_seed, position + index * period ) );
+                    boost::variate_generator<boost::rand48&, boost::uniform_real<> >
+                        exterior_random( exterior_generator, distribution );
+                    value = Scalar( exterior_random() );
+                }
+                else value = Scalar( interior_random() );
+
+                get_vertex( index ) = value;
             }
         }
     }
@@ -89,6 +104,9 @@ Scalar TrilinearBox::interpolate( const Scalar px, const Scalar py, const Scalar
         p111 = get_vertex( p + Vector3i( 1, 1, 1 ) );
 
     const Vector3f t = q - Vector3f( Scalar( p[0] ), Scalar( p[1] ), Scalar( p[2] ) );
+
+    // TODO: Possible optimisation: the txNN and tyM values could be precomputed for
+    //       every cell in the TrilinearBox.  That could save a LOT of work.
 
     Scalar
         tx00,
