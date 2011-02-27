@@ -7,9 +7,31 @@
 
 #include "region.h"
 
-struct VertexBuffer
+enum NeighborRelation
 {
-    VertexBuffer();
+    NEIGHBOR_ABOVE,
+    NEIGHBOR_BELOW,
+    NEIGHBOR_NORTH,
+    NEIGHBOR_SOUTH,
+    NEIGHBOR_EAST,
+    NEIGHBOR_WEST,
+    NEIGHBOR_RELATION_SIZE
+};
+
+struct ChunkRenderer
+{
+    ChunkRenderer();
+
+    void render();
+    void initialize(
+        const Vector3i& chunk_position,
+        const Chunk& chunk,
+        const Chunk* neighbor_chunks[NEIGHBOR_RELATION_SIZE]
+    );
+
+    bool initialized_;
+
+private:
 
     void create_buffers();
     void destroy_buffers();
@@ -20,8 +42,6 @@ struct VertexBuffer
         ibo_id_;
 
     GLsizei vertex_count_;
-
-    bool initialized_;
 };
 
 struct Renderer
@@ -32,18 +52,8 @@ struct Renderer
 
 protected:
 
-    void render_chunk(
-        const Vector2i& chunk_index,
-        const Region& region,
-        const Region* region_north,
-        const Region* region_south,
-        const Region* region_east,
-        const Region* region_west
-    );
-
-    typedef std::map<Vector2i, VertexBuffer, Vector2LexicographicLess<Vector2i> > ChunkVertexBufferMap;
-
-    ChunkVertexBufferMap chunk_vbos_;
+    typedef std::map<Vector3i, ChunkRenderer, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
+    ChunkRendererMap chunk_renderers_;
 };
 
 #endif // RENDERER_H

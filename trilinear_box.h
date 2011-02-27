@@ -13,18 +13,17 @@ struct TrilinearBox
         const int period
     );
 
-    Scalar interpolate( const Scalar px, const Scalar py, const Scalar pz ) const;
+    Scalar interpolate( const Vector3f& position ) const;
 
 private:
 
     size_t vertex_field_index( const Vector3i& index ) const;
-
     Scalar& get_vertex( const Vector3i& index );
     const Scalar& get_vertex( const Vector3i& index ) const;
 
     Vector3i vertex_field_size_;
 
-    std::vector<Scalar> vertex_field_;
+    std::vector<Scalar> vertices_;
 
     int period_;
 };

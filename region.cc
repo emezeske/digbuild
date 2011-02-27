@@ -8,24 +8,57 @@
 #include "trilinear_box.h"
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for Chunk:
+//////////////////////////////////////////////////////////////////////////////////
+
+Chunk::Chunk()
+{
+    memset( columns_, 0, sizeof( columns_ ) ); 
+}
+
+void Chunk::add_block_to_column( const Vector2i index, Block* block )
+{
+    assert( index[0] >= 0 );
+    assert( index[1] >= 0 );
+    assert( index[0] < CHUNK_SIZE );
+    assert( index[1] < CHUNK_SIZE );
+    assert( block );
+    assert( block->top_ <= CHUNK_SIZE );
+
+    // TODO: Check for block intersections.
+    // TODO: Enforce height-sorted order.
+
+    Block* column = columns_[index[0]][index[1]];
+
+    if ( column )
+    {
+        while ( column->next_ != 0 )
+        {
+            column = column->next_;
+        }
+
+        column->next_ = block;
+    }
+    else columns_[index[0]][index[1]] = block;
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for Region:
 //////////////////////////////////////////////////////////////////////////////////
 
-Region::Region( const uint64_t base_seed, const Vector2i position ) :
-    position_( position ),
-    block_pool_( sizeof( Block ) )
+Region::Region( const uint64_t base_seed, const Vector2i _position ) :
+    block_pool_( sizeof( Block ) ),
+    position_( _position )
 {
-    memset( columns_, 0, sizeof( columns_ ) ); 
-
     // TODO: Clean this up; there's lots of weird stuff here just for testing, and the function
     //       is obviously way too huge (and crazy).
 
     const BicubicPatchCornerFeatures fundamental_corner_features
     (
-        Vector2f( 0.0f, 128.0f ),
-        Vector2f( -64.0f, 64.0f ),
-        Vector2f( -64.0f, 64.0f ),
-        Vector2f( -64.0f, 64.0f )
+        Vector2f( 0.0f, 64.0f ),
+        Vector2f( -256.0f, 256.0f ),
+        Vector2f( -256.0f, 256.0f ),
+        Vector2f( -256.0f, 256.0f )
     );
 
     const BicubicPatchFeatures fundamental_features
@@ -39,9 +72,9 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
     const BicubicPatchCornerFeatures octave_corner_features
     (
         Vector2f( 0.0f, 32.0f ),
-        Vector2f( -32.0f, 32.0f ),
-        Vector2f( -32.0f, 32.0f ),
-        Vector2f( -32.0f, 32.0f )
+        Vector2f( -256.0f, 256.0f ),
+        Vector2f( -256.0f, 256.0f ),
+        Vector2f( -256.0f, 256.0f )
     );
 
     const BicubicPatchFeatures octave_features
@@ -78,14 +111,14 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
     // which is not ideal for cave networks.  However, by taking the intersection of a value range in two
     // TrilinearBoxes, the resulting geometry is very stringy and tunnel-like.
 
-    // TODO: get this from somewhere sane
-    const int trilinear_box_height = 256;
+    // TODO: get this 256 from somewhere sane
+    const Vector3i trilinear_box_size( REGION_SIZE, 256, REGION_SIZE );
 
     TrilinearBox boxA
     (
         base_seed,
         Vector3i( position_[0], 0, position_[1] ),
-        Vector3i( REGION_SIZE, trilinear_box_height, REGION_SIZE ),
+        trilinear_box_size,
         32
     );
 
@@ -94,7 +127,7 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
         // FIXME: using base_seed ^ 0x313535f3235 for now, but I'm not sure if I like it
         base_seed ^ 0x313535f3235,
         Vector3i( position_[0], 0, position_[1] ),
-        Vector3i( REGION_SIZE, trilinear_box_height, REGION_SIZE ),
+        trilinear_box_size,
         32
     );
 
@@ -102,14 +135,12 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
     {
         for ( int z = 0; z < REGION_SIZE; ++z )
         {
-            const Scalar fundamental_height = fundamental_patch.interpolate( 
-                static_cast<Scalar>( x ) / REGION_SIZE,
-                static_cast<Scalar>( z ) / REGION_SIZE
+            const Scalar fundamental_height = fundamental_patch.interpolate(
+                Vector2f( Scalar( x ) / REGION_SIZE, Scalar( z ) / REGION_SIZE )
             );
 
             const Scalar octave_height = octave_patches[x / octave_edge][z / octave_edge].interpolate(
-                static_cast<Scalar>( x % octave_edge ) / octave_edge,
-                static_cast<Scalar>( z % octave_edge ) / octave_edge
+                Vector2f( Scalar( x % octave_edge ) / octave_edge, Scalar( z % octave_edge ) / octave_edge )
             );
 
             const Scalar total_height = fundamental_height + octave_height / octave_harmonic;
@@ -124,45 +155,41 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
             };
 
             const int layer_heights_size = sizeof( layers ) / sizeof( std::pair<Scalar, BlockMaterial> );
-            const Vector2i column_index( x, z );
-            uint8_t bottom = 0;
-            Block* top_block = 0;
+            const Vector2i column_index = Vector2i( x, z );
+            unsigned
+                bottom = 0,
+                top_block = 0;
 
             for ( int i = 0; i < layer_heights_size; ++i )
             {
-                const Scalar height = layers[i].first;
+                const Scalar height = std::max( layers[i].first, Scalar( bottom + 1 ) );
                 const BlockMaterial material = layers[i].second;
-                Scalar adjusted_height = std::max( height, Scalar( bottom + 1 ) );
-                adjusted_height = std::min( adjusted_height, Scalar( std::numeric_limits<uint8_t>::max() ) );
-                const uint8_t top = uint8_t( gmtl::Math::round( adjusted_height ) );
+                const unsigned top = unsigned( gmtl::Math::round( height ) );
 
                 if ( material != BLOCK_MATERIAL_NONE )
                 {
-                    uint8_t sliding_bottom = bottom;
+                    unsigned sliding_bottom = bottom;
 
                     if ( material != BLOCK_MATERIAL_BEDROCK )
                     {
-                        for ( uint8_t y = sliding_bottom; y <= top; ++y )
+                        for ( unsigned y = sliding_bottom; y <= top; ++y )
                         {
-                            const Scalar densityA = boxA.interpolate( 
-                                static_cast<Scalar>( x ) / REGION_SIZE,
-                                static_cast<Scalar>( y ) / trilinear_box_height,
-                                static_cast<Scalar>( z ) / REGION_SIZE
+                            // TODO: Ensure that the components of this vector are clamped (or repeated) to [0.0,1.0].
+                            Vector3f box_position(
+                                Scalar( x ) / Scalar( trilinear_box_size[0] ),
+                                Scalar( y ) / Scalar( trilinear_box_size[1] ),
+                                Scalar( z ) / Scalar( trilinear_box_size[2] )
                             );
 
-                            const Scalar densityB = boxB.interpolate( 
-                                static_cast<Scalar>( x ) / REGION_SIZE,
-                                static_cast<Scalar>( y ) / trilinear_box_height,
-                                static_cast<Scalar>( z ) / REGION_SIZE
-                            );
+                            const Scalar densityA = boxA.interpolate( box_position );
+                            const Scalar densityB = boxB.interpolate( box_position );
 
-                            if ( densityA > 0.40 && densityA < 0.60 && densityB > 0.40 && densityB < 0.60 )
+                            if ( densityA > 0.45 && densityA < 0.55 && densityB > 0.45 && densityB < 0.55 )
                             {
                                 if ( y - sliding_bottom > 1 )
                                 {
-                                    Block* block = new ( block_pool_.malloc() ) Block( sliding_bottom, y, material );
-                                    top_block = block;
-                                    add_block_to_column( column_index, block );
+                                    add_block_to_column( column_index, sliding_bottom, y, material );
+                                    top_block = y;
                                 }
 
                                 sliding_bottom = y;
@@ -172,29 +199,21 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
 
                     if ( sliding_bottom < top )
                     {
-                        Block* block = new ( block_pool_.malloc() ) Block( sliding_bottom, top, material );
-                        top_block = block;
-                        add_block_to_column( column_index, block );
+                        add_block_to_column( column_index, sliding_bottom, top, material );
+                        top_block = top;
                     }
                 }
 
                 bottom = top;
             }
 
-            if ( top_block && top_block->material_ == BLOCK_MATERIAL_DIRT )
-            {
-                if ( top_block->top_ - top_block->bottom_ > 1 )
-                {
-                    --top_block->top_;
-                    Block* block = new ( block_pool_.malloc() ) Block( top_block->top_, uint8_t( top_block->top_ + 1 ), BLOCK_MATERIAL_GRASS );
-                    add_block_to_column( column_index, block );
-                }
-            }
+            add_block_to_column( column_index, top_block, top_block + 1, BLOCK_MATERIAL_DIRT );
+            add_block_to_column( column_index, top_block + 1, top_block + 2, BLOCK_MATERIAL_GRASS );
         }
     }
 
     // TODO: For tuning the box intersection ranges:
-    //
+    // 
     // TrilinearBox boxA
     // (
     //     base_seed,
@@ -219,46 +238,53 @@ Region::Region( const uint64_t base_seed, const Vector2i position ) :
     //     {
     //         for ( int z = 0; z < REGION_SIZE; ++z )
     //         {
-    //             const Scalar density = boxA.interpolate( 
+    //             const Vector3f box_position( 
     //                 static_cast<Scalar>( x ) / REGION_SIZE,
     //                 static_cast<Scalar>( y ) / REGION_SIZE,
     //                 static_cast<Scalar>( z ) / REGION_SIZE
     //             );
 
-    //             const Scalar density2 = boxB.interpolate( 
-    //                 static_cast<Scalar>( x ) / REGION_SIZE,
-    //                 static_cast<Scalar>( y ) / REGION_SIZE,
-    //                 static_cast<Scalar>( z ) / REGION_SIZE
-    //             );
+    //             const Scalar density = boxA.interpolate( box_position );
+    //             const Scalar density2 = boxB.interpolate( box_position );
 
-    //             if ( density >= 0.47 && density <= 0.53 && density2 >= 0.47 && density2 <= 0.53 )
+    //             if ( density >= 0.40 && density <= 0.60 && density2 >= 0.40 && density2 <= 0.60 )
     //                 add_block_to_column( Vector2i( x, z ), new ( block_pool_.malloc() ) Block( y, y + 1, BLOCK_MATERIAL_GRASS ) );
     //         }
     //     }
     // }
 }
 
-void Region::add_block_to_column( const Vector2i index, Block* block )
+void Region::add_block_to_column( const Vector2i column_index, const unsigned bottom, const unsigned top, const BlockMaterial material )
 {
-    assert( index[0] >= 0 );
-    assert( index[1] >= 0 );
-    assert( index[0] < REGION_SIZE );
-    assert( index[1] < REGION_SIZE );
-    assert( block );
+    assert( column_index[0] >= 0 );
+    assert( column_index[1] >= 0 );
+    assert( column_index[0] < REGION_SIZE );
+    assert( column_index[1] < REGION_SIZE );
 
-    // TODO: Check for block intersections.
-    // TODO: Ensure height-sorted order.
+    unsigned sliding_bottom = bottom;
 
-    Block* column = columns_[index[0]][index[1]];
-
-    if ( column )
+    while ( top > sliding_bottom )
     {
-        while ( column->next_ != 0 )
-        {
-            column = column->next_;
-        }
+        const Vector3i chunk_index = Vector3i( column_index[0], sliding_bottom, column_index[1] ) / int( Chunk::CHUNK_SIZE );
+        const Vector2i chunk_column_index( column_index[0] % Chunk::CHUNK_SIZE, column_index[1] % Chunk::CHUNK_SIZE );
 
-        column->next_ = block;
+        const ChunkMap::const_iterator chunk_it = chunks_.find( chunk_index );
+        ChunkSP chunk;
+
+        if ( chunk_it == chunks_.end() )
+        {
+            chunk.reset( new Chunk );
+            chunks_[chunk_index] = chunk;
+        }
+        else chunk = chunk_it->second;
+
+        const unsigned chunk_bottom = chunk_index[1] * Chunk::CHUNK_SIZE;
+        const Block::HeightT
+            block_bottom = sliding_bottom % Chunk::CHUNK_SIZE,
+            block_top = Block::HeightT( std::min( top - chunk_bottom, unsigned( Chunk::CHUNK_SIZE ) ) );
+
+        Block* block = new ( block_pool_.malloc() ) Block( block_bottom, block_top, material );
+        chunk->add_block_to_column( chunk_column_index, block );
+        sliding_bottom = chunk_bottom + Chunk::CHUNK_SIZE;
     }
-    else columns_[index[0]][index[1]] = block;
 }

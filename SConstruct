@@ -24,8 +24,9 @@ CCFLAGS = [
 
 LINKFLAGS = []
 
-CCFLAGS += [ '-DNDEBUG', '-O3' ]
-LINKFLAGS += [ '-Wl,--strip-all' ]
+CCFLAGS += [ '-O3' ]
+CCFLAGS += [ '-DNDEBUG' ]
+#LINKFLAGS += [ '-Wl,--strip-all' ]
 
 #CCFLAGS += [ '-pg' ]
 #LINKFLAGS += [ '-pg' ]

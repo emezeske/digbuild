@@ -49,7 +49,7 @@ struct BicubicPatch
         const BicubicPatchFeatures& features
     );
 
-    Scalar interpolate( const Scalar px, const Scalar py ) const;
+    Scalar interpolate( const Vector2f& position ) const;
 
 protected:
 

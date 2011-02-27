@@ -35,7 +35,7 @@ TrilinearBox::TrilinearBox
     assert( size[1] % period == 0 );
     assert( size[2] % period == 0 );
 
-    vertex_field_.resize( vertex_field_index( vertex_field_size_ ) + 1 );
+    vertices_.resize( vertex_field_index( vertex_field_size_ ) + 1 );
 
     // The PRNG seed for values on the edges of the box need to each be seeded with
     // the positions of the values, to ensure that adjacent TrilinearBoxes will line
@@ -75,59 +75,49 @@ TrilinearBox::TrilinearBox
     }
 }
 
-Scalar TrilinearBox::interpolate( const Scalar px, const Scalar py, const Scalar pz ) const
+Scalar TrilinearBox::interpolate( const Vector3f& position ) const
 {
-    assert( px >= 0.0f && px <= 1.0 && py >= 0.0f && py <= 1.0 && pz >= 0.0f && pz <= 1.0f );
+    assert( position[0] >= 0.0f && position[0] <= 1.0 );
+    assert( position[1] >= 0.0f && position[1] <= 1.0 );
+    assert( position[2] >= 0.0f && position[2] <= 1.0 );
 
-    const Vector3f q
+    const Vector3f vertex_space_position
     (
-        px * Scalar( vertex_field_size_[0] - 1 ),
-        py * Scalar( vertex_field_size_[1] - 1 ),
-        pz * Scalar( vertex_field_size_[2] - 1 )
+        position[0] * Scalar( vertex_field_size_[0] - 1 ),
+        position[1] * Scalar( vertex_field_size_[1] - 1 ),
+        position[2] * Scalar( vertex_field_size_[2] - 1 )
     );
 
-    const Vector3i p
-    (
-        int( gmtl::Math::trunc( q[0] ) ),
-        int( gmtl::Math::trunc( q[1] ) ),
-        int( gmtl::Math::trunc( q[2] ) )
-    );
+    const Vector3i vertex_index = vector_cast<Vector3i>( vertex_space_position );
 
     const Scalar
-        p000 = get_vertex( p + Vector3i( 0, 0, 0 ) ),
-        p001 = get_vertex( p + Vector3i( 0, 0, 1 ) ),
-        p010 = get_vertex( p + Vector3i( 0, 1, 0 ) ),
-        p011 = get_vertex( p + Vector3i( 0, 1, 1 ) ),
-        p100 = get_vertex( p + Vector3i( 1, 0, 0 ) ),
-        p101 = get_vertex( p + Vector3i( 1, 0, 1 ) ),
-        p110 = get_vertex( p + Vector3i( 1, 1, 0 ) ),
-        p111 = get_vertex( p + Vector3i( 1, 1, 1 ) );
+        p000 = get_vertex( vertex_index + Vector3i( 0, 0, 0 ) ),
+        p001 = get_vertex( vertex_index + Vector3i( 0, 0, 1 ) ),
+        p010 = get_vertex( vertex_index + Vector3i( 0, 1, 0 ) ),
+        p011 = get_vertex( vertex_index + Vector3i( 0, 1, 1 ) ),
+        p100 = get_vertex( vertex_index + Vector3i( 1, 0, 0 ) ),
+        p101 = get_vertex( vertex_index + Vector3i( 1, 0, 1 ) ),
+        p110 = get_vertex( vertex_index + Vector3i( 1, 1, 0 ) ),
+        p111 = get_vertex( vertex_index + Vector3i( 1, 1, 1 ) );
 
-    const Vector3f t = q - Vector3f( Scalar( p[0] ), Scalar( p[1] ), Scalar( p[2] ) );
+    const Vector3f t = vertex_space_position - vector_cast<Vector3f>( vertex_index );
 
-    // TODO: Possible optimisation: the txNN and tyM values could be precomputed for
-    //       every cell in the TrilinearBox.  That could save a LOT of work.
+    // NOTE: I tried a few different caching schemes, to potentially avoid recalculating
+    //       the first six interpolants here, but all of the schemes ran MUCH more slowly,
+    //       likely due to the fact that they used more memory and cache misses ruin any
+    //       advantage gained by avoiding a few interpolations.
 
-    Scalar
-        tx00,
-        tx01,
-        tx10,
-        tx11;
-
+    Scalar tx00, tx01, tx10, tx11;
     gmtl::Math::lerp( tx00, t[0], p000, p100 );
     gmtl::Math::lerp( tx01, t[0], p001, p101 );
     gmtl::Math::lerp( tx10, t[0], p010, p110 );
     gmtl::Math::lerp( tx11, t[0], p011, p111 );
 
-    Scalar
-        ty0,
-        ty1;
-
+    Scalar ty0, ty1;
     gmtl::Math::lerp( ty0, t[1], tx00, tx10 );
     gmtl::Math::lerp( ty1, t[1], tx01, tx11 );
 
     Scalar tz;
-
     gmtl::Math::lerp( tz, t[2], ty0, ty1 );
 
     return tz;
@@ -140,10 +130,10 @@ size_t TrilinearBox::vertex_field_index( const Vector3i& index ) const
 
 Scalar& TrilinearBox::get_vertex( const Vector3i& index )
 {
-    return vertex_field_[vertex_field_index( index )];
+    return vertices_[vertex_field_index( index )];
 }
 
 const Scalar& TrilinearBox::get_vertex( const Vector3i& index ) const
 {
-    return vertex_field_[vertex_field_index( index )];
+    return vertices_[vertex_field_index( index )];
 }

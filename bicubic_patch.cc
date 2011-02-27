@@ -152,13 +152,16 @@ BicubicPatch::BicubicPatch
     }
 }
 
-Scalar BicubicPatch::interpolate( const Scalar px, const Scalar py ) const
+Scalar BicubicPatch::interpolate( const Vector2f& position ) const
 {
-    assert( px >= 0.0f && px <= 1.0f && py >= 0.0f && py <= 1.0f );
+    assert( position[0] >= 0.0f && position[0] <= 1.0 );
+    assert( position[1] >= 0.0f && position[1] <= 1.0 );
 
     // This is simply the expansion of the bicubic equation using the coefficients obtained above.
 
     const Scalar
+        px  = position[0],
+        py  = position[1],
         px2 = px * px,
         px3 = px * px2,
         py2 = py * py,

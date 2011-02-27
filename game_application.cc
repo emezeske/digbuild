@@ -50,12 +50,13 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f )
 {
     const long ticks = SDL_GetTicks();
-    const uint64_t world_seed = time( NULL ) * 91387 + ticks * 75181;
+    // const uint64_t world_seed = time( NULL ) * 91387 + ticks * 75181;
+    const uint64_t world_seed = 0x58afe359358eafd3; // FIXME: Using a constant for performance measurements.
 
     SCOPE_TIMER_BEGIN
-    for ( int x = 0; x < 8; ++x )
+    for ( int x = 0; x < 3; ++x )
     {
-        for ( int y = 0; y < 8; ++y )
+        for ( int y = 0; y < 3; ++y )
         {
             const Vector2i position( x * Region::REGION_SIZE, y * Region::REGION_SIZE );
             RegionSP region( new Region( world_seed, position ) );

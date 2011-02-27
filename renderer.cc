@@ -55,10 +55,6 @@ enum FaceDirection
     FACE_DIRECTION_DOWN
 };
 
-const int
-    CHUNKS_PER_REGION_EDGE = 4,
-    CHUNK_SIZE = Region::REGION_SIZE / CHUNKS_PER_REGION_EDGE;
-
 struct BlockVertex
 {
     BlockVertex()
@@ -81,44 +77,77 @@ typedef std::vector<BlockVertex> BlockVertexV;
 
 const Region* find_region( const RegionMap& regions, const Vector2i position )
 {
-    RegionMap::const_iterator region_it = regions.find( position );
-    return ( region_it == regions.end() ? 0 : region_it->second.get() );
+    RegionMap::const_iterator it = regions.find( position );
+    return ( it == regions.end() ? 0 : it->second.get() );
 }
 
-const Block* find_neighboring_column( const Region& region, const Region* neighbor_region, Vector2i neighbor_index )
+const Chunk* find_chunk( const Region& region, const Vector3i& index )
+{
+    ChunkMap::const_iterator it = region.chunks().find( index );
+    return ( it == region.chunks().end() ? 0 : it->second.get() );
+}
+
+const Chunk* find_adjacent_chunk( const Region& region, const Region* neighbor_region, const Vector3i& neighbor_index )
 {
     if ( neighbor_index[0] >= 0 &&
-         neighbor_index[1] >= 0 &&
-         neighbor_index[0] < Region::REGION_SIZE &&
-         neighbor_index[1] < Region::REGION_SIZE )
+         neighbor_index[2] >= 0 &&
+         neighbor_index[0] < Region::CHUNKS_PER_EDGE &&
+         neighbor_index[2] < Region::CHUNKS_PER_EDGE )
     {
-        return region.get_column( neighbor_index );
+        return find_chunk( region, neighbor_index );
     }
     else if ( neighbor_region )
     {
-        neighbor_index[0] = ( Region::REGION_SIZE + neighbor_index[0] ) % Region::REGION_SIZE;
-        neighbor_index[1] = ( Region::REGION_SIZE + neighbor_index[1] ) % Region::REGION_SIZE;
-        return neighbor_region->get_column( neighbor_index );
+        return find_chunk( *neighbor_region, Vector3i(
+            ( Region::CHUNKS_PER_EDGE + neighbor_index[0] ) % Region::CHUNKS_PER_EDGE,
+            neighbor_index[1],
+            ( Region::CHUNKS_PER_EDGE + neighbor_index[2] ) % Region::CHUNKS_PER_EDGE
+        ) );
     }
     
     return 0;
 }
 
-void add_block_face
-(
-    const Vector2i column_world_position,
-    uint8_t block_bottom, 
-    uint8_t block_top, 
+const Block* find_colinear_column( const Chunk* neighbor_chunk, const Vector2i& column_index )
+{
+    if ( neighbor_chunk )
+    {
+        return neighbor_chunk->get_column( column_index );
+    }
+
+    return 0;
+}
+
+const Block* find_adjacent_column( const Chunk& chunk, const Chunk* neighbor_chunk, const Vector2i& neighbor_index )
+{
+    if ( neighbor_index[0] >= 0 &&
+         neighbor_index[1] >= 0 &&
+         neighbor_index[0] < Chunk::CHUNK_SIZE &&
+         neighbor_index[1] < Chunk::CHUNK_SIZE )
+    {
+        return chunk.get_column( neighbor_index );
+    }
+    else if ( neighbor_chunk )
+    {
+        return neighbor_chunk->get_column( Vector2i(
+            ( Chunk::CHUNK_SIZE + neighbor_index[0] ) % Chunk::CHUNK_SIZE,
+            ( Chunk::CHUNK_SIZE + neighbor_index[1] ) % Chunk::CHUNK_SIZE 
+        ) );
+    }
+    
+    return 0;
+}
+
+void add_block_face(
+    const Vector3i column_world_position,
+    Block::HeightT block_bottom, 
+    Block::HeightT block_top, 
     const BlockMaterial material,
     const FaceDirection direction,
     BlockVertexV& vertices
 )
 {
-    const Vector3f block_world_position(
-        Scalar( column_world_position[0] ),
-        block_bottom,
-        Scalar( column_world_position[1] )
-    );
+    const Vector3f block_world_position = vector_cast<Vector3f>( column_world_position ) + Vector3f( 0.0f, Scalar( block_bottom ), 0.0f );
     const Scalar height = Scalar( block_top - block_bottom );
 
     assert( material >= 0 && material < int( sizeof( MATERIAL_INFO ) / sizeof( MaterialInfo ) ) );
@@ -179,16 +208,15 @@ void add_block_face
     #undef V
 }
 
-void add_block_faces
-(
-    const Vector2i column_world_position,
+void add_block_faces(
+    const Vector3i column_world_position,
     const Block& block,
     const Block* adjacent_column,
     const FaceDirection direction,
     BlockVertexV& vertices
 )
 {
-    uint8_t sliding_bottom = block.bottom_;
+    Block::HeightT sliding_bottom = block.bottom_;
 
     while ( adjacent_column )
     {
@@ -196,9 +224,9 @@ void add_block_faces
         {
             // Create individual faces for each unit block, instead of one big face for the whole
             // block, to avoid the T-junctions that might otherwise occur (and cause seams).
-            for ( uint8_t b = sliding_bottom; b < adjacent_column->bottom_; ++b )
+            for ( Block::HeightT b = sliding_bottom; b < adjacent_column->bottom_; ++b )
             {
-                add_block_face( column_world_position, b, uint8_t( b + 1 ), block.material(), direction, vertices );
+                add_block_face( column_world_position, b, Block::HeightT( b + 1 ), block.material_, direction, vertices );
             }
 
             if ( adjacent_column->top_ < block.top_ )
@@ -219,23 +247,21 @@ void add_block_faces
         adjacent_column = adjacent_column->next_;
     }
 
-    for ( uint8_t b = sliding_bottom; b < block.top_; ++b )
+    for ( Block::HeightT b = sliding_bottom; b < block.top_; ++b )
     {
-        add_block_face( column_world_position, b, uint8_t( b + 1 ), block.material(), direction, vertices );
+        add_block_face( column_world_position, b, Block::HeightT( b + 1 ), block.material_, direction, vertices );
     }
 }
 
-void add_block_endcaps
-(
-    const Vector2i column_world_position,
+void add_block_endcaps(
+    const Vector3i column_world_position,
     const Block& block,
     const Block* lower_block,
+    const Block* neighbor_columns[NEIGHBOR_RELATION_SIZE],
     BlockVertexV& vertices
 )
 {
-    bool
-        bottom_cap = false,
-        top_cap = false;
+    bool bottom_cap = false;
 
     if ( lower_block )
     {
@@ -244,10 +270,26 @@ void add_block_endcaps
             bottom_cap = true;
         }
     }
-    else if ( block.bottom_ != 0 ) // Don't bother drawing bottom caps for the bottom-most blocks.
+    else if ( block.bottom_ == 0 && neighbor_columns[NEIGHBOR_BELOW] )
     {
-        bottom_cap = true;
+        const Block* lower_column = neighbor_columns[NEIGHBOR_BELOW];
+
+        while ( lower_column->next_ )
+        {
+            lower_column = lower_column->next_;
+        }
+
+        if ( lower_column->top_ != Chunk::CHUNK_SIZE )
+        {
+            bottom_cap = true;
+        }
     }
+    else bottom_cap = true;
+
+    if ( bottom_cap )
+        add_block_face( column_world_position, block.bottom_, block.bottom_, block.material_, FACE_DIRECTION_DOWN, vertices ); 
+
+    bool top_cap = false;
 
     if ( block.next_ )
     {
@@ -256,17 +298,34 @@ void add_block_endcaps
             top_cap = true;
         }
     }
+    else if ( block.top_ == Chunk::CHUNK_SIZE && neighbor_columns[NEIGHBOR_ABOVE] )
+    {
+        if ( neighbor_columns[NEIGHBOR_ABOVE]->bottom_ != 0 )
+        {
+            top_cap = true;
+        }
+    }
     else top_cap = true;
 
-    if ( bottom_cap )
-        add_block_face( column_world_position, block.bottom_, block.bottom_, block.material(), FACE_DIRECTION_DOWN, vertices ); 
-
     if ( top_cap )
-        add_block_face( column_world_position, block.top_, block.top_, block.material(), FACE_DIRECTION_UP, vertices ); 
+        add_block_face( column_world_position, block.top_, block.top_, block.material_, FACE_DIRECTION_UP, vertices ); 
 }
 
-void draw_vertex_buffer( const VertexBuffer& buffer )
+} // anonymous namespace
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for ChunkRenderer:
+//////////////////////////////////////////////////////////////////////////////////
+
+ChunkRenderer::ChunkRenderer() :
+    initialized_( false )
 {
+}
+
+void ChunkRenderer::render()
+{
+    bind();
+
     glEnableClientState( GL_VERTEX_ARRAY );
     glEnableClientState( GL_NORMAL_ARRAY );
     glEnableClientState( GL_COLOR_ARRAY );
@@ -275,39 +334,88 @@ void draw_vertex_buffer( const VertexBuffer& buffer )
     glNormalPointer( GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 12 ) );
     glColorPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
 
-    glDrawElements( GL_QUADS, buffer.vertex_count_, GL_UNSIGNED_INT, 0 );
+    glDrawElements( GL_QUADS, vertex_count_, GL_UNSIGNED_INT, 0 );
 
     glDisableClientState( GL_COLOR_ARRAY );
     glDisableClientState( GL_NORMAL_ARRAY );
     glDisableClientState( GL_VERTEX_ARRAY );
 }
 
-} // anonymous namespace
-
-//////////////////////////////////////////////////////////////////////////////////
-// Function definitions for VertexBuffer:
-//////////////////////////////////////////////////////////////////////////////////
-
-VertexBuffer::VertexBuffer() :
-    initialized_( false )
+void ChunkRenderer::initialize(
+    const Vector3i& chunk_position,
+    const Chunk& chunk,
+    const Chunk* neighbor_chunks[NEIGHBOR_RELATION_SIZE]
+)
 {
+    BlockVertexV vertices;
+
+    // For performance, it is best if this is an overestimate rather than an underestimate.
+    vertices.reserve( Chunk::CHUNK_SIZE * Chunk::CHUNK_SIZE * 128 );
+
+    for ( int x = 0; x < Chunk::CHUNK_SIZE; ++x )
+    {
+        for ( int z = 0; z < Chunk::CHUNK_SIZE; ++z )
+        {
+            const Vector2i column_index( x, z );
+            const Block* column = chunk.get_column( column_index );
+            const Block* neighbor_columns[NEIGHBOR_RELATION_SIZE];
+            neighbor_columns[NEIGHBOR_ABOVE] = find_colinear_column( neighbor_chunks[NEIGHBOR_ABOVE], column_index );
+            neighbor_columns[NEIGHBOR_BELOW] = find_colinear_column( neighbor_chunks[NEIGHBOR_BELOW], column_index );
+            neighbor_columns[NEIGHBOR_NORTH] = find_adjacent_column( chunk, neighbor_chunks[NEIGHBOR_NORTH], column_index + Vector2i(  0,  1 ) );
+            neighbor_columns[NEIGHBOR_SOUTH] = find_adjacent_column( chunk, neighbor_chunks[NEIGHBOR_SOUTH], column_index + Vector2i(  0, -1 ) );
+            neighbor_columns[NEIGHBOR_EAST]  = find_adjacent_column( chunk, neighbor_chunks[NEIGHBOR_EAST],  column_index + Vector2i(  1,  0 ) );
+            neighbor_columns[NEIGHBOR_WEST]  = find_adjacent_column( chunk, neighbor_chunks[NEIGHBOR_WEST],  column_index + Vector2i( -1,  0 ) );
+
+            const Vector3i column_world_position = chunk_position + Vector3i( column_index[0], 0, column_index[1] );
+            const Block* lower_block = 0;
+
+            while ( column )
+            {
+                add_block_faces( column_world_position, *column, neighbor_columns[NEIGHBOR_NORTH], FACE_DIRECTION_NORTH, vertices );
+                add_block_faces( column_world_position, *column, neighbor_columns[NEIGHBOR_SOUTH], FACE_DIRECTION_SOUTH, vertices );
+                add_block_faces( column_world_position, *column, neighbor_columns[NEIGHBOR_EAST],  FACE_DIRECTION_EAST,  vertices );
+                add_block_faces( column_world_position, *column, neighbor_columns[NEIGHBOR_WEST],  FACE_DIRECTION_WEST,  vertices );
+
+                add_block_endcaps( column_world_position, *column, lower_block, neighbor_columns, vertices );
+
+                lower_block = column;
+                column = column->next_;
+            }
+        }
+    }
+
+    create_buffers();
+    bind();
+    vertex_count_ = GLsizei( vertices.size() );
+
+    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
+
+    std::vector<GLuint> index_buffer;
+    index_buffer.resize( vertices.size() );
+
+    for ( int i = 0; i < int( vertices.size() ); ++i )
+    {
+        index_buffer[i] = i;
+    }
+
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, vertices.size() * sizeof( GLuint ), &index_buffer[0], GL_STATIC_DRAW );
 }
 
-void VertexBuffer::create_buffers()
+void ChunkRenderer::create_buffers()
 {
     glGenBuffers( 1, &vbo_id_ );
     glGenBuffers( 1, &ibo_id_ );
     initialized_ = true;
 }
 
-void VertexBuffer::destroy_buffers()
+void ChunkRenderer::destroy_buffers()
 {
     glDeleteBuffers( 1, &ibo_id_ );
     glDeleteBuffers( 1, &vbo_id_ );
     initialized_ = false;
 }
 
-void VertexBuffer::bind()
+void ChunkRenderer::bind()
 {
     glBindBuffer( GL_ARRAY_BUFFER, vbo_id_ );
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo_id_ );
@@ -326,89 +434,69 @@ void Renderer::render( const RegionMap& regions )
     glCullFace( GL_BACK );
     glEnable( GL_CULL_FACE );
 
+    // TODO: Abstract out
+    GLfloat
+        m_data[16],
+        p_data[16];
+
+    glGetFloatv( GL_MODELVIEW_MATRIX, m_data );
+    glGetFloatv( GL_PROJECTION_MATRIX, p_data );
+
+    gmtl::Matrix<Scalar, 4, 4> m;
+    m.set( m_data );
+
+    gmtl::Matrix<Scalar, 4, 4> p;
+    p.set( p_data );
+
+    gmtl::Frustumf view_frustum( m, p );
+
+    int chunks_rendered = 0;
+
     for ( RegionMap::const_iterator region_it = regions.begin(); region_it != regions.end(); ++region_it )
     {
         const Region& region = *region_it->second;
-        const Region* region_north = find_region( regions, region.position_ + Vector2i(  0,  Region::REGION_SIZE ) );
-        const Region* region_south = find_region( regions, region.position_ + Vector2i(  0, -Region::REGION_SIZE ) ); 
-        const Region* region_east  = find_region( regions, region.position_ + Vector2i(  Region::REGION_SIZE, 0 ) );
-        const Region* region_west  = find_region( regions, region.position_ + Vector2i( -Region::REGION_SIZE, 0 ) );
+        const Region* neighbor_regions[NEIGHBOR_RELATION_SIZE];
+        neighbor_regions[NEIGHBOR_ABOVE] = 0;
+        neighbor_regions[NEIGHBOR_BELOW] = 0;
+        neighbor_regions[NEIGHBOR_NORTH] = find_region( regions, region.position() + Vector2i(  0,  Region::REGION_SIZE ) );
+        neighbor_regions[NEIGHBOR_SOUTH] = find_region( regions, region.position() + Vector2i(  0, -Region::REGION_SIZE ) ); 
+        neighbor_regions[NEIGHBOR_EAST]  = find_region( regions, region.position() + Vector2i(  Region::REGION_SIZE, 0 ) );
+        neighbor_regions[NEIGHBOR_WEST]  = find_region( regions, region.position() + Vector2i( -Region::REGION_SIZE, 0 ) );
 
-        for ( int x = 0; x < CHUNKS_PER_REGION_EDGE; ++x )
+        // TODO: Frustum cull entire regions? (This requires that regions keep track of their AABoxes).
+        //       Maybe even do some kind of hierarchical culling (This requires that regions keep a hierarchy).
+
+        for ( ChunkMap::const_iterator chunk_it = region.chunks().begin(); chunk_it != region.chunks().end(); ++chunk_it )
         {
-            for ( int z = 0; z < CHUNKS_PER_REGION_EDGE; ++z )
+            const Vector3i chunk_index = chunk_it->first;
+            const Vector3i chunk_position = Vector3i( region.position()[0], 0, region.position()[1] ) + chunk_index * int( Chunk::CHUNK_SIZE );
+            const Vector3f chunk_min = vector_cast<Vector3f>( chunk_position );
+            const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
+            const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
+
+            if ( gmtl::isInVolume( view_frustum, chunk_box ) )
             {
-                render_chunk( Vector2i( x, z ), region, region_north, region_south, region_east, region_west );
-            }
-        }
-    }
-}
+                const Chunk* neighbor_chunks[NEIGHBOR_RELATION_SIZE];
+                neighbor_chunks[NEIGHBOR_ABOVE] = find_adjacent_chunk( region, neighbor_regions[NEIGHBOR_ABOVE], chunk_index + Vector3i(  0,  1,  0 ) );
+                neighbor_chunks[NEIGHBOR_BELOW] = find_adjacent_chunk( region, neighbor_regions[NEIGHBOR_BELOW], chunk_index + Vector3i(  0, -1,  0 ) );
+                neighbor_chunks[NEIGHBOR_NORTH] = find_adjacent_chunk( region, neighbor_regions[NEIGHBOR_NORTH], chunk_index + Vector3i(  0,  0,  1 ) );
+                neighbor_chunks[NEIGHBOR_SOUTH] = find_adjacent_chunk( region, neighbor_regions[NEIGHBOR_SOUTH], chunk_index + Vector3i(  0,  0, -1 ) );
+                neighbor_chunks[NEIGHBOR_EAST]  = find_adjacent_chunk( region, neighbor_regions[NEIGHBOR_EAST],  chunk_index + Vector3i(  1,  0,  0 ) );
+                neighbor_chunks[NEIGHBOR_WEST]  = find_adjacent_chunk( region, neighbor_regions[NEIGHBOR_WEST],  chunk_index + Vector3i( -1,  0,  0 ) );
 
-void Renderer::render_chunk(
-    const Vector2i& chunk_index,
-    const Region& region,
-    const Region* region_north,
-    const Region* region_south,
-    const Region* region_east,
-    const Region* region_west
-)
-{
-    const Vector2i chunk_position = region.position_ + chunk_index * CHUNK_SIZE;
-    VertexBuffer& vertex_buffer = chunk_vbos_[chunk_position];
+                ChunkRenderer& chunk_renderer = chunk_renderers_[chunk_position];
 
-    if ( !vertex_buffer.initialized_ )
-    {
-        BlockVertexV vertices;
-
-        // For performance, it is best if this is an overestimate rather than an underestimate.
-        vertices.reserve( CHUNK_SIZE * CHUNK_SIZE * 256 );
-
-        for ( int x = 0; x < CHUNK_SIZE; ++x )
-        {
-            for ( int z = 0; z < CHUNK_SIZE; ++z )
-            {
-                const Vector2i block_index( x, z );
-                const Vector2i column_index = chunk_index * CHUNK_SIZE + block_index;
-                const Block* column = region.get_column( column_index );
-                const Block* column_north = find_neighboring_column( region, region_north, column_index + Vector2i(  0,  1 ) );
-                const Block* column_south = find_neighboring_column( region, region_south, column_index + Vector2i(  0, -1 ) );
-                const Block* column_east  = find_neighboring_column( region, region_east,  column_index + Vector2i(  1,  0 ) );
-                const Block* column_west  = find_neighboring_column( region, region_west,  column_index + Vector2i( -1,  0 ) );
-
-                const Vector2i column_world_position = chunk_position + block_index;
-                const Block* lower_block = 0;
-
-                while ( column )
+                if ( !chunk_renderer.initialized_ )
                 {
-                    add_block_faces( column_world_position, *column, column_north, FACE_DIRECTION_NORTH, vertices );
-                    add_block_faces( column_world_position, *column, column_south, FACE_DIRECTION_SOUTH, vertices );
-                    add_block_faces( column_world_position, *column, column_east,  FACE_DIRECTION_EAST,  vertices );
-                    add_block_faces( column_world_position, *column, column_west,  FACE_DIRECTION_WEST,  vertices );
-                    add_block_endcaps( column_world_position, *column, lower_block, vertices );
-
-                    lower_block = column;
-                    column = column->next_;
+                    // TODO: Consider doing Chunk initialization at the time when a new Region is
+                    //       generated, rather than when the Chunk is first seen.
+                    chunk_renderer.initialize( chunk_position, *chunk_it->second, neighbor_chunks );
                 }
+
+                chunk_renderer.render();
+                ++chunks_rendered;
             }
         }
-
-        vertex_buffer.create_buffers();
-        vertex_buffer.bind();
-        vertex_buffer.vertex_count_ = GLsizei( vertices.size() );
-
-        glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
-
-        std::vector<GLuint> index_buffer;
-        index_buffer.resize( vertices.size() );
-
-        for ( int i = 0; i < int( vertices.size() ); ++i )
-        {
-            index_buffer[i] = i;
-        }
-
-        glBufferData( GL_ELEMENT_ARRAY_BUFFER, vertices.size() * sizeof( GLuint ), &index_buffer[0], GL_STATIC_DRAW );
     }
-    else vertex_buffer.bind();
-
-    draw_vertex_buffer( vertex_buffer );
+    // FIXME: std::cout << "Chunks rendered: " << chunks_rendered << std::endl;
 }
