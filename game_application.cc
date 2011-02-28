@@ -54,15 +54,31 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     const uint64_t world_seed = 0x58afe359358eafd3; // FIXME: Using a constant for performance measurements.
 
     SCOPE_TIMER_BEGIN
+
     for ( int x = 0; x < 3; ++x )
     {
-        for ( int y = 0; y < 3; ++y )
+        for ( int z = 0; z < 3; ++z )
         {
-            const Vector2i position( x * Region::REGION_SIZE, y * Region::REGION_SIZE );
+            const Vector2i position( x * Region::REGION_SIZE, z * Region::REGION_SIZE );
             RegionSP region( new Region( world_seed, position ) );
             regions_[position] = region;
         }
     }
+
+    SCOPE_TIMER_END
+    SCOPE_TIMER_BEGIN
+
+    for ( RegionMap::const_iterator region_it = regions_.begin(); region_it != regions_.end(); ++region_it )
+    {
+        Region& region = *region_it->second;
+        ChunkMap& chunks = region.chunks();
+
+        for ( ChunkMap::iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
+        {
+            chunk_it->second->update_external_faces( chunk_it->first, region, regions_ );
+        }
+    }
+
     SCOPE_TIMER_END
 }
 

@@ -7,27 +7,12 @@
 
 #include "region.h"
 
-enum NeighborRelation
-{
-    NEIGHBOR_ABOVE,
-    NEIGHBOR_BELOW,
-    NEIGHBOR_NORTH,
-    NEIGHBOR_SOUTH,
-    NEIGHBOR_EAST,
-    NEIGHBOR_WEST,
-    NEIGHBOR_RELATION_SIZE
-};
-
 struct ChunkRenderer
 {
     ChunkRenderer();
 
     void render();
-    void initialize(
-        const Vector3i& chunk_position,
-        const Chunk& chunk,
-        const Chunk* neighbor_chunks[NEIGHBOR_RELATION_SIZE]
-    );
+    void initialize( const Chunk& chunk );
 
     bool initialized_;
 

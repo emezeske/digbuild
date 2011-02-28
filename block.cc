@@ -16,3 +16,17 @@ Block::Block( const HeightT bottom, const HeightT top, const BlockMaterial mater
 {
     assert( bottom < top );
 }
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for BlockFace:
+//////////////////////////////////////////////////////////////////////////////////
+
+BlockFace::BlockFace()
+{
+}
+
+BlockFace::BlockFace( const Vector3f& normal, const BlockMaterial material ) :
+    normal_( normal ),
+    material_( material )
+{
+}
