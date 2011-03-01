@@ -24,10 +24,10 @@ void GameWindow::init_GL()
 {
     SDL_GL_Window::init_GL();
 
-    GLfloat light_ambient[] = { 0.3f, 0.3f, 0.3f, 1.0f };
+    GLfloat light_ambient[] = { 0.2f, 0.2f, 0.2f, 1.0f };
     GLfloat light_diffuse[] = { 0.5f, 0.5f, 0.5f, 1.0f };
-    GLfloat light_specular[] = { 0.01f, 0.01f, 0.01f, 1.0f };
-    GLfloat light_position[] = { 1.0f, 1.0f, 1.0f, 0.0f };
+    GLfloat light_specular[] = { 0.11f, 0.11f, 0.11f, 1.0f };
+    GLfloat light_position[] = { 1.0f, 1.0f, 1.0f, 1.0f };
   
     glLightfv( GL_LIGHT0, GL_AMBIENT, light_ambient );
     glLightfv( GL_LIGHT0, GL_DIFFUSE, light_diffuse );

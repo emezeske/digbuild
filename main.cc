@@ -6,7 +6,7 @@ const int
     SCREEN_HEIGHT = 1024,
     SCREEN_BPP    = 32;
 
-const Uint32 SCREEN_FLAGS = SDL_HWSURFACE | SDL_OPENGL;
+const Uint32 SCREEN_FLAGS = SDL_OPENGL;
 
 int main( int argc, char **argv )
 {

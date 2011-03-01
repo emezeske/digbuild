@@ -33,7 +33,7 @@ CCFLAGS += [ '-DNDEBUG' ]
 
 env = Environment()
 env.Append( ENV = {'PATH':os.environ['PATH'], 'TERM':os.environ['TERM'], 'HOME':os.environ['HOME']} ) # Environment variables required by colorgcc.
-env.Append( LIBS = [ 'SDL', 'GL', 'GLU' ] )
+env.Append( LIBS = [ 'SDL', 'SDL_image', 'GL', 'GLU' ] )
 env.Append( CCFLAGS = CCFLAGS )
 env.Append( LINKFLAGS = LINKFLAGS )
 

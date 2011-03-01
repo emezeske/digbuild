@@ -203,9 +203,11 @@ void Chunk::add_block_faces(
     {
         if ( adjacent_column->bottom_ < block.top_ && adjacent_column->top_ > sliding_bottom )
         {
-            if ( sliding_bottom < adjacent_column->bottom_ )
+            // Create individual faces for each unit block, instead of one big face for the whole
+            // block, to avoid the T-junctions that might otherwise occur (and cause seams).
+            for ( Block::HeightT b = sliding_bottom; b < adjacent_column->bottom_; ++b )
             {
-                add_block_face( column_world_position, sliding_bottom, adjacent_column->bottom_, block.material_, direction );
+                add_block_face( column_world_position, b, Block::HeightT( b + 1 ), block.material_, direction );
             }
 
             if ( adjacent_column->top_ < block.top_ )
@@ -226,9 +228,9 @@ void Chunk::add_block_faces(
         adjacent_column = adjacent_column->next_;
     }
 
-    if ( sliding_bottom < block.top_ )
+    for ( Block::HeightT b = sliding_bottom; b < block.top_; ++b )
     {
-        add_block_face( column_world_position, sliding_bottom, block.top_, block.material_, direction );
+        add_block_face( column_world_position, b, Block::HeightT( b + 1 ), block.material_, direction );
     }
 }
 
