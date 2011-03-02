@@ -2,7 +2,9 @@
 #define BLOCK_H
 
 #include <stdint.h>
+#include <assert.h>
 
+#include <limits>
 #include <vector>
 
 #include "math.h"
@@ -21,32 +23,41 @@ enum BlockMaterial
 
 struct Block
 {
-    typedef uint8_t HeightT;
+    Block( const BlockMaterial material = BLOCK_MATERIAL_NONE ) :
+        material_( material )
+    {
+        assert( material >= std::numeric_limits<uint8_t>::min() );
+        assert( material <= std::numeric_limits<uint8_t>::max() );
+    }
 
-    Block( const HeightT bottom, const HeightT top, const BlockMaterial material );
+    void set_material( const BlockMaterial material )
+    {
+        assert( material >= std::numeric_limits<uint8_t>::min() );
+        assert( material <= std::numeric_limits<uint8_t>::max() );
 
-    // NOTE: Don't give this type a deconstructor!  It's managed by boost::pool, which (as an optimisation)
-    //       can drop allocated Blocks without calling their destructors.
+        material_ = material;
+    }
 
-    Block* next_;
+    BlockMaterial get_material() const { return BlockMaterial( material_ ); }
 
-    HeightT
-        bottom_,
-        top_;
+private:
 
-    BlockMaterial
-        material_;
+    uint8_t material_;
 };
 
 struct BlockFace
 {
     enum { NUM_VERTICES = 4 };
 
-    BlockFace();
-    BlockFace( const Vector3f& normal, const BlockMaterial material );
+    BlockFace()
+    {
+    }
 
-    // TODO: Represent with origin, normal, and height?  That would make it
-    //       easier for the renderer to break it down into squares.
+    BlockFace( const Vector3f& normal, const BlockMaterial material ) :
+        normal_( normal ),
+        material_( material )
+    {
+    }
 
     Vector3f vertices_[NUM_VERTICES];
 

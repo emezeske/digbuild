@@ -3,11 +3,9 @@
 
 #include <GL/gl.h>
 
-#include <map>
-
 #include <boost/utility.hpp>
 
-#include "region.h"
+#include "chunk.h"
 #include "renderer_material.h"
 
 struct BlockVertex
@@ -72,7 +70,7 @@ struct Renderer
 {
     Renderer();
 
-    void render( const RegionMap& regions );
+    void render( const ChunkMap& chunks );
 
 protected:
 

@@ -47,36 +47,33 @@ void GameWindow::init_GL()
 
 GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     SDL_GL_Interface( initializer, fps ),
-    camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f )
+    camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f ),
+    // generator_( time( NULL ) * 91387 + SDL_GetTicks * 75181 ;
+    generator_( 0x58afe359358eafd3 ) // FIXME: Using a constant for performance measurements.
 {
-    const long ticks = SDL_GetTicks();
-    // const uint64_t world_seed = time( NULL ) * 91387 + ticks * 75181;
-    const uint64_t world_seed = 0x58afe359358eafd3; // FIXME: Using a constant for performance measurements.
-
     SCOPE_TIMER_BEGIN
 
     for ( int x = 0; x < 3; ++x )
     {
         for ( int z = 0; z < 3; ++z )
         {
-            const Vector2i position( x * Region::REGION_SIZE, z * Region::REGION_SIZE );
-            RegionSP region( new Region( world_seed, position ) );
-            regions_[position] = region;
+            const Vector2i position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
+            ChunkV new_chunks = generator_.generate_region( position );
+            
+            for ( ChunkV::iterator chunk_it = new_chunks.begin(); chunk_it != new_chunks.end(); ++chunk_it )
+            {
+                chunk_stitch_into_map( *chunk_it, chunks_ );
+            }
         }
     }
 
     SCOPE_TIMER_END
+
     SCOPE_TIMER_BEGIN
 
-    for ( RegionMap::const_iterator region_it = regions_.begin(); region_it != regions_.end(); ++region_it )
+    for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
     {
-        Region& region = *region_it->second;
-        ChunkMap& chunks = region.chunks();
-
-        for ( ChunkMap::iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
-        {
-            chunk_it->second->update_external_faces( chunk_it->first, region, regions_ );
-        }
+        chunk_it->second->update_external_faces();
     }
 
     SCOPE_TIMER_END
@@ -211,9 +208,9 @@ void GameApplication::render()
     if ( first_time )
     {
         SCOPE_TIMER_BEGIN
-        renderer_.render( regions_ );
+        renderer_.render( chunks_ );
         SCOPE_TIMER_END
         first_time = false;
     }
-    else renderer_.render( regions_ );
+    else renderer_.render( chunks_ );
 }

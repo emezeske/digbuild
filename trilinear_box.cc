@@ -21,8 +21,11 @@ uint64_t get_seed_for_coordinates( const uint64_t base_seed, const Vector3i posi
 // Function definitions for TrilinearBox:
 //////////////////////////////////////////////////////////////////////////////////
 
-TrilinearBox::TrilinearBox
-(
+TrilinearBox::TrilinearBox()
+{
+}
+
+TrilinearBox::TrilinearBox(
     const uint64_t base_seed,
     const Vector3i position,
     const Vector3i size,

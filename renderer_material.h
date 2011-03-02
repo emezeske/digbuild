@@ -6,10 +6,11 @@
 #include <vector>
 
 #include <boost/shared_ptr.hpp>
+#include <boost/utility.hpp>
 
 #include "math.h"
 
-struct Texture
+struct Texture : public boost::noncopyable
 {
     Texture();
     Texture( const std::string& filename );

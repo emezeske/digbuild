@@ -5,8 +5,9 @@
 
 struct TrilinearBox
 {
-    TrilinearBox
-    (
+    TrilinearBox();
+
+    TrilinearBox(
         const uint64_t base_seed,
         const Vector3i position,
         const Vector3i size,

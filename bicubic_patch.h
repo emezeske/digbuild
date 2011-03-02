@@ -6,8 +6,7 @@
 
 struct BicubicPatchCornerFeatures
 {
-    BicubicPatchCornerFeatures
-    (
+    BicubicPatchCornerFeatures(
         const Vector2f& height_range,
         const Vector2f& dx_range,
         const Vector2f& dz_range,
@@ -21,11 +20,9 @@ struct BicubicPatchCornerFeatures
         dxz_range_;
 };
 
-// TODO Better name?
 struct BicubicPatchFeatures
 {
-    BicubicPatchFeatures
-    (
+    BicubicPatchFeatures(
         const BicubicPatchCornerFeatures features_ll,
         const BicubicPatchCornerFeatures features_lr,
         const BicubicPatchCornerFeatures features_ul,
@@ -41,8 +38,9 @@ struct BicubicPatchFeatures
 
 struct BicubicPatch
 {
-    BicubicPatch
-    (
+    BicubicPatch();
+
+    BicubicPatch(
         const uint64_t base_seed,
         const Vector2i position,
         const Vector2i size,

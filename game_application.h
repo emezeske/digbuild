@@ -6,7 +6,8 @@
 #include "sdl_gl_interface.h"
 #include "renderer.h"
 #include "camera.h"
-#include "region.h"
+#include "world_generator.h"
+#include "chunk.h"
 
 struct GameWindow : public SDL_GL_Window
 {
@@ -37,7 +38,9 @@ protected:
 
     Camera camera_;
 
-    RegionMap regions_;
+    WorldGenerator generator_;
+
+    ChunkMap chunks_;
 };
 
 #endif // GAME_APPLICATION_H

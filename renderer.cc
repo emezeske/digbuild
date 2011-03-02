@@ -101,7 +101,7 @@ void ChunkRenderer::render( const RendererMaterialV& materials )
 
 void ChunkRenderer::initialize( const Chunk& chunk )
 {
-    const BlockFaceV& faces = chunk.external_faces();
+    const BlockFaceV& faces = chunk.get_external_faces();
 
     typedef std::map<BlockMaterial, BlockVertexV> MaterialVertexMap;
 
@@ -146,7 +146,7 @@ Renderer::Renderer()
     materials_[BLOCK_MATERIAL_MAGMA].reset  ( new RendererMaterial( "magma" ) );
 }
 
-void Renderer::render( const RegionMap& regions )
+void Renderer::render( const ChunkMap& chunks )
 {
     glCullFace( GL_BACK );
     glEnable( GL_CULL_FACE );
@@ -167,63 +167,40 @@ void Renderer::render( const RegionMap& regions )
 
     gmtl::Frustumf view_frustum( m, p );
 
-    // glEnable( GL_TEXTURE_2D );
-    // RendererMaterial zebra( "magma" ) ;
-    // glBindTexture( GL_TEXTURE_2D, zebra.texture().texture_id() );
+    // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
 
-    // const float r = 100.0f;
-    // glBegin( GL_QUADS );
-    //         glTexCoord2f( 0.0, 0.0 );
-    //         glVertex2f( -r, -r );
-    //         glTexCoord2f( 0.0, 1.0 );
-    //         glVertex2f( -r, +r );
-    //         glTexCoord2f( 1.0, 1.0 );
-    //         glVertex2f( +r, +r );
-    //         glTexCoord2f( 1.0, 0.0 );
-    //         glVertex2f( +r, -r );
-    // glEnd();
+    // TODO: Sort (using an ordering table) the chunks, and render them from front to back.  Eventually,
+    //       use an ARB_occlusion_query to avoid rendering fully occluded chunks.
+
+    // TODO: Render the translucent parts of the chunks from back to front.
+
+    // TODO: Look into glMultiDrawElements or display lists to reduce the number of OpenGL library calls.
 
     int chunks_rendered = 0;
     int chunks_total = 0;
 
-    for ( RegionMap::const_iterator region_it = regions.begin(); region_it != regions.end(); ++region_it )
+    for ( ChunkMap::const_iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
     {
-        const Region& region = *region_it->second;
+        const Vector3i chunk_position = chunk_it->first;
+        const Vector3f chunk_min = vector_cast<Vector3f>( chunk_position );
+        const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
+        const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
 
-        // TODO: Frustum cull entire regions? (This requires that regions keep track of their AABoxes).
-        //       Maybe even do some kind of hierarchical culling (This requires that regions keep a hierarchy).
-
-        // TODO: Sort (using an ordering table) the chunks, and render them from front to back.  Eventually,
-        //       use an ARB_occlusion_query to avoid rendering fully occluded chunks.
-
-        // TODO: Render the translucent parts of the chunks from back to front.
-
-        // TODO: Look into glMultiDrawElements or display lists to reduce the number of OpenGL library calls.
-
-        for ( ChunkMap::const_iterator chunk_it = region.chunks().begin(); chunk_it != region.chunks().end(); ++chunk_it )
+        if ( gmtl::isInVolume( view_frustum, chunk_box ) )
         {
-            const Vector3i chunk_index = chunk_it->first;
-            const Vector3i chunk_position = Vector3i( region.position()[0], 0, region.position()[1] ) + chunk_index * int( Chunk::CHUNK_SIZE );
-            const Vector3f chunk_min = vector_cast<Vector3f>( chunk_position );
-            const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
-            const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
+            ChunkRenderer& chunk_renderer = chunk_renderers_[chunk_position];
 
-            if ( gmtl::isInVolume( view_frustum, chunk_box ) )
+            if ( !chunk_renderer.initialized() )
             {
-                ChunkRenderer& chunk_renderer = chunk_renderers_[chunk_position];
-
-                if ( !chunk_renderer.initialized() )
-                {
-                    // TODO: Consider doing Chunk initialization at the time when a new Region is
-                    //       generated, rather than when the Chunk is first seen.
-                    chunk_renderer.initialize( *chunk_it->second );
-                }
-
-                chunk_renderer.render( materials_ );
-                ++chunks_rendered;
+                // TODO: Do Chunk initialization at the time when a new Region is
+                //       generated/modified, rather than when the Chunk is first seen.
+                chunk_renderer.initialize( *chunk_it->second );
             }
-            ++chunks_total;
+
+            chunk_renderer.render( materials_ );
+            ++chunks_rendered;
         }
+        ++chunks_total;
     }
 
     // TODO: Just for development.

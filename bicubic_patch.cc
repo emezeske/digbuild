@@ -74,8 +74,7 @@ struct BicubicPatchCorner
 // Function definitions for BicubicPatchCornerFeatures:
 //////////////////////////////////////////////////////////////////////////////////
 
-BicubicPatchCornerFeatures::BicubicPatchCornerFeatures
-(
+BicubicPatchCornerFeatures::BicubicPatchCornerFeatures(
     const Vector2f& height_range,
     const Vector2f& dx_range,
     const Vector2f& dz_range,
@@ -92,8 +91,7 @@ BicubicPatchCornerFeatures::BicubicPatchCornerFeatures
 // Function definitions for BicubicPatchFeatures:
 //////////////////////////////////////////////////////////////////////////////////
 
-BicubicPatchFeatures::BicubicPatchFeatures
-(
+BicubicPatchFeatures::BicubicPatchFeatures(
     const BicubicPatchCornerFeatures features_ll,
     const BicubicPatchCornerFeatures features_lr,
     const BicubicPatchCornerFeatures features_ul,
@@ -110,8 +108,11 @@ BicubicPatchFeatures::BicubicPatchFeatures
 // Function definitions for BicubicPatch:
 //////////////////////////////////////////////////////////////////////////////////
 
-BicubicPatch::BicubicPatch
-(
+BicubicPatch::BicubicPatch()
+{
+}
+
+BicubicPatch::BicubicPatch(
     const uint64_t base_seed,
     const Vector2i position,
     const Vector2i size,
