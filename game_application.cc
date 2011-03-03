@@ -16,8 +16,8 @@ void GameWindow::create_window()
 {
     SDL_GL_Window::create_window();
 
-    SDL_ShowCursor( SDL_DISABLE );
-    SDL_WM_GrabInput( SDL_GRAB_ON );
+    // SDL_ShowCursor( SDL_DISABLE );
+    // SDL_WM_GrabInput( SDL_GRAB_ON );
 }
 
 void GameWindow::init_GL()
@@ -73,7 +73,7 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
 
     for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
     {
-        chunk_it->second->update_external_faces();
+        chunk_it->second->update();
     }
 
     SCOPE_TIMER_END

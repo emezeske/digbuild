@@ -60,7 +60,7 @@ void ChunkVertexBuffer::render()
     glClientActiveTexture( GL_TEXTURE0 );
     glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
 
-    glDrawElements( GL_QUADS, vertex_count_, GL_UNSIGNED_INT, 0 );
+    glDrawElements( GL_TRIANGLES, vertex_count_, GL_UNSIGNED_INT, 0 );
 
     glDisableClientState( GL_TEXTURE_COORD_ARRAY );
     glDisableClientState( GL_NORMAL_ARRAY );
@@ -109,17 +109,15 @@ void ChunkRenderer::initialize( const Chunk& chunk )
 
     for ( BlockFaceV::const_iterator face_it = faces.begin(); face_it != faces.end(); ++face_it )
     {
-        // FIXME:
-        // for ( size_t i = 0; i < BlockFace::NUM_VERTICES; ++i )
-        // {
-        //     // TODO: Texture coordinates
-        //     material_vertices[face_it->material_].push_back( BlockVertex( face_it->vertices_[i], face_it->normal_, Vector2f( 0.5f, 0.5f ) ) );
-        // }
+        BlockVertexV& v = material_vertices[face_it->material_];
 
-        material_vertices[face_it->material_].push_back( BlockVertex( face_it->vertices_[0], face_it->normal_, Vector2f( 0.0f, 0.0f ) ) );
-        material_vertices[face_it->material_].push_back( BlockVertex( face_it->vertices_[1], face_it->normal_, Vector2f( 1.0f, 0.0f ) ) );
-        material_vertices[face_it->material_].push_back( BlockVertex( face_it->vertices_[2], face_it->normal_, Vector2f( 1.0f, 1.0f ) ) );
-        material_vertices[face_it->material_].push_back( BlockVertex( face_it->vertices_[3], face_it->normal_, Vector2f( 0.0f, 1.0f ) ) );
+        v.push_back( BlockVertex( face_it->vertices_[2], face_it->normal_, Vector2f( 1.0f, 1.0f ) ) );
+        v.push_back( BlockVertex( face_it->vertices_[1], face_it->normal_, Vector2f( 1.0f, 0.0f ) ) );
+        v.push_back( BlockVertex( face_it->vertices_[0], face_it->normal_, Vector2f( 0.0f, 0.0f ) ) );
+
+        v.push_back( BlockVertex( face_it->vertices_[0], face_it->normal_, Vector2f( 0.0f, 0.0f ) ) );
+        v.push_back( BlockVertex( face_it->vertices_[3], face_it->normal_, Vector2f( 0.0f, 1.0f ) ) );
+        v.push_back( BlockVertex( face_it->vertices_[2], face_it->normal_, Vector2f( 1.0f, 1.0f ) ) );
     }
 
     for ( MaterialVertexMap::const_iterator it = material_vertices.begin(); it != material_vertices.end(); ++it )
@@ -182,7 +180,7 @@ void Renderer::render( const ChunkMap& chunks )
     for ( ChunkMap::const_iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
     {
         const Vector3i chunk_position = chunk_it->first;
-        const Vector3f chunk_min = vector_cast<Vector3f>( chunk_position );
+        const Vector3f chunk_min = vector_cast<Scalar>( chunk_position );
         const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
         const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
 

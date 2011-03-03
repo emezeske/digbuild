@@ -21,6 +21,11 @@ enum NeighborRelation
     NEIGHBOR_RELATION_SIZE
 };
 
+#define FOR_EACH_NEIGHBOR( iterator_name )\
+    for ( NeighborRelation iterator_name = NEIGHBOR_ABOVE;\
+          iterator_name != NEIGHBOR_RELATION_SIZE;\
+          iterator_name = NeighborRelation( int( iterator_name ) + 1 ) )
+
 inline NeighborRelation reverse_neighbor_relation( const NeighborRelation relation )
 {
     switch ( relation )
@@ -35,9 +40,11 @@ inline NeighborRelation reverse_neighbor_relation( const NeighborRelation relati
     }
 }
 
+typedef std::vector<gmtl::AABoxf> AABoxfV;
+
 struct Chunk : public boost::noncopyable
 {
-    enum { CHUNK_SIZE = 16 };
+    enum { CHUNK_SIZE = 32 };
 
     Chunk( const Vector3i& position );
 
@@ -106,10 +113,12 @@ struct Chunk : public boost::noncopyable
     void set_neighbor( const NeighborRelation relation, Chunk* new_neighbor )
     {
         assert( relation >= 0 && relation < NEIGHBOR_RELATION_SIZE );
+
+        const NeighborRelation reverse_relation = reverse_neighbor_relation( relation );
+
         assert( !new_neighbor || !new_neighbor->get_neighbor( reverse_relation ) );
 
         Chunk* existing_neighbor = neighbors_[relation];
-        const NeighborRelation reverse_relation = reverse_neighbor_relation( relation );
 
         if ( existing_neighbor )
         {
@@ -125,9 +134,11 @@ struct Chunk : public boost::noncopyable
         neighbors_[relation] = new_neighbor;
     }
 
-    void update_external_faces();
+    void update();
 
     const BlockFaceV& get_external_faces() const { return external_faces_; }
+
+    const AABoxfV& get_collision_boxes() const { return collision_boxes_; }
 
 private:
 
@@ -137,7 +148,6 @@ private:
                index[0] < CHUNK_SIZE && index[1] < CHUNK_SIZE && index[2] < CHUNK_SIZE;
     }
 
-    void maybe_add_external_face( const Vector3f& block_position, const Vector3i& block_index, const Block& block, const NeighborRelation relation );
     void add_external_face( const Vector3f& block_position, const Block& block, const NeighborRelation relation );
 
     Vector3i position_;
@@ -145,6 +155,8 @@ private:
     Block blocks_[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE];
 
     BlockFaceV external_faces_;
+
+    AABoxfV collision_boxes_;
 
     Chunk* neighbors_[NEIGHBOR_RELATION_SIZE];
 };

@@ -21,11 +21,10 @@ struct WorldGenerator
 
 protected:
 
-    void generate_chunk_column(
+    ChunkV generate_chunk_column(
         const RegionFeatures& features,
         const Vector2i& region_position,
-        const Vector2i& column_index,
-        ChunkMap& chunks
+        const Vector2i& column_index
     );
     
     const uint64_t world_seed_;
@@ -40,6 +39,8 @@ struct RegionFeatures
         NUM_TRILINEAR_BOXES     = 2,
         TRILINEAR_BOX_HEIGHT    = 256
     };
+
+    static const Vector3i TRILINEAR_BOX_SIZE;
 
     RegionFeatures(
         const uint64_t world_seed,
@@ -60,9 +61,8 @@ struct RegionFeatures
         return octave_patches_[index[0]][index[1]];
     }
 
-    const TrilinearBox& get_box( const unsigned index )
+    const TrilinearBox& get_box( const unsigned index ) const
     {
-        assert( index >= 0 );
         assert( index < NUM_TRILINEAR_BOXES );
 
         return boxes_[index];

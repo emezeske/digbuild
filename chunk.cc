@@ -19,14 +19,16 @@ const Vector3f
 Chunk::Chunk( const Vector3i& position ) :
     position_( position )
 {
+    FOR_EACH_NEIGHBOR( relation )
+    {
+        neighbors_[relation] = 0;
+    }
 }
 
-void Chunk::update_external_faces()
+void Chunk::update()
 {
     external_faces_.clear();
-
-    // TODO: This might be made more efficient by only checking the ABOVE, NORTH, and EAST neighbors
-    //       for each Block, and adding faces for either the current block OR the neighbors.
+    collision_boxes_.clear();
 
     for ( int x = 0; x < CHUNK_SIZE; ++x )
     {
@@ -36,26 +38,32 @@ void Chunk::update_external_faces()
             {
                 const Vector3i block_index( x, y, z );
                 const Block& block = get_block( block_index );
-                const Vector3f block_position = vector_cast<Vector3f>( position_ + block_index );
 
-                maybe_add_external_face( block_position, block_index, block, NEIGHBOR_ABOVE );
-                maybe_add_external_face( block_position, block_index, block, NEIGHBOR_BELOW );
-                maybe_add_external_face( block_position, block_index, block, NEIGHBOR_NORTH );
-                maybe_add_external_face( block_position, block_index, block, NEIGHBOR_SOUTH );
-                maybe_add_external_face( block_position, block_index, block, NEIGHBOR_EAST );
-                maybe_add_external_face( block_position, block_index, block, NEIGHBOR_WEST );
+                if ( block.get_material() != BLOCK_MATERIAL_NONE )
+                {
+                    const Vector3f block_position = vector_cast<Scalar>( Vector3i( position_ + block_index ) );
+                    bool block_visible = false;
+
+                    // TODO: This might be made more efficient by only checking the ABOVE, NORTH, and EAST neighbors
+                    //       for each Block, and adding faces for either the current block OR the neighbor.
+                    FOR_EACH_NEIGHBOR( relation )
+                    {
+                        const Block* block_neighbor = get_block_neighbor( block_index, relation );
+
+                        if ( !block_neighbor || block_neighbor->get_material() == BLOCK_MATERIAL_NONE )
+                        {
+                            add_external_face( block_position, block, relation );
+                            block_visible = true;
+                        }
+                    }
+
+                    if ( block_visible )
+                    {
+                        collision_boxes_.push_back( gmtl::AABoxf( block_position, block_position + Vector3f( 1.0f, 1.0f, 1.0f ) ) );
+                    }
+                }
             }
         }
-    }
-}
-
-void Chunk::maybe_add_external_face( const Vector3f& block_position, const Vector3i& block_index, const Block& block, const NeighborRelation relation )
-{
-    const Block* block_neighbor = get_block_neighbor( block_index, relation );
-
-    if ( !block_neighbor )
-    {
-        add_external_face( block_position, block, relation );
     }
 }
 
@@ -76,9 +84,9 @@ void Chunk::add_external_face( const Vector3f& block_position, const Block& bloc
         case NEIGHBOR_BELOW:
             external_faces_.push_back( BlockFace( DOWN_NORMAL, block.get_material() ) );
             external_faces_.back().vertices_[0] = V( 0, 0, 0 );
-            external_faces_.back().vertices_[1] = V( 1, 0, 0 );
+            external_faces_.back().vertices_[1] = V( 0, 0, 1 );
             external_faces_.back().vertices_[2] = V( 1, 0, 1 );
-            external_faces_.back().vertices_[3] = V( 0, 0, 1 );
+            external_faces_.back().vertices_[3] = V( 1, 0, 0 );
             break;
 
         case NEIGHBOR_NORTH:
@@ -133,7 +141,7 @@ void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks )
     neighbors[NEIGHBOR_EAST]  = chunks.find( chunk->get_position() + Vector3i( Chunk::CHUNK_SIZE, 0, 0 ) );
     neighbors[NEIGHBOR_WEST]  = chunks.find( chunk->get_position() + Vector3i( -Chunk::CHUNK_SIZE, 0, 0 ) );
 
-    for ( int relation = 0; relation < NEIGHBOR_RELATION_SIZE; ++relation )
+    FOR_EACH_NEIGHBOR( relation )
     {
         if ( neighbors[relation] != chunks.end() )
         {
@@ -146,9 +154,9 @@ void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks )
 
 void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks )
 {
-    for ( NeighborRelation relation = 0; relation < NEIGHBOR_RELATION_SIZE; ++relation )
+    FOR_EACH_NEIGHBOR( relation )
     {
-        if ( neighbors[relation] != chunks.end() )
+        if ( chunk->get_neighbor( relation ) )
         {
             chunk->set_neighbor( relation, 0 );
         }

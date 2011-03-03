@@ -91,7 +91,7 @@ Scalar TrilinearBox::interpolate( const Vector3f& position ) const
         position[2] * Scalar( vertex_field_size_[2] - 1 )
     );
 
-    const Vector3i vertex_index = vector_cast<Vector3i>( vertex_space_position );
+    const Vector3i vertex_index = vector_cast<int>( vertex_space_position );
 
     const Scalar
         p000 = get_vertex( vertex_index + Vector3i( 0, 0, 0 ) ),
@@ -103,7 +103,7 @@ Scalar TrilinearBox::interpolate( const Vector3f& position ) const
         p110 = get_vertex( vertex_index + Vector3i( 1, 1, 0 ) ),
         p111 = get_vertex( vertex_index + Vector3i( 1, 1, 1 ) );
 
-    const Vector3f t = vertex_space_position - vector_cast<Vector3f>( vertex_index );
+    const Vector3f t = vertex_space_position - vector_cast<Scalar>( vertex_index );
 
     // NOTE: I tried a few different caching schemes, to potentially avoid recalculating
     //       the first six interpolants here, but all of the schemes ran MUCH more slowly,
