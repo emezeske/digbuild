@@ -1,7 +1,7 @@
 #ifndef RENDERER_MATERIAL_H
 #define RENDERER_MATERIAL_H
 
-#include <GL/gl.h>
+#include <GL/glew.h>
 
 #include <vector>
 
@@ -9,6 +9,7 @@
 #include <boost/utility.hpp>
 
 #include "math.h"
+#include "shader.h"
 
 struct Texture : public boost::noncopyable
 {
@@ -28,16 +29,23 @@ private:
 
 struct RendererMaterial
 {
-    RendererMaterial();
     RendererMaterial( const std::string& name );
 
     const Texture& texture() const { return texture_; }
+    const Shader& vertex_shader() const { return vertex_shader_; }
+    const Shader& fragment_shader() const { return fragment_shader_; }
 
 private:
 
-    static const std::string TEXTURES_DIRECTORY;
+    static const std::string
+        TEXTURE_DIRECTORY,
+        SHADER_DIRECTORY;
 
     Texture texture_;
+
+    Shader
+        vertex_shader_,
+        fragment_shader_;
 };
 
 typedef boost::shared_ptr<RendererMaterial> RendererMaterialSP;

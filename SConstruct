@@ -16,7 +16,7 @@ CCFLAGS = [
     '-Wpointer-arith',
     '-Wcast-qual',
     '-Wwrite-strings',
-    '-Wconversion',
+#    '-Wconversion',
     '-Wredundant-decls',
     '-Wno-unused',
     '-Wno-deprecated'
@@ -33,7 +33,7 @@ LINKFLAGS += [ '-Wl,--strip-all' ]
 
 env = Environment()
 env.Append( ENV = {'PATH':os.environ['PATH'], 'TERM':os.environ['TERM'], 'HOME':os.environ['HOME']} ) # Environment variables required by colorgcc.
-env.Append( LIBS = [ 'SDL', 'SDL_image', 'GL', 'GLU' ] )
+env.Append( LIBS = [ 'SDL', 'SDL_image', 'GL', 'GLU', 'GLEW' ] )
 env.Append( CCFLAGS = CCFLAGS )
 env.Append( LINKFLAGS = LINKFLAGS )
 

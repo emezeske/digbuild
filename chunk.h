@@ -10,37 +10,34 @@
 #include "math.h"
 #include "block.h"
 
-enum NeighborRelation
+enum CardinalRelation
 {
-    NEIGHBOR_ABOVE,
-    NEIGHBOR_BELOW,
-    NEIGHBOR_NORTH,
-    NEIGHBOR_SOUTH,
-    NEIGHBOR_EAST,
-    NEIGHBOR_WEST,
-    NEIGHBOR_RELATION_SIZE
+    CARDINAL_RELATION_ABOVE,
+    CARDINAL_RELATION_BELOW,
+    CARDINAL_RELATION_NORTH,
+    CARDINAL_RELATION_SOUTH,
+    CARDINAL_RELATION_EAST,
+    CARDINAL_RELATION_WEST,
+    NUM_CARDINAL_RELATIONS
 };
 
-#define FOR_EACH_NEIGHBOR( iterator_name )\
-    for ( NeighborRelation iterator_name = NEIGHBOR_ABOVE;\
-          iterator_name != NEIGHBOR_RELATION_SIZE;\
-          iterator_name = NeighborRelation( int( iterator_name ) + 1 ) )
-
-inline NeighborRelation reverse_neighbor_relation( const NeighborRelation relation )
-{
-    switch ( relation )
-    {
-        case NEIGHBOR_ABOVE: return NEIGHBOR_BELOW;
-        case NEIGHBOR_BELOW: return NEIGHBOR_ABOVE;
-        case NEIGHBOR_NORTH: return NEIGHBOR_SOUTH;
-        case NEIGHBOR_SOUTH: return NEIGHBOR_NORTH;
-        case NEIGHBOR_EAST:  return NEIGHBOR_WEST;
-        case NEIGHBOR_WEST:  return NEIGHBOR_EAST;
-        default: throw std::runtime_error( "Invalid neighbor relation." );
-    }
-}
-
 typedef std::vector<gmtl::AABoxf> AABoxfV;
+
+struct Chunk;
+
+struct BlockIterator
+{
+    BlockIterator( Chunk* chunk, Block* block, Vector3i index ) :
+        chunk_( chunk ),
+        block_( block ),
+        index_( index )
+    {
+    }
+
+    Chunk* chunk_;
+    Block* block_;
+    Vector3i index_;
+};
 
 struct Chunk : public boost::noncopyable
 {
@@ -56,85 +53,60 @@ struct Chunk : public boost::noncopyable
         return blocks_[index[0]][index[1]][index[2]];
     }
 
-    Block* get_block_neighbor( Vector3i index, const NeighborRelation relation )
+    BlockIterator get_block_neighbor( const Vector3i& index, const Vector3i& relation )
     {
-        assert( relation >= 0 && relation < NEIGHBOR_RELATION_SIZE );
+        assert( relation_in_range( relation ) );
+        Vector3i neighbor_index = index + relation;
+        Vector3i neighbor_chunk_relation( 0, 0, 0 );
 
-        bool use_chunk_neighbor = false;
-
-        #define _increment_wrap( c )\
-            do\
-                if ( ++index[c] == CHUNK_SIZE )\
-                {\
-                    index[c] = 0;\
-                    use_chunk_neighbor = true;\
-                }\
-            while ( false )
-
-        #define _decrement_wrap( c )\
-            do\
-                if ( --index[c] == -1 )\
-                {\
-                    index[c] = CHUNK_SIZE - 1;\
-                    use_chunk_neighbor = true;\
-                }\
-            while ( false )
-
-        switch ( relation )
+        for ( int i = 0; i < 3; ++i )
         {
-            case NEIGHBOR_ABOVE: _increment_wrap( 1 ); break;
-            case NEIGHBOR_BELOW: _decrement_wrap( 1 ); break;
-            case NEIGHBOR_NORTH: _increment_wrap( 2 ); break;
-            case NEIGHBOR_SOUTH: _decrement_wrap( 2 ); break;
-            case NEIGHBOR_EAST:  _increment_wrap( 0 ); break;
-            case NEIGHBOR_WEST:  _decrement_wrap( 0 ); break;
-            default: throw std::runtime_error( "Invalid neighbor relation." );
-        };
-
-        #undef _decrement_wrap
-        #undef _increment_wrap
-
-        Chunk* chunk = use_chunk_neighbor ? get_neighbor( relation ) : this;
-
-        if ( use_chunk_neighbor )
-        {
-            Chunk* chunk_neighbor = get_neighbor( relation );
-            return chunk_neighbor ? &chunk_neighbor->get_block( index ) : 0;
+            if ( neighbor_index[i] == -1 )
+            {
+                neighbor_index[i] = CHUNK_SIZE - 1;
+                neighbor_chunk_relation[i] = -1;
+            }
+            else if ( neighbor_index[i] == CHUNK_SIZE )
+            {
+                neighbor_index[i] = 0;
+                neighbor_chunk_relation[i] = 1;
+            }
         }
-        else return &get_block( index );
+
+        Chunk* neighbor_chunk = get_neighbor( neighbor_chunk_relation );
+        Block* neighbor_block = neighbor_chunk ? &neighbor_chunk->get_block( neighbor_index ) : 0;
+        return BlockIterator( neighbor_chunk, neighbor_block, neighbor_index );
     }
 
-    Chunk* get_neighbor( const NeighborRelation relation )
+    Chunk* get_neighbor( const Vector3i& relation )
     {
-        assert( relation >= 0 && relation < NEIGHBOR_RELATION_SIZE );
-        return neighbors_[relation];
+        return get_neighbor_impl( relation );
     }
 
-    void set_neighbor( const NeighborRelation relation, Chunk* new_neighbor )
+    void set_neighbor( const Vector3i& relation, Chunk* new_neighbor )
     {
-        assert( relation >= 0 && relation < NEIGHBOR_RELATION_SIZE );
-
-        const NeighborRelation reverse_relation = reverse_neighbor_relation( relation );
+        const Vector3i reverse_relation = -relation;
 
         assert( !new_neighbor || !new_neighbor->get_neighbor( reverse_relation ) );
 
-        Chunk* existing_neighbor = neighbors_[relation];
+        Chunk* existing_neighbor = get_neighbor( relation );
 
         if ( existing_neighbor )
         {
             assert( !new_neighbor );
-            neighbors_[relation]->neighbors_[reverse_relation] = 0;
+            existing_neighbor->get_neighbor_impl( reverse_relation ) = 0;
         }
 
         if ( new_neighbor )
         {
-            new_neighbor->neighbors_[reverse_relation] = this;
+            new_neighbor->get_neighbor_impl( reverse_relation ) = this;
         }
 
-        neighbors_[relation] = new_neighbor;
+        get_neighbor_impl( relation ) = new_neighbor;
     }
 
-    void update();
+    void reset_lighting();
+    void update_geometry();
 
     const BlockFaceV& get_external_faces() const { return external_faces_; }
 
@@ -142,13 +114,34 @@ struct Chunk : public boost::noncopyable
 
 private:
 
+    bool relation_in_range( const Vector3i& relation )
+    {
+        return relation[0] >= -1 && relation[0] <= 1 &&
+               relation[1] >= -1 && relation[1] <= 1 &&
+               relation[2] >= -1 && relation[2] <= 1;
+    }
+
     bool block_in_range( const Vector3i& index )
     {
         return index[0] >= 0 && index[1] >= 0 && index[2] >= 0 &&
                index[0] < CHUNK_SIZE && index[1] < CHUNK_SIZE && index[2] < CHUNK_SIZE;
     }
 
-    void add_external_face( const Vector3f& block_position, const Block& block, const NeighborRelation relation );
+    Chunk*& get_neighbor_impl( const Vector3i& relation )
+    {
+        assert( relation_in_range( relation ) );
+        return neighbors_[relation[0] + 1][relation[1] + 1][relation[2] + 1];
+    }
+
+    void add_external_face(
+        const Vector3i& block_index,
+        const Vector3f& block_position,
+        const Block& block,
+        const CardinalRelation relation,
+        const Vector3f& normal
+    );
+
+    Vector3f calculate_vertex_lighting( const Vector3i& vertex_index );
 
     Vector3i position_;
 
@@ -158,7 +151,7 @@ private:
 
     AABoxfV collision_boxes_;
 
-    Chunk* neighbors_[NEIGHBOR_RELATION_SIZE];
+    Chunk* neighbors_[3][3][3];
 };
 
 typedef boost::shared_ptr<Chunk> ChunkSP;
@@ -167,5 +160,6 @@ typedef std::map<Vector3i, ChunkSP, Vector3LexicographicLess<Vector3i> > ChunkMa
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks );
 void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks );
+void chunk_apply_lighting( Chunk& chunk );
 
 #endif // CHUNK_H

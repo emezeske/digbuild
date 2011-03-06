@@ -1,6 +1,7 @@
 #ifndef SDL_GL_INTERFACE_H
 #define SDL_GL_INTERFACE_H
 
+#include <GL/glew.h>
 #include <SDL/SDL.h>
 #include <string>
 

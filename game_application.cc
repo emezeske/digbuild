@@ -1,45 +1,23 @@
-#include <GL/gl.h>
+#include <GL/glew.h>
 
 #include "sdl_utilities.h"
 #include "game_application.h"
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for GameWindow:
+// Local definitions:
 //////////////////////////////////////////////////////////////////////////////////
 
-GameWindow::GameWindow( const int w, const int h, const int bpp, const Uint32 flags, const std::string &title ) : 
-    SDL_GL_Window( w, h, bpp, flags, title )
+namespace {
+
+typedef std::pair<Vector3i, ChunkSP> PositionChunkPair;
+typedef std::vector<PositionChunkPair> ChunkMapValueV;
+
+bool highest_chunk( const PositionChunkPair& a, const PositionChunkPair& b )
 {
+    return a.first[1] > b.first[1];
 }
 
-void GameWindow::create_window()
-{
-    SDL_GL_Window::create_window();
-
-    // SDL_ShowCursor( SDL_DISABLE );
-    // SDL_WM_GrabInput( SDL_GRAB_ON );
-}
-
-void GameWindow::init_GL()
-{
-    SDL_GL_Window::init_GL();
-
-    GLfloat light_ambient[] = { 0.2f, 0.2f, 0.2f, 1.0f };
-    GLfloat light_diffuse[] = { 0.5f, 0.5f, 0.5f, 1.0f };
-    GLfloat light_specular[] = { 0.11f, 0.11f, 0.11f, 1.0f };
-    GLfloat light_position[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-  
-    glLightfv( GL_LIGHT0, GL_AMBIENT, light_ambient );
-    glLightfv( GL_LIGHT0, GL_DIFFUSE, light_diffuse );
-    glLightfv( GL_LIGHT0, GL_SPECULAR, light_specular );
-    glLightfv( GL_LIGHT0, GL_POSITION, light_position );
-  
-    glEnable( GL_LIGHTING );
-    glEnable( GL_LIGHT0 );
- 
-    glShadeModel( GL_SMOOTH );
-    glEnable( GL_COLOR_MATERIAL );
-}
+} // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for GameApplication:
@@ -48,10 +26,10 @@ void GameWindow::init_GL()
 GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     SDL_GL_Interface( initializer, fps ),
     camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f ),
-    // generator_( time( NULL ) * 91387 + SDL_GetTicks * 75181 ;
+    // generator_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
     generator_( 0x58afe359358eafd3 ) // FIXME: Using a constant for performance measurements.
 {
-    SCOPE_TIMER_BEGIN
+    SCOPE_TIMER_BEGIN( "World generation" )
 
     for ( int x = 0; x < 3; ++x )
     {
@@ -69,11 +47,34 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
 
     SCOPE_TIMER_END
 
-    SCOPE_TIMER_BEGIN
+    SCOPE_TIMER_BEGIN( "Lighting" )
+
+    ChunkMapValueV height_sorted_chunks;
 
     for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
     {
-        chunk_it->second->update();
+        height_sorted_chunks.push_back( *chunk_it );
+    }
+
+    std::sort( height_sorted_chunks.begin(), height_sorted_chunks.end(), highest_chunk );
+
+    for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
+    {
+        chunk_it->second->reset_lighting();
+    }
+
+    for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
+    {
+        chunk_apply_lighting( *chunk_it->second.get() );
+    }
+
+    SCOPE_TIMER_END
+
+    SCOPE_TIMER_BEGIN( "Updating geometry" )
+
+    for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
+    {
+        chunk_it->second->update_geometry();
     }
 
     SCOPE_TIMER_END
@@ -207,7 +208,7 @@ void GameApplication::render()
 
     if ( first_time )
     {
-        SCOPE_TIMER_BEGIN
+        SCOPE_TIMER_BEGIN( "First render" )
         renderer_.render( chunks_ );
         SCOPE_TIMER_END
         first_time = false;

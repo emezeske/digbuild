@@ -1,6 +1,6 @@
 #define GL_GLEXT_PROTOTYPES
 
-#include <GL/gl.h>
+#include <GL/glew.h>
 
 #include <boost/numeric/conversion/cast.hpp>
 
@@ -48,17 +48,21 @@ ChunkVertexBuffer::~ChunkVertexBuffer()
 
 void ChunkVertexBuffer::render()
 {
-    glEnableClientState( GL_VERTEX_ARRAY );
-    glEnableClientState( GL_NORMAL_ARRAY );
-    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-
     bind();
 
+    glEnableClientState( GL_VERTEX_ARRAY );
     glVertexPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 0 ) );
+
+    glEnableClientState( GL_NORMAL_ARRAY );
     glNormalPointer( GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 12 ) );
 
     glClientActiveTexture( GL_TEXTURE0 );
+    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
     glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
+
+    glClientActiveTexture( GL_TEXTURE1 );
+    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 32 ) );
 
     glDrawElements( GL_TRIANGLES, vertex_count_, GL_UNSIGNED_INT, 0 );
 
@@ -92,10 +96,19 @@ void ChunkRenderer::render( const RendererMaterialV& materials )
         assert( material >= 0 && material < static_cast<int>( materials.size() ) );
         const RendererMaterial& renderer_material = *materials[material];
 
+        renderer_material.vertex_shader().enable();
+        renderer_material.fragment_shader().enable();
+
+        renderer_material.fragment_shader().set_uniform_int( "texture", 0 );
+
         glEnable( GL_TEXTURE_2D );
         glClientActiveTexture( GL_TEXTURE0 );
         glBindTexture( GL_TEXTURE_2D, renderer_material.texture().texture_id() );
         vbo.render();
+
+        // TODO: Use a guard object instead.
+        renderer_material.fragment_shader().disable();
+        renderer_material.vertex_shader().disable();
     }
 }
 
@@ -111,13 +124,14 @@ void ChunkRenderer::initialize( const Chunk& chunk )
     {
         BlockVertexV& v = material_vertices[face_it->material_];
 
-        v.push_back( BlockVertex( face_it->vertices_[2], face_it->normal_, Vector2f( 1.0f, 1.0f ) ) );
-        v.push_back( BlockVertex( face_it->vertices_[1], face_it->normal_, Vector2f( 1.0f, 0.0f ) ) );
-        v.push_back( BlockVertex( face_it->vertices_[0], face_it->normal_, Vector2f( 0.0f, 0.0f ) ) );
+        // TODO: Clean this up
+        v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[1].position_, face_it->normal_, Vector2f( 1.0f, 0.0f ), face_it->vertices_[1].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
 
-        v.push_back( BlockVertex( face_it->vertices_[0], face_it->normal_, Vector2f( 0.0f, 0.0f ) ) );
-        v.push_back( BlockVertex( face_it->vertices_[3], face_it->normal_, Vector2f( 0.0f, 1.0f ) ) );
-        v.push_back( BlockVertex( face_it->vertices_[2], face_it->normal_, Vector2f( 1.0f, 1.0f ) ) );
+        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[3].position_, face_it->normal_, Vector2f( 0.0f, 1.0f ), face_it->vertices_[3].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
     }
 
     for ( MaterialVertexMap::const_iterator it = material_vertices.begin(); it != material_vertices.end(); ++it )

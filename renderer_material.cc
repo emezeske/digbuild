@@ -1,5 +1,4 @@
 #include <SDL/SDL_image.h> 
-#include <GL/glu.h> 
 
 #include <stdexcept> 
 
@@ -82,17 +81,19 @@ Texture::~Texture()
 // Static constant definitions for RendererMaterial:
 //////////////////////////////////////////////////////////////////////////////////
 
-const std::string RendererMaterial::TEXTURES_DIRECTORY = "./media/materials/textures";
+const std::string
+    RendererMaterial::TEXTURE_DIRECTORY = "./media/materials/textures",
+    RendererMaterial::SHADER_DIRECTORY  = "./media/materials/shaders";
 
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for RendererMaterial:
 //////////////////////////////////////////////////////////////////////////////////
 
-RendererMaterial::RendererMaterial()
-{
-}
+// TODO: Only load textures/shaders once, and keep referenes to them.
 
 RendererMaterial::RendererMaterial( const std::string& name ) :
-    texture_( TEXTURES_DIRECTORY + "/" + name + ".png" )
+    texture_( TEXTURE_DIRECTORY + "/" + name + ".png" ),
+    vertex_shader_( SHADER_DIRECTORY + "/default.vertex.glsl", GL_VERTEX_SHADER ),
+    fragment_shader_( SHADER_DIRECTORY + "/default.fragment.glsl", GL_FRAGMENT_SHADER )
 {
 }

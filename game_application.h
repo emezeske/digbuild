@@ -9,18 +9,6 @@
 #include "world_generator.h"
 #include "chunk.h"
 
-struct GameWindow : public SDL_GL_Window
-{
-    GameWindow( const int w, const int h, const int bpp, const Uint32 flags, const std::string &title );
-    virtual ~GameWindow() {}
-
-    virtual void create_window();
-
-protected:
-
-    virtual void init_GL();
-};
-
 struct GameApplication : public SDL_GL_Interface
 {
     GameApplication( SDL_GL_Window &initializer, const int fps );

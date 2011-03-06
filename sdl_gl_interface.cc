@@ -1,3 +1,6 @@
+#include <GL/glew.h>
+
+#define NO_SDL_GLEXT
 #include <SDL/SDL_opengl.h>
 
 #include <stdexcept>
@@ -23,6 +26,19 @@ SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uin
 
 void SDL_GL_Window::init_GL()
 {
+    GLenum glew_result = glewInit();
+
+    if ( glew_result != GLEW_OK )
+    {
+        throw std::runtime_error( "Error initializing GLEW: " +
+            std::string( reinterpret_cast<const char*>( glewGetErrorString( glew_result ) ) ) );
+    }
+
+    if ( !glewIsSupported( "GL_VERSION_2_0" ) )
+    {
+        throw std::runtime_error( "OpenGL 2.0 not supported" );
+    }
+
     glEnable( GL_DEPTH_TEST );
     glEnable( GL_BLEND );
     glEnable( GL_TEXTURE_2D );
@@ -65,6 +81,9 @@ void SDL_GL_Window::create_window()
             SDL_WarpMouse( 0, 0 );
             SDL_WM_SetCaption( title_.c_str(), NULL );
             SDL_FillRect( screen_, NULL, SDL_MapRGBA( screen_->format, 0, 0, 0, 0 ) );
+
+            SDL_ShowCursor( SDL_DISABLE );
+            SDL_WM_GrabInput( SDL_GRAB_ON );
         
             init_GL();
             reshape_window();
