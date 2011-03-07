@@ -27,7 +27,7 @@ struct Chunk;
 
 struct BlockIterator
 {
-    BlockIterator( Chunk* chunk, Block* block, Vector3i index ) :
+    BlockIterator( Chunk* chunk = 0, Block* block = 0, Vector3i index = Vector3i( 0, 0, 0 ) ) :
         chunk_( chunk ),
         block_( block ),
         index_( index )
@@ -138,10 +138,15 @@ private:
         const Vector3f& block_position,
         const Block& block,
         const CardinalRelation relation,
-        const Vector3f& normal
+        const Vector3i& relation_vector
     );
 
-    Vector3f calculate_vertex_lighting( const Vector3i& vertex_index );
+    Vector3f calculate_vertex_lighting(
+        const Vector3i& primary_index,
+        const Vector3i& primary_relation,
+        const Vector3i& neighbor_relation_a,
+        const Vector3i& neighbor_relation_b
+    );
 
     Vector3i position_;
 

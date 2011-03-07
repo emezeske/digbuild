@@ -149,8 +149,6 @@ void Chunk::update_geometry()
             const Vector3f block_position = vector_cast<Scalar>( Vector3i( position_ + block_index ) );
             bool block_visible = false;
 
-            // TODO: This might be made more efficient by only checking the ABOVE, NORTH, and EAST neighbors
-            //       for each Block, and adding faces for either the current block OR the neighbor.
             FOR_EACH_CARDINAL_RELATION( relation )
             {
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
@@ -163,7 +161,7 @@ void Chunk::update_geometry()
                         block_position,
                         block,
                         relation,
-                        vector_cast<Scalar>( relation_vector )
+                        relation_vector
                     );
                     block_visible = true;
                 }
@@ -177,58 +175,56 @@ void Chunk::update_geometry()
     }
 }
 
-void Chunk::add_external_face( const Vector3i& block_index, const Vector3f& block_position, const Block& block, const CardinalRelation relation, const Vector3f& normal )
+void Chunk::add_external_face( const Vector3i& block_index, const Vector3f& block_position, const Block& block, const CardinalRelation relation, const Vector3i& relation_vector )
 {
-    // TODO: Uhh, make the vertex lighting PER VERTEX!
-    const Vector3f lighting = calculate_vertex_lighting( block_index );
-    external_faces_.push_back( BlockFace( normal, lighting, block.get_material() ) );
+    external_faces_.push_back( BlockFace( vector_cast<Scalar>( relation_vector ), block.get_material() ) );
 
-    #define V( x, y, z )\
+    #define V( x, y, z, nax, nay, naz, nbx, nby, nbz )\
         BlockFace::Vertex( block_position + Vector3f( x, y, z ),\
-        calculate_vertex_lighting( block_index + Vector3i( x, y, z ) ) )
+        calculate_vertex_lighting( block_index, relation_vector, Vector3i( nax, nay, naz ), Vector3i( nbx, nby, nbz ) ) )
 
     switch ( relation )
     {
         case CARDINAL_RELATION_ABOVE:
-            external_faces_.back().vertices_[0] = V( 0, 1, 0 );
-            external_faces_.back().vertices_[1] = V( 1, 1, 0 );
-            external_faces_.back().vertices_[2] = V( 1, 1, 1 );
-            external_faces_.back().vertices_[3] = V( 0, 1, 1 );
+            external_faces_.back().vertices_[0] = V( 0, 1, 0, -1, 0, 0, 0, 0, -1 );
+            external_faces_.back().vertices_[1] = V( 1, 1, 0,  1, 0, 0, 0, 0, -1 );
+            external_faces_.back().vertices_[2] = V( 1, 1, 1,  1, 0, 0, 0, 0,  1 );
+            external_faces_.back().vertices_[3] = V( 0, 1, 1, -1, 0, 0, 0, 0,  1 );
             break;
 
         case CARDINAL_RELATION_BELOW:
-            external_faces_.back().vertices_[0] = V( 0, 0, 0 );
-            external_faces_.back().vertices_[1] = V( 0, 0, 1 );
-            external_faces_.back().vertices_[2] = V( 1, 0, 1 );
-            external_faces_.back().vertices_[3] = V( 1, 0, 0 );
+            external_faces_.back().vertices_[0] = V( 0, 0, 0, -1, 0, 0, 0, 0, -1 );
+            external_faces_.back().vertices_[1] = V( 0, 0, 1, -1, 0, 0, 0, 0,  1 );
+            external_faces_.back().vertices_[2] = V( 1, 0, 1,  1, 0, 0, 0, 0,  1 );
+            external_faces_.back().vertices_[3] = V( 1, 0, 0,  1, 0, 0, 0, 0, -1 );
             break;
 
         case CARDINAL_RELATION_NORTH:
-            external_faces_.back().vertices_[0] = V( 1, 0, 1 );
-            external_faces_.back().vertices_[1] = V( 0, 0, 1 );
-            external_faces_.back().vertices_[2] = V( 0, 1, 1 );
-            external_faces_.back().vertices_[3] = V( 1, 1, 1 );
+            external_faces_.back().vertices_[0] = V( 1, 0, 1,  1, 0, 0, 0, -1, 0 );
+            external_faces_.back().vertices_[1] = V( 0, 0, 1, -1, 0, 0, 0, -1, 0 );
+            external_faces_.back().vertices_[2] = V( 0, 1, 1, -1, 0, 0, 0,  1, 0 );
+            external_faces_.back().vertices_[3] = V( 1, 1, 1,  1, 0, 0, 0,  1, 0 );
             break;
 
         case CARDINAL_RELATION_SOUTH:
-            external_faces_.back().vertices_[0] = V( 0, 0, 0 );
-            external_faces_.back().vertices_[1] = V( 1, 0, 0 );
-            external_faces_.back().vertices_[2] = V( 1, 1, 0 );
-            external_faces_.back().vertices_[3] = V( 0, 1, 0 );
+            external_faces_.back().vertices_[0] = V( 0, 0, 0, -1, 0, 0, 0, -1, 0 );
+            external_faces_.back().vertices_[1] = V( 1, 0, 0,  1, 0, 0, 0, -1, 0 );
+            external_faces_.back().vertices_[2] = V( 1, 1, 0,  1, 0, 0, 0,  1, 0 );
+            external_faces_.back().vertices_[3] = V( 0, 1, 0, -1, 0, 0, 0,  1, 0 );
             break;
 
         case CARDINAL_RELATION_EAST:
-            external_faces_.back().vertices_[0] = V( 1, 0, 0 );
-            external_faces_.back().vertices_[1] = V( 1, 0, 1 );
-            external_faces_.back().vertices_[2] = V( 1, 1, 1 );
-            external_faces_.back().vertices_[3] = V( 1, 1, 0 );
+            external_faces_.back().vertices_[0] = V( 1, 0, 0, 0, 0, -1, 0, -1, 0 );
+            external_faces_.back().vertices_[1] = V( 1, 0, 1, 0, 0,  1, 0, -1, 0 );
+            external_faces_.back().vertices_[2] = V( 1, 1, 1, 0, 0,  1, 0,  1, 0 );
+            external_faces_.back().vertices_[3] = V( 1, 1, 0, 0, 0, -1, 0,  1, 0 );
             break;
 
         case CARDINAL_RELATION_WEST:
-            external_faces_.back().vertices_[0] = V( 0, 0, 0 );
-            external_faces_.back().vertices_[1] = V( 0, 1, 0 );
-            external_faces_.back().vertices_[2] = V( 0, 1, 1 );
-            external_faces_.back().vertices_[3] = V( 0, 0, 1 );
+            external_faces_.back().vertices_[0] = V( 0, 0, 0, 0, 0, -1, 0, -1, 0 );
+            external_faces_.back().vertices_[1] = V( 0, 1, 0, 0, 0, -1, 0,  1, 0 );
+            external_faces_.back().vertices_[2] = V( 0, 1, 1, 0, 0,  1, 0,  1, 0 );
+            external_faces_.back().vertices_[3] = V( 0, 0, 1, 0, 0,  1, 0, -1, 0 );
             break;
 
         default:
@@ -237,49 +233,67 @@ void Chunk::add_external_face( const Vector3i& block_index, const Vector3f& bloc
     #undef V
 }
 
-// TODO Cache the result of this function?
-Vector3f Chunk::calculate_vertex_lighting( const Vector3i& vertex_index )
+Vector3f Chunk::calculate_vertex_lighting(
+    const Vector3i& primary_index,
+    const Vector3i& primary_relation,
+    const Vector3i& neighbor_relation_a,
+    const Vector3i& neighbor_relation_b
+)
 {
-    const size_t NUM_SURROUNDING_BLOCKS = 8;
+    const size_t NUM_NEIGHBORS = 4;
+    BlockIterator neighbors[NUM_NEIGHBORS];
+    neighbors[0] = get_block_neighbor( primary_index, primary_relation );
+    neighbors[1] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a );
+    neighbors[2] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_b );
 
-    const Block* surrounding_blocks[NUM_SURROUNDING_BLOCKS] =
+    bool neighbor_ab_may_contribute = false;
+
+    if ( !neighbors[1].block_ || neighbors[1].block_->get_material() == BLOCK_MATERIAL_NONE ||
+         !neighbors[2].block_ || neighbors[2].block_->get_material() == BLOCK_MATERIAL_NONE )
     {
-        get_block_neighbor( vertex_index, Vector3i(  0,  0,  0 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i(  0,  0, -1 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i(  0, -1,  0 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i(  0, -1, -1 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i( -1,  0,  0 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i( -1,  0, -1 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i( -1, -1,  0 ) ).block_,
-        get_block_neighbor( vertex_index, Vector3i( -1, -1, -1 ) ).block_
-    };
+        neighbor_ab_may_contribute = true;
+        neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
+    }
 
     int total_lighting = 0;
-    int num_contributing_blocks = 0;
+    int num_contributors = 0;
 
-    for ( size_t i = 0; i < NUM_SURROUNDING_BLOCKS; ++i )
+    for ( size_t i = 0; i < NUM_NEIGHBORS; ++i )
     {
-        const Block* block = surrounding_blocks[i];
+        const Block* block = neighbors[i].block_;
 
-        if ( block && block->get_material() == BLOCK_MATERIAL_NONE )
+        if ( block )
         {
-            total_lighting += block->get_light_level();
-            ++num_contributing_blocks;
+            if ( block->get_material() == BLOCK_MATERIAL_NONE )
+            {
+                total_lighting += block->get_light_level();
+                ++num_contributors;
+            }
+        }
+        else if ( i != 3 || neighbor_ab_may_contribute )
+        {
+            total_lighting += Block::FULLY_LIT;
+            ++num_contributors;
         }
     }
 
-    Scalar average_lighting = 0;
+    Scalar average_lighting = Scalar( total_lighting ) / Scalar( num_contributors );
+    Scalar attenuated_lighting = 1.0f;
+    Scalar attenuation_power = Scalar( Block::FULLY_LIT ) - average_lighting;
 
-    if ( num_contributing_blocks != 0 )
+    if ( attenuation_power > 0 )
     {
-        // TODO Proper attenuation.
-        average_lighting = Scalar( total_lighting ) / Scalar( num_contributing_blocks ) / Scalar( Block::FULLY_LIT );
+        attenuated_lighting = gmtl::Math::pow( 0.75f, attenuation_power );
     }
 
-    // TODO: How does ambient occlusion *really* work?
-    average_lighting -= ( 8 - num_contributing_blocks ) * 0.09;
+    int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
 
-    return Vector3f( average_lighting, average_lighting, average_lighting );
+    if ( ambient_occlusion_power > 0 )
+    {
+        attenuated_lighting *= gmtl::Math::pow( 0.85f, ambient_occlusion_power );
+    }
+
+    return Vector3f( attenuated_lighting, attenuated_lighting, attenuated_lighting );
 }
 
 //////////////////////////////////////////////////////////////////////////////////

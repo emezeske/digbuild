@@ -116,9 +116,8 @@ struct BlockFace
     {
     }
 
-    BlockFace( const Vector3f& normal, const Vector3f& lighting, const BlockMaterial material ) :
+    BlockFace( const Vector3f& normal, const BlockMaterial material ) :
         normal_( normal ),
-        lighting_( lighting ),
         material_( material )
     {
     }
@@ -126,8 +125,6 @@ struct BlockFace
     Vertex vertices_[NUM_VERTICES];
 
     Vector3f normal_;
-
-    Vector3f lighting_;
 
     BlockMaterial material_;
 };
