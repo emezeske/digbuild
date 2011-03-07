@@ -23,11 +23,15 @@ enum BlockMaterial
 
 struct Block
 {
-    static const uint8_t FULLY_LIT = 0x0f;
+    static const Vector3i MAX_BRIGHTNESS;
 
     Block() :
         material_( BLOCK_MATERIAL_NONE ),
-        lighting_( 0 )
+        sunlight_source_( 0 ),
+        visited_( 0 ),
+        light_level_r_( 0 ),
+        light_level_g_( 0 ),
+        light_level_b_( 0 )
     {
     }
 
@@ -41,55 +45,37 @@ struct Block
 
     BlockMaterial get_material() const { return BlockMaterial( material_ ); }
 
-    void set_light_source( const bool source )
+    void set_sunlight_source( const bool sunlight_source ) { sunlight_source_ = sunlight_source; }
+    bool is_sunlight_source() const { return sunlight_source_; }
+
+    void set_visited( const bool visited ) { visited_ = visited; }
+    bool is_visited() const { return visited_; }
+
+    void set_light_level( const Vector3i& light_level )
     {
-        set_lighting_bit( source, LIGHT_SOURCE_BIT );
+        assert( light_level[0] <= MAX_BRIGHTNESS[0] );
+        assert( light_level[1] <= MAX_BRIGHTNESS[1] );
+        assert( light_level[2] <= MAX_BRIGHTNESS[2] );
+
+        light_level_r_ = light_level[0];
+        light_level_g_ = light_level[1];
+        light_level_b_ = light_level[2];
     }
 
-    bool is_light_source() const { return lighting_ & LIGHT_SOURCE_BIT; }
-
-    void set_sunlight_source( const bool source )
+    Vector3i get_light_level() const
     {
-        set_lighting_bit( source, SUNLIGHT_SOURCE_BIT );
+        return Vector3i( light_level_r_, light_level_g_, light_level_b_ );
     }
-
-    bool is_sunlight_source() const { return lighting_ & SUNLIGHT_SOURCE_BIT; }
-
-    void set_visited( const bool visited )
-    {
-        set_lighting_bit( visited, VISITED_BIT );
-    }
-
-    bool is_visited() const { return lighting_ & VISITED_BIT; }
-
-    void set_light_level( const uint8_t level )
-    {
-        assert( !( level & ~LIGHT_LEVEL_MASK ) );
-        lighting_ = ( lighting_ & ~LIGHT_LEVEL_MASK ) | level;
-    }
-
-    uint8_t get_light_level() const { return lighting_ & LIGHT_LEVEL_MASK; }
 
 private:
 
-    static const uint8_t
-        LIGHT_SOURCE_BIT    = 1 << 7,
-        SUNLIGHT_SOURCE_BIT = 1 << 6,
-        VISITED_BIT         = 1 << 5,
-        LIGHT_LEVEL_MASK    = 0x1f;
-
-    void set_lighting_bit( const bool value, const uint8_t bit )
-    {
-        if ( value )
-        {
-            lighting_ |= bit;
-        }
-        else lighting_ &= ~bit;
-    }
-
     uint8_t material_;
 
-    uint8_t lighting_;
+    uint8_t sunlight_source_ : 1;
+    uint8_t visited_         : 1;
+    uint8_t light_level_r_   : 4;
+    uint8_t light_level_g_   : 4;
+    uint8_t light_level_b_   : 4;
 };
 
 struct BlockFace

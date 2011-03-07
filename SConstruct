@@ -8,8 +8,9 @@ headers = glob.glob( '*.h' )
 CCFLAGS = [ 
     '-isystem/usr/include/gmtl-0.5.2',
     '-g',
-    '-mfpmath=sse',
     '-ffast-math',
+    '-fassociative-math',
+#    '-flto',
     '-Wall',
     '-W',
     '-Wshadow',
@@ -33,7 +34,7 @@ LINKFLAGS += [ '-Wl,--strip-all' ]
 
 env = Environment()
 env.Append( ENV = {'PATH':os.environ['PATH'], 'TERM':os.environ['TERM'], 'HOME':os.environ['HOME']} ) # Environment variables required by colorgcc.
-env.Append( LIBS = [ 'SDL', 'SDL_image', 'GL', 'GLU', 'GLEW' ] )
+env.Append( LIBS = [ 'SDL', 'SDL_image', 'GL', 'GLU', 'GLEW', 'rt' ] )
 env.Append( CCFLAGS = CCFLAGS )
 env.Append( LINKFLAGS = LINKFLAGS )
 

@@ -25,7 +25,7 @@
 
 namespace {
 
-Vector3i cardinal_relation_vector( const CardinalRelation relation )
+inline Vector3i cardinal_relation_vector( const CardinalRelation relation )
 {
     switch ( relation )
     {
@@ -40,10 +40,16 @@ Vector3i cardinal_relation_vector( const CardinalRelation relation )
 }
 
 typedef std::vector<Block*> BlockV;
-typedef std::pair<BlockIterator, uint8_t> FloodFillBlock;
+typedef std::pair<BlockIterator, Vector3i> FloodFillBlock;
 typedef std::deque<FloodFillBlock> FloodFillQueue;
 
-void breadth_first_flood_fill_light( FloodFillQueue& queue, const BlockIterator& iterator, const uint8_t light_level, BlockV& blocks_visited )
+void breadth_first_flood_fill_light(
+    FloodFillQueue& queue,
+    const BlockIterator& iterator,
+    const bool is_sunlight,
+    const Vector3i light_level,
+    BlockV& blocks_visited
+)
 {
     blocks_visited.clear();
     queue.clear();
@@ -58,11 +64,24 @@ void breadth_first_flood_fill_light( FloodFillQueue& queue, const BlockIterator&
         {
             blocks_visited.push_back( flood_block.first.block_ );
             flood_block.first.block_->set_visited( true );
-            flood_block.first.block_->set_light_level( flood_block.second );
 
-            const uint8_t attenuated_light_level = flood_block.second - 1;
+            Vector3i block_light_level = flood_block.first.block_->get_light_level() + flood_block.second;
 
-            if ( attenuated_light_level > 0 )
+            for ( int i = 0; i < 3; ++i )
+            {
+                block_light_level[i] = std::min( block_light_level[i], Block::MAX_BRIGHTNESS[i] );
+            }
+
+            flood_block.first.block_->set_light_level( block_light_level );
+
+            Vector3i attenuated_light_level = flood_block.second - Vector3i( 1, 1, 1 );
+
+            for ( int i = 0; i < 3; ++i )
+            {
+                attenuated_light_level[i] = std::max( attenuated_light_level[i], 0 );
+            }
+
+            if ( attenuated_light_level != Vector3i( 0, 0, 0 ) )
             {
                 FOR_EACH_CARDINAL_RELATION( relation )
                 {
@@ -72,8 +91,10 @@ void breadth_first_flood_fill_light( FloodFillQueue& queue, const BlockIterator&
                     if ( neighbor.block_ &&
                          neighbor.block_->get_material() == BLOCK_MATERIAL_NONE &&
                          !neighbor.block_->is_visited() &&
-                         !neighbor.block_->is_sunlight_source() &&
-                         ( neighbor.block_->get_light_level() < attenuated_light_level ) )
+                         ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) &&
+                         ( neighbor.block_->get_light_level()[0] < attenuated_light_level[0] ||
+                           neighbor.block_->get_light_level()[1] < attenuated_light_level[1] ||
+                           neighbor.block_->get_light_level()[2] < attenuated_light_level[2] ) )
                     {
                         queue.push_back( std::make_pair( neighbor, attenuated_light_level ) );
                     }
@@ -110,25 +131,21 @@ void Chunk::reset_lighting()
             for ( int y = y_max; y >= 0; --y )
             {
                 Block& block = get_block( Vector3i( x, y, z ) );
+                block.set_light_level( Vector3i( 0, 0, 0 ) );
 
                 if ( above_ground )
                 {
                     if ( block.get_material() == BLOCK_MATERIAL_NONE )
                     {
-                        block.set_light_source( true );
                         block.set_sunlight_source( true );
                     }
                     else
                     {
                         above_ground = false;
-                        block.set_light_level( 0 );
+                        block.set_sunlight_source( false );
                     }
                 }
-                else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
-                {
-                    block.set_light_source( true );
-                }
-                else block.set_light_level( 0 );
+                else block.set_sunlight_source( false );
             }
         }
     }
@@ -255,7 +272,7 @@ Vector3f Chunk::calculate_vertex_lighting(
         neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
     }
 
-    int total_lighting = 0;
+    Vector3i total_lighting( 0, 0, 0 );
     int num_contributors = 0;
 
     for ( size_t i = 0; i < NUM_NEIGHBORS; ++i )
@@ -272,28 +289,26 @@ Vector3f Chunk::calculate_vertex_lighting(
         }
         else if ( i != 3 || neighbor_ab_may_contribute )
         {
-            total_lighting += Block::FULLY_LIT;
+            total_lighting += Block::MAX_BRIGHTNESS;
             ++num_contributors;
         }
     }
 
-    Scalar average_lighting = Scalar( total_lighting ) / Scalar( num_contributors );
-    Scalar attenuated_lighting = 1.0f;
-    Scalar attenuation_power = Scalar( Block::FULLY_LIT ) - average_lighting;
+    const Vector3f average_lighting = vector_cast<Scalar>( total_lighting ) / Scalar( num_contributors );
+    const Vector3f attenuation_power = vector_cast<Scalar>( Block::MAX_BRIGHTNESS ) - average_lighting;
+    const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
+    Vector3f attenuated_lighting;
 
-    if ( attenuation_power > 0 )
+    for ( int i = 0; i < 3; ++i )
     {
-        attenuated_lighting = gmtl::Math::pow( 0.75f, attenuation_power );
+        // TODO: This is extremely slow!  Around half of the total vertex lighting
+        //       computation time is tied up in these pow() calls.
+        attenuated_lighting[i] = 
+            gmtl::Math::pow( 0.75f, attenuation_power[i] ) *
+            gmtl::Math::pow( 0.85f, ambient_occlusion_power );
     }
 
-    int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
-
-    if ( ambient_occlusion_power > 0 )
-    {
-        attenuated_lighting *= gmtl::Math::pow( 0.85f, ambient_occlusion_power );
-    }
-
-    return Vector3f( attenuated_lighting, attenuated_lighting, attenuated_lighting );
+    return attenuated_lighting;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -338,9 +353,26 @@ void chunk_apply_lighting( Chunk& chunk )
         const Vector3i index( x, y, z );
         Block& block = chunk.get_block( index );
 
-        if ( block.is_light_source() )
+        Vector3i light_level;
+
+        if ( block.is_sunlight_source() )
         {
-            breadth_first_flood_fill_light( queue, BlockIterator( &chunk, &block, index ), Block::FULLY_LIT, blocks_visited );
+            light_level = Block::MAX_BRIGHTNESS;
+        }
+        else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
+        {
+            light_level = Vector3i( 14, 4, 0 );
+        }
+
+        if ( light_level != Vector3i( 0, 0, 0 ) )
+        {
+            breadth_first_flood_fill_light(
+                queue,
+                BlockIterator( &chunk, &block, index ),
+                block.is_sunlight_source(),
+                light_level,
+                blocks_visited
+            );
 
             for ( BlockV::iterator it = blocks_visited.begin(); it != blocks_visited.end(); ++it )
             {
