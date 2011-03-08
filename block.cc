@@ -1,4 +1,5 @@
 #include "block.h"
 
-const Vector3i
-    Block::MAX_BRIGHTNESS( 0x0f, 0x0f, 0x0f );
+const Vector4i
+    Block::MIN_LIGHT_LEVEL( 0x00, 0x00, 0x00, 0x00 ),
+    Block::MAX_LIGHT_LEVEL( 0x0f, 0x0f, 0x0f, 0x0f );

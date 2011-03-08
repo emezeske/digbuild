@@ -17,10 +17,14 @@ Camera::Camera( Vector3f position, Scalar sensitivity, Scalar pitch, Scalar yaw 
 {
 }
 
-void Camera::render() const
+void Camera::rotate() const
 {
     glRotatef( -pitch_, 1.0f, 0.0f, 0.0f );
     glRotatef( -yaw_, 0.0f, 1.0f, 0.0f );
+}
+
+void Camera::translate() const
+{
     glTranslatef( -position_[0], -position_[1], -position_[2] );
 }
 

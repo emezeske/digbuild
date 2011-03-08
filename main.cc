@@ -2,8 +2,8 @@
 #include "game_application.h"
 
 const int
-    SCREEN_WIDTH  = 1280,
-    SCREEN_HEIGHT = 1024,
+    SCREEN_WIDTH  = 1920,
+    SCREEN_HEIGHT = 1100,
     SCREEN_BPP    = 32;
 
 const Uint32 SCREEN_FLAGS = SDL_OPENGL;

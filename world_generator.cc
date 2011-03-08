@@ -69,10 +69,10 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     //       depending on the position of the region itself.
 
     const BicubicPatchCornerFeatures fundamental_corner_features(
-        Vector2f( 0.0f, 64.0f ),
-        Vector2f( -256.0f, 256.0f ),
-        Vector2f( -256.0f, 256.0f ),
-        Vector2f( -256.0f, 256.0f )
+        Vector2f( 0.0f, 128.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f )
     );
 
     const BicubicPatchFeatures fundamental_features(
@@ -83,10 +83,10 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     );
 
     const BicubicPatchCornerFeatures octave_corner_features(
-        Vector2f( 0.0f, 32.0f ),
-        Vector2f( -256.0f, 256.0f ),
-        Vector2f( -256.0f, 256.0f ),
-        Vector2f( -256.0f, 256.0f )
+        Vector2f( 0.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f )
     );
 
     const BicubicPatchFeatures octave_features(
@@ -143,13 +143,12 @@ ChunkV WorldGenerator::generate_chunk_column(
 
             const std::pair<BlockMaterial, Scalar> layers[] = 
             {
-                std::make_pair( BLOCK_MATERIAL_MAGMA,   1.0f                                     ),
-                std::make_pair( BLOCK_MATERIAL_BEDROCK, 1.0f  + ( total_height         ) * 0.25f ),
-                std::make_pair( BLOCK_MATERIAL_NONE,    1.0f  + ( total_height + 16.0f ) * 0.45f ),
-                std::make_pair( BLOCK_MATERIAL_STONE,   32.0f + ( total_height + 16.0f ) * 0.65f ),
-                std::make_pair( BLOCK_MATERIAL_CLAY,    32.0f + ( total_height + 16.0f ) * 0.75f ),
-                std::make_pair( BLOCK_MATERIAL_DIRT,    32.0f + ( total_height + 16.0f ) * 1.00f ),
-                std::make_pair( BLOCK_MATERIAL_GRASS,   33.0f + ( total_height + 16.0f ) * 1.00f )
+                std::make_pair( BLOCK_MATERIAL_MAGMA,   1.0f                             ),
+                std::make_pair( BLOCK_MATERIAL_BEDROCK, 20.0f + ( total_height ) * 0.25f ),
+                std::make_pair( BLOCK_MATERIAL_STONE,   52.0f + ( total_height ) * 1.00f ),
+                std::make_pair( BLOCK_MATERIAL_CLAY,    58.0f + ( total_height ) * 1.00f ),
+                std::make_pair( BLOCK_MATERIAL_DIRT,    62.0f + ( total_height ) * 1.00f ),
+                std::make_pair( BLOCK_MATERIAL_GRASS,   63.0f + ( total_height ) * 1.00f )
             };
 
             const unsigned num_layers = sizeof( layers ) / sizeof( std::pair<Scalar, BlockMaterial> );

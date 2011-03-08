@@ -32,8 +32,7 @@ struct RendererMaterial
     RendererMaterial( const std::string& name );
 
     const Texture& texture() const { return texture_; }
-    const Shader& vertex_shader() const { return vertex_shader_; }
-    const Shader& fragment_shader() const { return fragment_shader_; }
+    const Shader& shader() const { return shader_; }
 
 private:
 
@@ -43,9 +42,7 @@ private:
 
     Texture texture_;
 
-    Shader
-        vertex_shader_,
-        fragment_shader_;
+    Shader shader_;
 };
 
 typedef boost::shared_ptr<RendererMaterial> RendererMaterialSP;

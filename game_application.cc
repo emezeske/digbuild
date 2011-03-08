@@ -202,16 +202,18 @@ void GameApplication::do_one_step( float step_time )
 
 void GameApplication::render()
 {
-    camera_.render(); // Perform camera based translation and rotation.
+    camera_.rotate();
+    renderer_.render_skydome();
+    camera_.translate();
 
     static bool first_time = true;
 
     if ( first_time )
     {
         SCOPE_TIMER_BEGIN( "First render" )
-        renderer_.render( chunks_ );
+        renderer_.render_chunks( chunks_ );
         SCOPE_TIMER_END
         first_time = false;
     }
-    else renderer_.render( chunks_ );
+    else renderer_.render_chunks( chunks_ );
 }

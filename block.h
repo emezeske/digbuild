@@ -23,7 +23,9 @@ enum BlockMaterial
 
 struct Block
 {
-    static const Vector3i MAX_BRIGHTNESS;
+    static const Vector4i
+        MIN_LIGHT_LEVEL,
+        MAX_LIGHT_LEVEL;
 
     Block() :
         material_( BLOCK_MATERIAL_NONE ),
@@ -51,23 +53,34 @@ struct Block
     void set_visited( const bool visited ) { visited_ = visited; }
     bool is_visited() const { return visited_; }
 
-    void set_light_level( const Vector3i& light_level )
+    void set_light_level( const Vector4i& light_level )
     {
-        assert( light_level[0] <= MAX_BRIGHTNESS[0] );
-        assert( light_level[1] <= MAX_BRIGHTNESS[1] );
-        assert( light_level[2] <= MAX_BRIGHTNESS[2] );
-
+        assert( light_level_valid( light_level ) );
         light_level_r_ = light_level[0];
         light_level_g_ = light_level[1];
         light_level_b_ = light_level[2];
+        light_level_s_ = light_level[3];
     }
 
-    Vector3i get_light_level() const
+    Vector4i get_light_level() const
     {
-        return Vector3i( light_level_r_, light_level_g_, light_level_b_ );
+        return Vector4i( light_level_r_, light_level_g_, light_level_b_, light_level_s_ );
     }
 
 private:
+
+    bool light_level_valid( const Vector4i& light_level ) const
+    {
+        for ( int i = 0; i < Vector4i::Size; ++i )
+        {
+             if ( light_level[i] < MIN_LIGHT_LEVEL[i] || light_level[i] > MAX_LIGHT_LEVEL[i] )
+             {
+                 return false;
+             }
+        }
+
+        return true;
+    }
 
     uint8_t material_;
 
@@ -76,6 +89,7 @@ private:
     uint8_t light_level_r_   : 4;
     uint8_t light_level_g_   : 4;
     uint8_t light_level_b_   : 4;
+    uint8_t light_level_s_   : 4;
 };
 
 struct BlockFace
@@ -88,14 +102,14 @@ struct BlockFace
         {
         }
 
-        Vertex( const Vector3f& position, const Vector3f& lighting ) :
+        Vertex( const Vector3f& position, const Vector4f& lighting ) :
             position_( position ),
             lighting_( lighting )
         {
         }
 
         Vector3f position_;
-        Vector3f lighting_;
+        Vector4f lighting_;
     };
 
     BlockFace()

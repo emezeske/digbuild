@@ -9,9 +9,11 @@ typedef float Scalar;
 // FIXME: Use gmlt::Vec2f, etc.
 typedef gmtl::Vec<Scalar, 2> Vector2f;
 typedef gmtl::Vec<Scalar, 3> Vector3f;
+typedef gmtl::Vec<Scalar, 4> Vector4f;
 
 typedef gmtl::Vec<int32_t, 2> Vector2i;
 typedef gmtl::Vec<int32_t, 3> Vector3i;
+typedef gmtl::Vec<int32_t, 4> Vector4i;
 
 template <typename ToDataType, typename FromDataType, unsigned Size>
 gmtl::VecBase<ToDataType, Size> vector_cast( const gmtl::VecBase<FromDataType, Size>& from )

@@ -40,14 +40,14 @@ inline Vector3i cardinal_relation_vector( const CardinalRelation relation )
 }
 
 typedef std::vector<Block*> BlockV;
-typedef std::pair<BlockIterator, Vector3i> FloodFillBlock;
+typedef std::pair<BlockIterator, Vector4i> FloodFillBlock;
 typedef std::deque<FloodFillBlock> FloodFillQueue;
 
 void breadth_first_flood_fill_light(
     FloodFillQueue& queue,
     const BlockIterator& iterator,
     const bool is_sunlight,
-    const Vector3i light_level,
+    const Vector4i light_level,
     BlockV& blocks_visited
 )
 {
@@ -65,23 +65,23 @@ void breadth_first_flood_fill_light(
             blocks_visited.push_back( flood_block.first.block_ );
             flood_block.first.block_->set_visited( true );
 
-            Vector3i block_light_level = flood_block.first.block_->get_light_level() + flood_block.second;
+            Vector4i block_light_level = flood_block.first.block_->get_light_level() + flood_block.second;
 
-            for ( int i = 0; i < 3; ++i )
+            for ( int i = 0; i < Vector4i::Size; ++i )
             {
-                block_light_level[i] = std::min( block_light_level[i], Block::MAX_BRIGHTNESS[i] );
+                block_light_level[i] = std::min( block_light_level[i], Block::MAX_LIGHT_LEVEL[i] );
             }
 
             flood_block.first.block_->set_light_level( block_light_level );
 
-            Vector3i attenuated_light_level = flood_block.second - Vector3i( 1, 1, 1 );
+            Vector4i attenuated_light_level = flood_block.second - Vector4i( 1, 1, 1, 1 );
 
-            for ( int i = 0; i < 3; ++i )
+            for ( int i = 0; i < Vector4i::Size; ++i )
             {
                 attenuated_light_level[i] = std::max( attenuated_light_level[i], 0 );
             }
 
-            if ( attenuated_light_level != Vector3i( 0, 0, 0 ) )
+            if ( attenuated_light_level != Block::MIN_LIGHT_LEVEL )
             {
                 FOR_EACH_CARDINAL_RELATION( relation )
                 {
@@ -94,7 +94,8 @@ void breadth_first_flood_fill_light(
                          ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) &&
                          ( neighbor.block_->get_light_level()[0] < attenuated_light_level[0] ||
                            neighbor.block_->get_light_level()[1] < attenuated_light_level[1] ||
-                           neighbor.block_->get_light_level()[2] < attenuated_light_level[2] ) )
+                           neighbor.block_->get_light_level()[2] < attenuated_light_level[2] ||
+                           neighbor.block_->get_light_level()[3] < attenuated_light_level[3] ) )
                     {
                         queue.push_back( std::make_pair( neighbor, attenuated_light_level ) );
                     }
@@ -131,7 +132,7 @@ void Chunk::reset_lighting()
             for ( int y = y_max; y >= 0; --y )
             {
                 Block& block = get_block( Vector3i( x, y, z ) );
-                block.set_light_level( Vector3i( 0, 0, 0 ) );
+                block.set_light_level( Block::MIN_LIGHT_LEVEL );
 
                 if ( above_ground )
                 {
@@ -250,7 +251,7 @@ void Chunk::add_external_face( const Vector3i& block_index, const Vector3f& bloc
     #undef V
 }
 
-Vector3f Chunk::calculate_vertex_lighting(
+Vector4f Chunk::calculate_vertex_lighting(
     const Vector3i& primary_index,
     const Vector3i& primary_relation,
     const Vector3i& neighbor_relation_a,
@@ -272,7 +273,7 @@ Vector3f Chunk::calculate_vertex_lighting(
         neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
     }
 
-    Vector3i total_lighting( 0, 0, 0 );
+    Vector4i total_lighting = Block::MIN_LIGHT_LEVEL;
     int num_contributors = 0;
 
     for ( size_t i = 0; i < NUM_NEIGHBORS; ++i )
@@ -289,23 +290,23 @@ Vector3f Chunk::calculate_vertex_lighting(
         }
         else if ( i != 3 || neighbor_ab_may_contribute )
         {
-            total_lighting += Block::MAX_BRIGHTNESS;
+            total_lighting += Vector4i( 0, 0, 0, Block::MAX_LIGHT_LEVEL[3] );
             ++num_contributors;
         }
     }
 
-    const Vector3f average_lighting = vector_cast<Scalar>( total_lighting ) / Scalar( num_contributors );
-    const Vector3f attenuation_power = vector_cast<Scalar>( Block::MAX_BRIGHTNESS ) - average_lighting;
+    const Vector4f average_lighting = vector_cast<Scalar>( total_lighting ) / Scalar( num_contributors );
+    const Vector4f attenuation_power = vector_cast<Scalar>( Block::MAX_LIGHT_LEVEL ) - average_lighting;
     const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
-    Vector3f attenuated_lighting;
+    Vector4f attenuated_lighting;
 
-    for ( int i = 0; i < 3; ++i )
+    for ( int i = 0; i < Vector4i::Size; ++i )
     {
         // TODO: This is extremely slow!  Around half of the total vertex lighting
         //       computation time is tied up in these pow() calls.
         attenuated_lighting[i] = 
             gmtl::Math::pow( 0.75f, attenuation_power[i] ) *
-            gmtl::Math::pow( 0.85f, ambient_occlusion_power );
+            gmtl::Math::pow( 0.75f, ambient_occlusion_power );
     }
 
     return attenuated_lighting;
@@ -353,18 +354,18 @@ void chunk_apply_lighting( Chunk& chunk )
         const Vector3i index( x, y, z );
         Block& block = chunk.get_block( index );
 
-        Vector3i light_level;
+        Vector4i light_level;
 
         if ( block.is_sunlight_source() )
         {
-            light_level = Block::MAX_BRIGHTNESS;
+            light_level = Vector4i( 0, 0, 0, Block::MAX_LIGHT_LEVEL[3] );
         }
         else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
         {
-            light_level = Vector3i( 14, 4, 0 );
+            light_level = Vector4i( 14, 4, 0, 0 );
         }
 
-        if ( light_level != Vector3i( 0, 0, 0 ) )
+        if ( light_level != Block::MIN_LIGHT_LEVEL )
         {
             breadth_first_flood_fill_light(
                 queue,

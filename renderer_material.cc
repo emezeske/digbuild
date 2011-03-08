@@ -93,7 +93,6 @@ const std::string
 
 RendererMaterial::RendererMaterial( const std::string& name ) :
     texture_( TEXTURE_DIRECTORY + "/" + name + ".png" ),
-    vertex_shader_( SHADER_DIRECTORY + "/default.vertex.glsl", GL_VERTEX_SHADER ),
-    fragment_shader_( SHADER_DIRECTORY + "/default.fragment.glsl", GL_FRAGMENT_SHADER )
+    shader_( SHADER_DIRECTORY + "/default.vertex.glsl", SHADER_DIRECTORY + "/default.fragment.glsl" )
 {
 }

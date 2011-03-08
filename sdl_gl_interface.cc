@@ -39,16 +39,12 @@ void SDL_GL_Window::init_GL()
         throw std::runtime_error( "OpenGL 2.0 not supported" );
     }
 
-    glEnable( GL_DEPTH_TEST );
-    glEnable( GL_BLEND );
-    glEnable( GL_TEXTURE_2D );
-
-    glClearColor( 0.0f, 0.0f, 1.0f, 1.0f );
-    glClearDepth( 1.0f );
-    glDepthFunc( GL_LEQUAL );
     glShadeModel( GL_SMOOTH );
+    glClearDepth( 1.0f );
     glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    glHint( GL_GENERATE_MIPMAP_HINT, GL_NICEST );
+    glHint( GL_TEXTURE_COMPRESSION_HINT, GL_NICEST );
+    glHint( GL_FOG_HINT, GL_NICEST );
 }
 
 void SDL_GL_Window::create_window()
@@ -110,7 +106,7 @@ void SDL_GL_Window::reshape_window()
 
     glMatrixMode( GL_PROJECTION );
     glLoadIdentity();
-    gluPerspective( 45.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 1.0f, 1000.0f );
+    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 1.0f, 500.0f );
 
     glMatrixMode( GL_MODELVIEW );
     glLoadIdentity();
@@ -224,11 +220,10 @@ void SDL_GL_Interface::main_loop()
             process_events();
             do_one_step( float( step_time_seconds ) );
             
-            glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+            glClear( GL_DEPTH_BUFFER_BIT );
             glMatrixMode( GL_MODELVIEW );
             glLoadIdentity();
             render();
-            glFlush();
             SDL_GL_SwapBuffers();
         }
     }

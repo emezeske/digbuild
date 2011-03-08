@@ -141,7 +141,7 @@ private:
         const Vector3i& relation_vector
     );
 
-    Vector3f calculate_vertex_lighting(
+    Vector4f calculate_vertex_lighting(
         const Vector3i& primary_index,
         const Vector3i& primary_relation,
         const Vector3i& neighbor_relation_a,

@@ -8,7 +8,8 @@ struct Camera
 {
     Camera( Vector3f position, Scalar sensitivity, Scalar pitch, Scalar yaw );
 
-    void render() const;
+    void rotate() const;
+    void translate() const;
     void do_one_step( float step_time );
     void handle_mouse_motion( int xrel, int yrel );
     Vector3f get_direction();

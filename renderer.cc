@@ -7,43 +7,49 @@
 #include "renderer.h"
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for VertexBuffer:
+//////////////////////////////////////////////////////////////////////////////////
+
+VertexBuffer::VertexBuffer( const GLsizei num_elements ) :
+    num_elements_( num_elements )
+{
+    glGenBuffers( 1, &vbo_id_ );
+    glGenBuffers( 1, &ibo_id_ );
+}
+
+VertexBuffer::~VertexBuffer()
+{
+    glDeleteBuffers( 1, &ibo_id_ );
+    glDeleteBuffers( 1, &vbo_id_ );
+}
+
+void VertexBuffer::bind()
+{
+    glBindBuffer( GL_ARRAY_BUFFER, vbo_id_ );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo_id_ );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for ChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
 
-ChunkVertexBuffer::ChunkVertexBuffer() :
-    vertex_count_( 0 )
-{
-}
-
 ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices ) :
-    vertex_count_( boost::numeric_cast<GLsizei>( vertices.size() ) )
+    VertexBuffer( boost::numeric_cast<GLsizei>( vertices.size() ) )
 {
-    assert( vertex_count_ > 0 );
-
-    glGenBuffers( 1, &vbo_id_ );
-    glGenBuffers( 1, &ibo_id_ );
+    assert( vertices.size() > 0 );
 
     bind();
     glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
 
-    std::vector<GLuint> index_buffer;
-    index_buffer.resize( vertices.size() );
+    std::vector<GLuint> indices;
+    indices.resize( vertices.size() );
 
     for ( int i = 0; i < int( vertices.size() ); ++i )
     {
-        index_buffer[i] = i;
+        indices[i] = i;
     }
 
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, vertices.size() * sizeof( GLuint ), &index_buffer[0], GL_STATIC_DRAW );
-}
-
-ChunkVertexBuffer::~ChunkVertexBuffer()
-{
-    if ( vertex_count_ )
-    {
-        glDeleteBuffers( 1, &ibo_id_ );
-        glDeleteBuffers( 1, &vbo_id_ );
-    }
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, vertices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
 }
 
 void ChunkVertexBuffer::render()
@@ -62,19 +68,12 @@ void ChunkVertexBuffer::render()
 
     glClientActiveTexture( GL_TEXTURE1 );
     glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 32 ) );
+    glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 32 ) );
 
-    glDrawElements( GL_TRIANGLES, vertex_count_, GL_UNSIGNED_INT, 0 );
-
+    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
     glDisableClientState( GL_TEXTURE_COORD_ARRAY );
     glDisableClientState( GL_NORMAL_ARRAY );
     glDisableClientState( GL_VERTEX_ARRAY );
-}
-
-void ChunkVertexBuffer::bind()
-{
-    glBindBuffer( GL_ARRAY_BUFFER, vbo_id_ );
-    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo_id_ );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -96,19 +95,25 @@ void ChunkRenderer::render( const RendererMaterialV& materials )
         assert( material >= 0 && material < static_cast<int>( materials.size() ) );
         const RendererMaterial& renderer_material = *materials[material];
 
-        renderer_material.vertex_shader().enable();
-        renderer_material.fragment_shader().enable();
-
-        renderer_material.fragment_shader().set_uniform_int( "texture", 0 );
+        renderer_material.shader().enable();
+        Vector3f sun_direction( 0.0f, 1.0f, 1.0f );
+        gmtl::normalize( sun_direction );
+        renderer_material.shader().set_uniform_vec3f( "sun_color", Vector3f( 1.0f, 1.0f, 1.0f ) );
+        renderer_material.shader().set_uniform_vec3f( "sun_direction", sun_direction );
 
         glEnable( GL_TEXTURE_2D );
+        glActiveTexture( GL_TEXTURE0 );
         glClientActiveTexture( GL_TEXTURE0 );
         glBindTexture( GL_TEXTURE_2D, renderer_material.texture().texture_id() );
+        renderer_material.shader().set_uniform_int( "texture", 0 );
+
         vbo.render();
 
+        glBindTexture( GL_TEXTURE_2D, 0 );
+        glDisable( GL_TEXTURE_2D );
+
         // TODO: Use a guard object instead.
-        renderer_material.fragment_shader().disable();
-        renderer_material.vertex_shader().disable();
+        renderer_material.shader().disable();
     }
 }
 
@@ -158,11 +163,8 @@ Renderer::Renderer()
     materials_[BLOCK_MATERIAL_MAGMA].reset  ( new RendererMaterial( "magma" ) );
 }
 
-void Renderer::render( const ChunkMap& chunks )
+void Renderer::render_chunks( const ChunkMap& chunks )
 {
-    glCullFace( GL_BACK );
-    glEnable( GL_CULL_FACE );
-
     // TODO: Abstract out
     GLfloat
         m_data[16],
@@ -191,6 +193,24 @@ void Renderer::render( const ChunkMap& chunks )
     int chunks_rendered = 0;
     int chunks_total = 0;
 
+    glEnable( GL_CULL_FACE );
+
+    glEnable( GL_DEPTH_TEST );
+    glDepthFunc( GL_LEQUAL );
+
+    // glEnable( GL_BLEND );
+    // glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
+    // const GLfloat fog_color[] = { 0.81f, 0.89f, 0.89f, 1.0f };
+    // glEnable( GL_FOG );
+    // glFogi( GL_FOG_MODE, GL_LINEAR );
+    // glFogfv( GL_FOG_COLOR, fog_color );
+    // glFogf( GL_FOG_DENSITY, 1.0f );
+    // glHint( GL_FOG_HINT, GL_NICEST );
+    // glFogf( GL_FOG_START, 0.0f );
+    // glFogf( GL_FOG_END, 1000.0f );
+    // glFogi( GL_FOG_COORD_SRC, GL_FRAGMENT_DEPTH );
+
     for ( ChunkMap::const_iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
     {
         const Vector3i chunk_position = chunk_it->first;
@@ -215,8 +235,123 @@ void Renderer::render( const ChunkMap& chunks )
         ++chunks_total;
     }
 
+    glDisable( GL_DEPTH_TEST );
+    glDisable( GL_BLEND );
+    glDisable( GL_CULL_FACE );
+
     // TODO: Just for development.
     // static unsigned c = 0;
     // if ( ++c % 60 == 0 )
     //     std::cout << "Chunks rendered: " << chunks_rendered << " / " << chunks_total << std::endl;
+}
+
+struct SkydomeVertexBuffer : public VertexBuffer
+{
+    SkydomeVertexBuffer();
+
+    void render();
+};
+
+struct SkydomeVertex
+{
+    SkydomeVertex()
+    {
+    }
+
+    SkydomeVertex( const Vector3f& position, const Vector3f& color ) :
+        x_( position[0] ), y_( position[1] ), z_( position[2] ),
+        r_( color[0] ), g_( color[1] ), b_( color[2] )
+    {
+    }
+
+    GLfloat x_, y_, z_;
+    GLfloat r_, g_, b_;
+
+} __attribute__( ( packed ) );
+
+SkydomeVertexBuffer::SkydomeVertexBuffer()
+{
+    const int
+        TESSELATION_BETA = 32,
+        TESSELATION_PHI = 32;
+
+    const Scalar RADIUS = 10.0f;
+
+    const Vector3f
+        horizon_color( 0.81f, 0.89f, 0.89f ),
+        zenith_color( 0.10f, 0.36f, 0.61f );
+
+    std::vector<SkydomeVertex> vertices;
+
+    for ( int i = 0; i < TESSELATION_PHI; ++i )
+    {
+        Scalar phi = Scalar( i ) / Scalar( TESSELATION_PHI - 1 ) * 2.0 * gmtl::Math::PI;
+
+        for ( int j = 0; j < TESSELATION_BETA; ++j )
+        {
+            Scalar
+                beta_factor = Scalar( j ) / Scalar( TESSELATION_BETA - 1 ),
+                beta = beta_factor * gmtl::Math::PI;
+
+            const Vector3f terminus(
+                RADIUS * gmtl::Math::sin( beta ) * gmtl::Math::cos( phi ),
+                RADIUS * gmtl::Math::cos( beta ),
+                RADIUS * gmtl::Math::sin( beta ) * gmtl::Math::sin( phi )
+            );
+
+            Vector3f color;
+            gmtl::lerp( color, gmtl::Math::cos( beta ), horizon_color, zenith_color );
+            vertices.push_back( SkydomeVertex( terminus, color ) );
+        }
+    }
+
+    bind();
+    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SkydomeVertex ), &vertices[0], GL_STATIC_DRAW );
+
+    std::vector<GLuint> indices;
+
+    for ( int i = 0; i < TESSELATION_PHI - 1; ++i )
+    {
+        for ( int j = 0; j < TESSELATION_BETA - 1; ++j )
+        {
+            GLuint begin_index = i * TESSELATION_BETA + j;
+
+            indices.push_back( begin_index + 1 );
+            indices.push_back( begin_index + TESSELATION_BETA );
+            indices.push_back( begin_index );
+
+            indices.push_back( begin_index + TESSELATION_BETA + 1 );
+            indices.push_back( begin_index + TESSELATION_BETA );
+            indices.push_back( begin_index + 1 );
+        }
+    }
+
+    for ( int i = 0; i < indices.size(); ++i )
+    {
+        indices[i] %= vertices.size();
+    }
+
+    num_elements_ = indices.size();
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+}
+
+void SkydomeVertexBuffer::render()
+{
+    bind();
+
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glVertexPointer( 3, GL_FLOAT, sizeof( SkydomeVertex ), reinterpret_cast<void*>( 0 ) );
+
+    glEnableClientState( GL_COLOR_ARRAY );
+    glColorPointer( 3, GL_FLOAT, sizeof( SkydomeVertex ), reinterpret_cast<void*>( 12 ) );
+
+    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
+    glDisableClientState( GL_COLOR_ARRAY );
+    glDisableClientState( GL_VERTEX_ARRAY );
+}
+
+void Renderer::render_skydome()
+{
+    SkydomeVertexBuffer skydome_vbo;
+    skydome_vbo.render();
 }
