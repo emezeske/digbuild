@@ -1,23 +1,5 @@
-#include <GL/glew.h>
-
 #include "sdl_utilities.h"
 #include "game_application.h"
-
-//////////////////////////////////////////////////////////////////////////////////
-// Local definitions:
-//////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-typedef std::pair<Vector3i, ChunkSP> PositionChunkPair;
-typedef std::vector<PositionChunkPair> ChunkMapValueV;
-
-bool highest_chunk( const PositionChunkPair& a, const PositionChunkPair& b )
-{
-    return a.first[1] > b.first[1];
-}
-
-} // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for GameApplication:
@@ -26,58 +8,9 @@ bool highest_chunk( const PositionChunkPair& a, const PositionChunkPair& b )
 GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     SDL_GL_Interface( initializer, fps ),
     camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f ),
-    // generator_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
-    generator_( 0x58afe359358eafd3 ) // FIXME: Using a constant for performance measurements.
+    // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
+    world_( 0x58afe359358eafd3 ) // FIXME: Using a constant for performance measurements.
 {
-    SCOPE_TIMER_BEGIN( "World generation" )
-
-    for ( int x = 0; x < 3; ++x )
-    {
-        for ( int z = 0; z < 3; ++z )
-        {
-            const Vector2i position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
-            ChunkV new_chunks = generator_.generate_region( position );
-            
-            for ( ChunkV::iterator chunk_it = new_chunks.begin(); chunk_it != new_chunks.end(); ++chunk_it )
-            {
-                chunk_stitch_into_map( *chunk_it, chunks_ );
-            }
-        }
-    }
-
-    SCOPE_TIMER_END
-
-    SCOPE_TIMER_BEGIN( "Lighting" )
-
-    ChunkMapValueV height_sorted_chunks;
-
-    for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
-    {
-        height_sorted_chunks.push_back( *chunk_it );
-    }
-
-    std::sort( height_sorted_chunks.begin(), height_sorted_chunks.end(), highest_chunk );
-
-    for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
-    {
-        chunk_it->second->reset_lighting();
-    }
-
-    for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
-    {
-        chunk_apply_lighting( *chunk_it->second.get() );
-    }
-
-    SCOPE_TIMER_END
-
-    SCOPE_TIMER_BEGIN( "Updating geometry" )
-
-    for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
-    {
-        chunk_it->second->update_geometry();
-    }
-
-    SCOPE_TIMER_END
 }
 
 GameApplication::~GameApplication()
@@ -195,25 +128,13 @@ void GameApplication::handle_mouse_down_event( const int button, const int x, co
     }
 }
 
-void GameApplication::do_one_step( float step_time )
+void GameApplication::do_one_step( const float step_time )
 {
     camera_.do_one_step( step_time );
+    world_.do_one_step( step_time );
 }
 
 void GameApplication::render()
 {
-    camera_.rotate();
-    renderer_.render_skydome();
-    camera_.translate();
-
-    static bool first_time = true;
-
-    if ( first_time )
-    {
-        SCOPE_TIMER_BEGIN( "First render" )
-        renderer_.render_chunks( chunks_ );
-        SCOPE_TIMER_END
-        first_time = false;
-    }
-    else renderer_.render_chunks( chunks_ );
+    renderer_.render( camera_, world_ );
 }

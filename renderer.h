@@ -5,8 +5,23 @@
 
 #include <boost/utility.hpp>
 
-#include "chunk.h"
+#include "camera.h"
+#include "world.h"
 #include "renderer_material.h"
+
+struct VertexBuffer : public boost::noncopyable
+{
+    VertexBuffer( const GLsizei num_elements = 0 );
+    virtual ~VertexBuffer();
+
+    void bind();
+
+    GLuint
+        vbo_id_,
+        ibo_id_;
+
+    GLsizei num_elements_;
+};
 
 struct BlockVertex
 {
@@ -31,20 +46,6 @@ struct BlockVertex
 
 typedef std::vector<BlockVertex> BlockVertexV;
 
-struct VertexBuffer : public boost::noncopyable
-{
-    VertexBuffer( const GLsizei num_elements = 0 );
-    virtual ~VertexBuffer();
-
-    void bind();
-
-    GLuint
-        vbo_id_,
-        ibo_id_;
-
-    GLsizei num_elements_;
-};
-
 struct ChunkVertexBuffer : public VertexBuffer
 {
     ChunkVertexBuffer( const BlockVertexV& vertices );
@@ -59,29 +60,67 @@ struct ChunkRenderer
 {
     ChunkRenderer();
 
-    void render( const RendererMaterialV& materials );
+    void render( const Sky& sky, const RendererMaterialV& materials );
     void initialize( const Chunk& chunk );
     bool initialized() const { return initialized_; }
 
-private:
+protected:
 
     bool initialized_;
 
     ChunkVertexBufferMap vbos_;
 };
 
+struct SkydomeVertexBuffer : public VertexBuffer
+{
+    static const Scalar RADIUS = 10.0f;
+
+    SkydomeVertexBuffer();
+
+    void render();
+};
+
+struct StarVertexBuffer : public VertexBuffer
+{
+    static const Scalar RADIUS = 10.0f;
+
+    StarVertexBuffer( const Sky::StarV& stars );
+
+    void render();
+};
+
+struct SkyRenderer
+{
+    SkyRenderer();
+
+    void render( const Sky& sky );
+
+protected:
+
+    Texture
+        sun_texture_,
+        moon_texture_;
+
+    SkydomeVertexBuffer skydome_vbo_;
+
+    Shader skydome_shader_;
+};
+
 struct Renderer
 {
     Renderer();
 
-    void render_chunks( const ChunkMap& chunks );
-
-    void render_skydome();
+    void render( const Camera& camera, const World& world );
 
 protected:
 
+    void render_chunks( const Sky& sky, const ChunkMap& chunks );
+    void render_sky( const Sky& sky );
+
     typedef std::map<Vector3i, ChunkRenderer, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
     ChunkRendererMap chunk_renderers_;
+
+    SkyRenderer sky_renderer_;
 
     RendererMaterialV materials_;
 };

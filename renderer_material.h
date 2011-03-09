@@ -29,16 +29,16 @@ private:
 
 struct RendererMaterial
 {
+    static const std::string
+        TEXTURE_DIRECTORY,
+        SHADER_DIRECTORY;
+
     RendererMaterial( const std::string& name );
 
     const Texture& texture() const { return texture_; }
     const Shader& shader() const { return shader_; }
 
 private:
-
-    static const std::string
-        TEXTURE_DIRECTORY,
-        SHADER_DIRECTORY;
 
     Texture texture_;
 

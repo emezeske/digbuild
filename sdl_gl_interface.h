@@ -50,7 +50,7 @@ protected:
     virtual void handle_mouse_motion_event( const int button, const int x, const int y, const int xrel, const int yrel ) {}
     virtual void handle_mouse_down_event( const int button, const int x, const int y, const int xrel, const int yrel ) {}
     virtual void handle_mouse_up_event( const int button, const int x, const int y, const int xrel, const int yrel ) {}
-    virtual void do_one_step( float step_time ) = 0;
+    virtual void do_one_step( const float step_time ) = 0;
     virtual void render() = 0;
 
     bool run_;

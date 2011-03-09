@@ -6,6 +6,35 @@
 
 #include "renderer.h"
 
+
+//////////////////////////////////////////////////////////////////////////////////
+// Local definitions:
+//////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct SimplePositionVertex
+{
+    SimplePositionVertex( const Vector3f& position = Vector3f() ) :
+        x_( position[0] ), y_( position[1] ), z_( position[2] )
+    {
+    }
+
+    GLfloat x_, y_, z_;
+
+} __attribute__( ( packed ) );
+
+Vector3f spherical_to_cartesian( const Vector3f& spherical )
+{
+    return Vector3f(
+        spherical[0] * gmtl::Math::sin( spherical[1] ) * gmtl::Math::sin( spherical[2] ),
+        spherical[0] * gmtl::Math::cos( spherical[1] ),
+        spherical[0] * gmtl::Math::sin( spherical[1] ) * gmtl::Math::cos( spherical[2] )
+    );
+}
+
+} // anonymous namespace
+
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for VertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
@@ -85,7 +114,7 @@ ChunkRenderer::ChunkRenderer() :
 {
 }
 
-void ChunkRenderer::render( const RendererMaterialV& materials )
+void ChunkRenderer::render( const Sky& sky, const RendererMaterialV& materials )
 {
     for ( ChunkVertexBufferMap::iterator it = vbos_.begin(); it != vbos_.end(); ++it )
     {
@@ -96,10 +125,10 @@ void ChunkRenderer::render( const RendererMaterialV& materials )
         const RendererMaterial& renderer_material = *materials[material];
 
         renderer_material.shader().enable();
-        Vector3f sun_direction( 0.0f, 1.0f, 1.0f );
-        gmtl::normalize( sun_direction );
-        renderer_material.shader().set_uniform_vec3f( "sun_color", Vector3f( 1.0f, 1.0f, 1.0f ) );
-        renderer_material.shader().set_uniform_vec3f( "sun_direction", sun_direction );
+        const Vector3f atmospheric_light_direction_spherical( 1.0f, sky.get_celestial_body_angle()[0], sky.get_celestial_body_angle()[1] );
+        const Vector3f atmospheric_light_direction = spherical_to_cartesian( atmospheric_light_direction_spherical );
+        renderer_material.shader().set_uniform_vec3f( "atmospheric_light_color", sky.get_atmospheric_light_color() );
+        renderer_material.shader().set_uniform_vec3f( "atmospheric_light_direction", atmospheric_light_direction );
 
         glEnable( GL_TEXTURE_2D );
         glActiveTexture( GL_TEXTURE0 );
@@ -129,7 +158,7 @@ void ChunkRenderer::initialize( const Chunk& chunk )
     {
         BlockVertexV& v = material_vertices[face_it->material_];
 
-        // TODO: Clean this up
+        // TODO: Clean this up.  We can send less vertices down to the GPU by mucking with the indices.
         v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
         v.push_back( BlockVertex( face_it->vertices_[1].position_, face_it->normal_, Vector2f( 1.0f, 0.0f ), face_it->vertices_[1].lighting_ ) );
         v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
@@ -149,6 +178,179 @@ void ChunkRenderer::initialize( const Chunk& chunk )
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for SkydomeVertexBuffer:
+//////////////////////////////////////////////////////////////////////////////////
+
+SkydomeVertexBuffer::SkydomeVertexBuffer()
+{
+    const int
+        TESSELATION_BETA = 32,
+        TESSELATION_PHI = 32;
+
+    std::vector<SimplePositionVertex> vertices;
+
+    for ( int i = 0; i < TESSELATION_PHI; ++i )
+    {
+        const Scalar phi = Scalar( i ) / Scalar( TESSELATION_PHI - 1 ) * 2.0 * gmtl::Math::PI;
+
+        for ( int j = 0; j < TESSELATION_BETA; ++j )
+        {
+            const Scalar beta = Scalar( j ) / Scalar( TESSELATION_BETA - 1 ) * gmtl::Math::PI;
+            vertices.push_back( SimplePositionVertex( spherical_to_cartesian( Vector3f( RADIUS, beta, phi ) ) ) );
+        }
+    }
+
+    std::vector<GLuint> indices;
+
+    for ( int i = 0; i < TESSELATION_PHI - 1; ++i )
+    {
+        for ( int j = 0; j < TESSELATION_BETA - 1; ++j )
+        {
+            GLuint begin_index = i * TESSELATION_BETA + j;
+
+            indices.push_back( begin_index + 1 );
+            indices.push_back( begin_index + TESSELATION_BETA );
+            indices.push_back( begin_index );
+
+            indices.push_back( begin_index + TESSELATION_BETA + 1 );
+            indices.push_back( begin_index + TESSELATION_BETA );
+            indices.push_back( begin_index + 1 );
+        }
+    }
+
+    for ( size_t i = 0; i < indices.size(); ++i )
+    {
+        indices[i] %= vertices.size();
+    }
+
+    bind();
+    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SimplePositionVertex ), &vertices[0], GL_STATIC_DRAW );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    num_elements_ = indices.size();
+}
+
+void SkydomeVertexBuffer::render()
+{
+    bind();
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
+    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
+    glDisableClientState( GL_VERTEX_ARRAY );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for StarVertexBuffer:
+//////////////////////////////////////////////////////////////////////////////////
+
+StarVertexBuffer::StarVertexBuffer( const Sky::StarV& stars )
+{
+    std::vector<SimplePositionVertex> vertices;
+    std::vector<GLuint> indices;
+
+    for ( size_t i = 0; i < stars.size(); ++i )
+    {
+        const Vector3f& star = stars[i];
+
+        #define V( beta, phi ) vertices.push_back( SimplePositionVertex( spherical_to_cartesian( Vector3f( RADIUS, beta, phi ) ) ) )
+        V( star[1],           star[2] + star[0] );
+        V( star[1] + star[0], star[2] + star[0] );
+        V( star[1],           star[2]           );
+        V( star[1] + star[0], star[2]           );
+        #undef V
+
+        const size_t index = i * 4;
+        indices.push_back( index + 0 );
+        indices.push_back( index + 1 );
+        indices.push_back( index + 2 );
+        indices.push_back( index + 2 );
+        indices.push_back( index + 1 );
+        indices.push_back( index + 3 );
+    }
+
+    bind();
+    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SimplePositionVertex ), &vertices[0], GL_STATIC_DRAW );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    num_elements_ = indices.size();
+}
+
+void StarVertexBuffer::render()
+{
+    bind();
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
+    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
+    glDisableClientState( GL_VERTEX_ARRAY );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for SkyRenderer:
+//////////////////////////////////////////////////////////////////////////////////
+
+SkyRenderer::SkyRenderer() :
+    sun_texture_( RendererMaterial::TEXTURE_DIRECTORY + "/sun.png" ),
+    moon_texture_( RendererMaterial::TEXTURE_DIRECTORY + "/moon.png" ),
+    skydome_shader_( RendererMaterial::SHADER_DIRECTORY + "/skydome.vertex.glsl",
+                     RendererMaterial::SHADER_DIRECTORY + "/skydome.fragment.glsl" )
+{
+}
+
+void SkyRenderer::render( const Sky& sky )
+{
+    skydome_shader_.enable();
+    skydome_shader_.set_uniform_float( "skydome_radius", SkydomeVertexBuffer::RADIUS );
+    skydome_shader_.set_uniform_vec3f( "zenith_color", sky.get_zenith_color() );
+    skydome_shader_.set_uniform_vec3f( "horizon_color", sky.get_horizon_color() );
+    skydome_vbo_.render();
+    skydome_shader_.disable();
+
+    glEnable( GL_BLEND );
+    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+
+    glPushMatrix();
+    glRotatef( 180 * sky.get_celestial_body_angle()[1] / gmtl::Math::PI, 0.0f, 1.0f, 0.0f );
+    glRotatef( -90 + 180 * sky.get_celestial_body_angle()[0] / gmtl::Math::PI, 1.0f, 0.0f, 0.0f );
+
+    if ( sky.get_star_intensity() > gmtl::GMTL_EPSILON )
+    {
+        StarVertexBuffer star_vbo( sky.get_stars() );
+        glColor4f( 1.0f, 1.0f, 1.0f, sky.get_star_intensity() );
+        star_vbo.render();
+    }
+
+    glEnable( GL_TEXTURE_2D );
+    glActiveTexture( GL_TEXTURE0 );
+
+    switch ( sky.get_celestial_body() )
+    {
+        case Sky::CELESTIAL_BODY_SUN:
+            glBindTexture( GL_TEXTURE_2D, sun_texture_.texture_id() );
+            break;
+        case Sky::CELESTIAL_BODY_MOON:
+            glBindTexture( GL_TEXTURE_2D, moon_texture_.texture_id() );
+            break;
+    }
+
+    glColor3f( sky.get_celestial_body_color()[0], sky.get_celestial_body_color()[1], sky.get_celestial_body_color()[2] );
+    glBegin( GL_TRIANGLE_STRIP );
+        glTexCoord2f( 0.0f, 0.0f );
+        glVertex3f( -0.5f, -0.5f, 3.0f );
+        glTexCoord2f( 0.0f, 1.0f );
+        glVertex3f( -0.5f, 0.5f, 3.0f );
+        glTexCoord2f( 1.0f, 0.0f );
+        glVertex3f( 0.5f, -0.5f, 3.0f );
+        glTexCoord2f( 1.0f, 1.0f );
+        glVertex3f( 0.5f, 0.5f, 3.0f );
+    glEnd();
+
+    glBindTexture( GL_TEXTURE_2D, 0 );
+
+    glPopMatrix();
+
+    glDisable( GL_BLEND );
+    glDisable( GL_TEXTURE_2D );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for Renderer:
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -163,7 +365,20 @@ Renderer::Renderer()
     materials_[BLOCK_MATERIAL_MAGMA].reset  ( new RendererMaterial( "magma" ) );
 }
 
-void Renderer::render_chunks( const ChunkMap& chunks )
+void Renderer::render( const Camera& camera, const World& world )
+{
+    camera.rotate();
+    render_sky( world.get_sky() );
+    camera.translate();
+    render_chunks( world.get_sky(), world.get_chunks() );
+}
+
+void Renderer::render_sky( const Sky& sky )
+{
+    sky_renderer_.render( sky );
+}
+
+void Renderer::render_chunks( const Sky& sky, const ChunkMap& chunks )
 {
     // TODO: Abstract out
     GLfloat
@@ -229,7 +444,7 @@ void Renderer::render_chunks( const ChunkMap& chunks )
                 chunk_renderer.initialize( *chunk_it->second );
             }
 
-            chunk_renderer.render( materials_ );
+            chunk_renderer.render( sky, materials_ );
             ++chunks_rendered;
         }
         ++chunks_total;
@@ -243,115 +458,4 @@ void Renderer::render_chunks( const ChunkMap& chunks )
     // static unsigned c = 0;
     // if ( ++c % 60 == 0 )
     //     std::cout << "Chunks rendered: " << chunks_rendered << " / " << chunks_total << std::endl;
-}
-
-struct SkydomeVertexBuffer : public VertexBuffer
-{
-    SkydomeVertexBuffer();
-
-    void render();
-};
-
-struct SkydomeVertex
-{
-    SkydomeVertex()
-    {
-    }
-
-    SkydomeVertex( const Vector3f& position, const Vector3f& color ) :
-        x_( position[0] ), y_( position[1] ), z_( position[2] ),
-        r_( color[0] ), g_( color[1] ), b_( color[2] )
-    {
-    }
-
-    GLfloat x_, y_, z_;
-    GLfloat r_, g_, b_;
-
-} __attribute__( ( packed ) );
-
-SkydomeVertexBuffer::SkydomeVertexBuffer()
-{
-    const int
-        TESSELATION_BETA = 32,
-        TESSELATION_PHI = 32;
-
-    const Scalar RADIUS = 10.0f;
-
-    const Vector3f
-        horizon_color( 0.81f, 0.89f, 0.89f ),
-        zenith_color( 0.10f, 0.36f, 0.61f );
-
-    std::vector<SkydomeVertex> vertices;
-
-    for ( int i = 0; i < TESSELATION_PHI; ++i )
-    {
-        Scalar phi = Scalar( i ) / Scalar( TESSELATION_PHI - 1 ) * 2.0 * gmtl::Math::PI;
-
-        for ( int j = 0; j < TESSELATION_BETA; ++j )
-        {
-            Scalar
-                beta_factor = Scalar( j ) / Scalar( TESSELATION_BETA - 1 ),
-                beta = beta_factor * gmtl::Math::PI;
-
-            const Vector3f terminus(
-                RADIUS * gmtl::Math::sin( beta ) * gmtl::Math::cos( phi ),
-                RADIUS * gmtl::Math::cos( beta ),
-                RADIUS * gmtl::Math::sin( beta ) * gmtl::Math::sin( phi )
-            );
-
-            Vector3f color;
-            gmtl::lerp( color, gmtl::Math::cos( beta ), horizon_color, zenith_color );
-            vertices.push_back( SkydomeVertex( terminus, color ) );
-        }
-    }
-
-    bind();
-    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SkydomeVertex ), &vertices[0], GL_STATIC_DRAW );
-
-    std::vector<GLuint> indices;
-
-    for ( int i = 0; i < TESSELATION_PHI - 1; ++i )
-    {
-        for ( int j = 0; j < TESSELATION_BETA - 1; ++j )
-        {
-            GLuint begin_index = i * TESSELATION_BETA + j;
-
-            indices.push_back( begin_index + 1 );
-            indices.push_back( begin_index + TESSELATION_BETA );
-            indices.push_back( begin_index );
-
-            indices.push_back( begin_index + TESSELATION_BETA + 1 );
-            indices.push_back( begin_index + TESSELATION_BETA );
-            indices.push_back( begin_index + 1 );
-        }
-    }
-
-    for ( int i = 0; i < indices.size(); ++i )
-    {
-        indices[i] %= vertices.size();
-    }
-
-    num_elements_ = indices.size();
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
-}
-
-void SkydomeVertexBuffer::render()
-{
-    bind();
-
-    glEnableClientState( GL_VERTEX_ARRAY );
-    glVertexPointer( 3, GL_FLOAT, sizeof( SkydomeVertex ), reinterpret_cast<void*>( 0 ) );
-
-    glEnableClientState( GL_COLOR_ARRAY );
-    glColorPointer( 3, GL_FLOAT, sizeof( SkydomeVertex ), reinterpret_cast<void*>( 12 ) );
-
-    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
-    glDisableClientState( GL_COLOR_ARRAY );
-    glDisableClientState( GL_VERTEX_ARRAY );
-}
-
-void Renderer::render_skydome()
-{
-    SkydomeVertexBuffer skydome_vbo;
-    skydome_vbo.render();
 }
