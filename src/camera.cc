@@ -52,7 +52,7 @@ void Camera::handle_mouse_motion( int xrel, int yrel )
     else if ( pitch_ < -90.0f ) pitch_ = -90.f;
 }
 
-Vector3f Camera::get_direction()
+Vector3f Camera::get_direction() const
 {
     float
         pitch_radians = pitch_ * gmtl::Math::PI / 180.0f,

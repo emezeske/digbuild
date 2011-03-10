@@ -1,1 +1,44 @@
-DigBuild is a simple Minecraft clone.
+###########################################################################
+# ABOUT
+###########################################################################
+
+Digbuild is an experimental project to create a voxel-based game with many
+similarities to Minecraft (and many improvements as well).
+
+###########################################################################
+# DEPENDENCIES
+###########################################################################
+
+The following libraries are required to build Digbuild:
+
+    * Boost
+    * GMTL (see http://sourceforge.net/projects/ggt)
+    * SDL
+    * SDL Image
+    * GL
+    * GLU
+    * GLEW
+
+###########################################################################
+# BUILDING
+###########################################################################
+
+In the top-level Digbuild directory, run 'scons'.  Depending on where your
+Boost and GMTL header files are installed, you may need to use the following
+options:
+
+    --boost_include_dir=<PATH>
+    --gmtl_include_dir=<PATH>
+
+The following arguments may also be used to configure the build:
+
+    optimize=(1|0) # Build the binary with optimizations.
+    assert=(1|0)   # Build the binary with assertions left in.
+    release=(1|0)  # Strip the binary, etc.
+    profile=(1|0)  # Build gprof profiling information into the binary.
+
+The following build targets may be useful:
+
+    run      # Run the binary (after building it if necessary).
+    prof     # Run the binary and generate profiling output when it exits.
+    src/tags # Build an exuberant-ctags database file.

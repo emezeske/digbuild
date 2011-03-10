@@ -78,8 +78,8 @@ void SDL_GL_Window::create_window()
             SDL_WM_SetCaption( title_.c_str(), NULL );
             SDL_FillRect( screen_, NULL, SDL_MapRGBA( screen_->format, 0, 0, 0, 0 ) );
 
-            SDL_ShowCursor( SDL_DISABLE );
-            SDL_WM_GrabInput( SDL_GRAB_ON );
+            //SDL_ShowCursor( SDL_DISABLE );
+            //SDL_WM_GrabInput( SDL_GRAB_ON );
         
             init_GL();
             reshape_window();

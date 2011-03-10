@@ -1,4 +1,7 @@
 *.o
+.sconf_temp
 .sconsign.dblite
+config.log
 digbuild
 tags
+media/materials/textures/source

@@ -58,12 +58,17 @@ typedef std::map<BlockMaterial, ChunkVertexBufferSP> ChunkVertexBufferMap;
 
 struct ChunkRenderer
 {
-    void render( const Sky& sky, const RendererMaterialV& materials );
+    ChunkRenderer( const Vector3f& centroid = Vector3f() );
+
+    void render_opaque( const Sky& sky, const RendererMaterialV& materials );
     void rebuild( const Chunk& chunk );
+    const Vector3f& get_centroid() const { return centroid_; }
 
 protected:
 
     ChunkVertexBufferMap vbos_;
+
+    Vector3f centroid_;
 };
 
 struct SkydomeVertexBuffer : public VertexBuffer
@@ -118,8 +123,9 @@ struct Renderer
 
 protected:
 
-    void render_chunks( const Sky& sky, const ChunkMap& chunks );
+    void render_chunks( const Vector3f& camera_position, const Sky& sky, const ChunkMap& chunks );
     void render_sky( const Sky& sky );
+    gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 
     typedef std::map<Vector3i, ChunkRenderer, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
     ChunkRendererMap chunk_renderers_;

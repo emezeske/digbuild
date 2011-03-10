@@ -2,10 +2,11 @@
 
 #include <GL/glew.h>
 
+#include <set>
+
 #include <boost/numeric/conversion/cast.hpp>
 
 #include "renderer.h"
-
 
 //////////////////////////////////////////////////////////////////////////////////
 // Local definitions:
@@ -114,7 +115,12 @@ void ChunkVertexBuffer::render()
 // Function definitions for ChunkRenderer:
 //////////////////////////////////////////////////////////////////////////////////
 
-void ChunkRenderer::render( const Sky& sky, const RendererMaterialV& materials )
+ChunkRenderer::ChunkRenderer( const Vector3f& centroid ) :
+    centroid_( centroid )
+{
+}
+
+void ChunkRenderer::render_opaque( const Sky& sky, const RendererMaterialV& materials )
 {
     for ( ChunkVertexBufferMap::iterator it = vbos_.begin(); it != vbos_.end(); ++it )
     {
@@ -386,8 +392,21 @@ Renderer::Renderer()
 
 void Renderer::note_chunk_changes( const Chunk& chunk )
 {
-    ChunkRenderer& chunk_renderer = chunk_renderers_[chunk.get_position()];
-    chunk_renderer.rebuild( chunk );
+    ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk.get_position() );
+
+    if ( chunk_renderer_it == chunk_renderers_.end() )
+    {
+        const Vector3f centroid = vector_cast<Scalar>( chunk.get_position() ) + Vector3f(
+            Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
+            Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
+            Scalar( Chunk::CHUNK_SIZE ) / 2.0f
+        );
+
+        chunk_renderer_it =
+            chunk_renderers_.insert( std::make_pair( chunk.get_position(), ChunkRenderer( centroid ) ) ).first;
+    }
+
+    chunk_renderer_it->second.rebuild( chunk );
 }
 
 void Renderer::render( const Camera& camera, const World& world )
@@ -395,7 +414,7 @@ void Renderer::render( const Camera& camera, const World& world )
     camera.rotate();
     render_sky( world.get_sky() );
     camera.translate();
-    render_chunks( world.get_sky(), world.get_chunks() );
+    render_chunks( camera.get_position(), world.get_sky(), world.get_chunks() );
 }
 
 void Renderer::render_sky( const Sky& sky )
@@ -403,40 +422,11 @@ void Renderer::render_sky( const Sky& sky )
     sky_renderer_.render( sky );
 }
 
-void Renderer::render_chunks( const Sky& sky, const ChunkMap& chunks )
+void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, const ChunkMap& chunks )
 {
-    // TODO: Abstract out
-    GLfloat
-        m_data[16],
-        p_data[16];
-
-    glGetFloatv( GL_MODELVIEW_MATRIX, m_data );
-    glGetFloatv( GL_PROJECTION_MATRIX, p_data );
-
-    gmtl::Matrix<Scalar, 4, 4> m;
-    m.set( m_data );
-
-    gmtl::Matrix<Scalar, 4, 4> p;
-    p.set( p_data );
-
-    gmtl::Frustumf view_frustum( m, p );
-
     // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
 
-    // TODO: Sort (using an ordering table) the chunks, and render them from front to back.  Eventually,
-    //       use an ARB_occlusion_query to avoid rendering fully occluded chunks.
-
-    // TODO: Render the translucent parts of the chunks from back to front.
-
     // TODO: Look into glMultiDrawElements or display lists to reduce the number of OpenGL library calls.
-
-    int chunks_rendered = 0;
-    int chunks_total = 0;
-
-    glEnable( GL_CULL_FACE );
-
-    glEnable( GL_DEPTH_TEST );
-    glDepthFunc( GL_LEQUAL );
 
     // glEnable( GL_BLEND );
     // glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
@@ -451,6 +441,15 @@ void Renderer::render_chunks( const Sky& sky, const ChunkMap& chunks )
     // glFogf( GL_FOG_END, 1000.0f );
     // glFogi( GL_FOG_COORD_SRC, GL_FRAGMENT_DEPTH );
 
+    gmtl::Frustumf view_frustum(
+        get_opengl_matrix( GL_MODELVIEW_MATRIX ),
+        get_opengl_matrix( GL_PROJECTION_MATRIX )
+    );
+
+    typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
+    typedef std::set<DistanceChunkPair> ChunkRendererSet;
+    ChunkRendererSet visible_chunks;
+
     for ( ChunkMap::const_iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
     {
         const Vector3i chunk_position = chunk_it->first;
@@ -458,16 +457,18 @@ void Renderer::render_chunks( const Sky& sky, const ChunkMap& chunks )
         const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
         const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
 
-        ++chunks_total;
-
         if ( gmtl::isInVolume( view_frustum, chunk_box ) )
         {
             ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk_position );
 
             if ( chunk_renderer_it != chunk_renderers_.end() )
             {
-                chunk_renderer_it->second.render( sky, materials_ );
-                ++chunks_rendered;
+                const Vector3f camera_to_centroid =
+                    camera_position - chunk_renderer_it->second.get_centroid();
+                const Scalar distance_squared =
+                    gmtl::dot( camera_to_centroid, camera_to_centroid );
+
+                visible_chunks.insert( std::make_pair( distance_squared, &chunk_renderer_it->second ) );
             }
         }
     }
@@ -475,10 +476,41 @@ void Renderer::render_chunks( const Sky& sky, const ChunkMap& chunks )
     // TODO: Just for development.
     // static unsigned c = 0;
     // if ( ++c % 60 == 0 )
-    //     std::cout << "Chunks rendered: " << chunks_rendered << " / " << chunks_total << std::endl;
+    //     std::cout << "Visible chunks: " << visible_chunks.size() << " / " << chunks.size() << std::endl;
+
+    glEnable( GL_CULL_FACE );
+    glEnable( GL_DEPTH_TEST );
+    glDepthFunc( GL_LEQUAL );
+
+    // Draw the Chunks from nearest to farthest.  This will result in many of the farthest
+    // chunks being fully occluded, and thus their fragments will be rejected without running
+    // any expensive fragment shaders.
+    //
+    // TODO: Use an ARB_occlusion_query to avoid rendering fully occluded chunks.
+
+    for ( ChunkRendererSet::iterator it = visible_chunks.begin(); it != visible_chunks.end(); ++it )
+    {
+        it->second->render_opaque( sky, materials_ );
+    }
+
+    // TODO: Render the translucent parts of the chunks from back to front.
+
+    // for ( ChunkRendererSet::reverse_iterator it = visible_chunks.rbegin(); it != visible_chunks.rend(); ++it )
+    // {
+    //     it->second->render_translucent( sky, materials_ );
+    // }
 
     glDisable( GL_DEPTH_TEST );
     glDisable( GL_BLEND );
     glDisable( GL_CULL_FACE );
 
+}
+
+gmtl::Matrix44f Renderer::get_opengl_matrix( const GLenum matrix )
+{
+    GLfloat m_data[16];
+    glGetFloatv( matrix, m_data );
+    gmtl::Matrix44f m;
+    m.set( m_data );
+    return m;
 }
