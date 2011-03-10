@@ -97,6 +97,9 @@ struct SkyRenderer
 
 protected:
 
+    void rotate_sky( const Vector2f& angle ) const;
+    void render_celestial_body( const GLuint texture_id, const Vector3f& color ) const;
+
     Texture
         sun_texture_,
         moon_texture_;

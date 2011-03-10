@@ -125,10 +125,16 @@ void ChunkRenderer::render( const Sky& sky, const RendererMaterialV& materials )
         const RendererMaterial& renderer_material = *materials[material];
 
         renderer_material.shader().enable();
-        const Vector3f atmospheric_light_direction_spherical( 1.0f, sky.get_celestial_body_angle()[0], sky.get_celestial_body_angle()[1] );
-        const Vector3f atmospheric_light_direction = spherical_to_cartesian( atmospheric_light_direction_spherical );
-        renderer_material.shader().set_uniform_vec3f( "atmospheric_light_color", sky.get_atmospheric_light_color() );
-        renderer_material.shader().set_uniform_vec3f( "atmospheric_light_direction", atmospheric_light_direction );
+
+        const Vector3f
+            sun_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_sun_angle()[0], sky.get_sun_angle()[1] ) ),
+            moon_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_moon_angle()[0], sky.get_moon_angle()[1] ) );
+
+        renderer_material.shader().set_uniform_vec3f( "sun_direction", sun_direction );
+        renderer_material.shader().set_uniform_vec3f( "moon_direction", moon_direction );
+
+        renderer_material.shader().set_uniform_vec3f( "sun_light_color", sky.get_sun_light_color() );
+        renderer_material.shader().set_uniform_vec3f( "moon_light_color", sky.get_moon_light_color() );
 
         glEnable( GL_TEXTURE_2D );
         glActiveTexture( GL_TEXTURE0 );
@@ -251,11 +257,22 @@ StarVertexBuffer::StarVertexBuffer( const Sky::StarV& stars )
     {
         const Vector3f& star = stars[i];
 
-        #define V( beta, phi ) vertices.push_back( SimplePositionVertex( spherical_to_cartesian( Vector3f( RADIUS, beta, phi ) ) ) )
-        V( star[1],           star[2] + star[0] );
-        V( star[1] + star[0], star[2] + star[0] );
-        V( star[1],           star[2]           );
-        V( star[1] + star[0], star[2]           );
+        const Vector3f
+            star_center = spherical_to_cartesian( Vector3f( RADIUS, star[1], star[2] ) );
+
+        Vector3f
+            basis_a = spherical_to_cartesian( Vector3f( RADIUS, star[1] - gmtl::Math::PI_OVER_2, star[2] - gmtl::Math::PI_OVER_2 ) ),
+            basis_b;
+
+        gmtl::cross( basis_b, basis_a, star_center );
+        gmtl::normalize( basis_a );
+        gmtl::normalize( basis_b );
+
+        #define V( da, db ) vertices.push_back( SimplePositionVertex( star_center + da * basis_a + db * basis_b ) )
+        V( 0.0f,    star[0] );
+        V( star[0], star[0] );
+        V( 0.0f,    0.0f    );
+        V( star[0], 0.0f    );
         #undef V
 
         const size_t index = i * 4;
@@ -305,32 +322,39 @@ void SkyRenderer::render( const Sky& sky )
 
     glEnable( GL_BLEND );
     glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    glEnable( GL_TEXTURE_2D );
 
     glPushMatrix();
-    glRotatef( 180 * sky.get_celestial_body_angle()[1] / gmtl::Math::PI, 0.0f, 1.0f, 0.0f );
-    glRotatef( -90 + 180 * sky.get_celestial_body_angle()[0] / gmtl::Math::PI, 1.0f, 0.0f, 0.0f );
+        rotate_sky( sky.get_moon_angle() );
+        if ( sky.get_star_intensity() > gmtl::GMTL_EPSILON )
+        {
+            StarVertexBuffer star_vbo( sky.get_stars() );
+            glColor4f( 1.0f, 1.0f, 1.0f, sky.get_star_intensity() );
+            star_vbo.render();
+        }
+        render_celestial_body( moon_texture_.texture_id(), sky.get_moon_color() );
+    glPopMatrix();
 
-    if ( sky.get_star_intensity() > gmtl::GMTL_EPSILON )
-    {
-        StarVertexBuffer star_vbo( sky.get_stars() );
-        glColor4f( 1.0f, 1.0f, 1.0f, sky.get_star_intensity() );
-        star_vbo.render();
-    }
+    glPushMatrix();
+        rotate_sky( sky.get_sun_angle() );
+        render_celestial_body( sun_texture_.texture_id(), sky.get_sun_color() );
+    glPopMatrix();
 
-    glEnable( GL_TEXTURE_2D );
+    glDisable( GL_BLEND );
+    glDisable( GL_TEXTURE_2D );
+}
+
+void SkyRenderer::rotate_sky( const Vector2f& angle ) const
+{
+    glRotatef( 180 * angle[1] / gmtl::Math::PI, 0.0f, 1.0f, 0.0f );
+    glRotatef( -90 + 180 * angle[0] / gmtl::Math::PI, 1.0f, 0.0f, 0.0f );
+}
+
+void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f& color ) const
+{
     glActiveTexture( GL_TEXTURE0 );
-
-    switch ( sky.get_celestial_body() )
-    {
-        case Sky::CELESTIAL_BODY_SUN:
-            glBindTexture( GL_TEXTURE_2D, sun_texture_.texture_id() );
-            break;
-        case Sky::CELESTIAL_BODY_MOON:
-            glBindTexture( GL_TEXTURE_2D, moon_texture_.texture_id() );
-            break;
-    }
-
-    glColor3f( sky.get_celestial_body_color()[0], sky.get_celestial_body_color()[1], sky.get_celestial_body_color()[2] );
+    glBindTexture( GL_TEXTURE_2D, texture_id);
+    glColor3f( color[0], color[1], color[2] );
     glBegin( GL_TRIANGLE_STRIP );
         glTexCoord2f( 0.0f, 0.0f );
         glVertex3f( -0.5f, -0.5f, 3.0f );
@@ -341,13 +365,7 @@ void SkyRenderer::render( const Sky& sky )
         glTexCoord2f( 1.0f, 1.0f );
         glVertex3f( 0.5f, 0.5f, 3.0f );
     glEnd();
-
     glBindTexture( GL_TEXTURE_2D, 0 );
-
-    glPopMatrix();
-
-    glDisable( GL_BLEND );
-    glDisable( GL_TEXTURE_2D );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
