@@ -25,6 +25,29 @@
 
 namespace {
 
+inline Scalar get_lighting_attenuation( const Scalar power )
+{
+    const int MAX_POWER = 32;
+    const int GRANULARITY = 10;
+    static Scalar lighting_attenuation_table[MAX_POWER * GRANULARITY + 1];
+    static bool initialized = false;
+
+    if ( !initialized )
+    {
+        for ( int i = 0; i <= MAX_POWER * GRANULARITY; ++i )
+        {
+            lighting_attenuation_table[i] = gmtl::Math::pow( 0.70f, Scalar( i ) / Scalar( GRANULARITY ) );
+        }
+
+        initialized = true;
+    }
+
+    int index = int( roundf( power * Scalar( GRANULARITY ) ) );
+    index = std::max( index, 0 );
+    index = std::min( index, MAX_POWER * GRANULARITY );
+    return lighting_attenuation_table[index];
+}
+
 inline Vector3i cardinal_relation_vector( const CardinalRelation relation )
 {
     switch ( relation )
@@ -296,17 +319,13 @@ Vector4f Chunk::calculate_vertex_lighting(
     }
 
     const Vector4f average_lighting = vector_cast<Scalar>( total_lighting ) / Scalar( num_contributors );
-    const Vector4f attenuation_power = vector_cast<Scalar>( Block::MAX_LIGHT_LEVEL ) - average_lighting;
     const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
     Vector4f attenuated_lighting;
-
+    
     for ( int i = 0; i < Vector4i::Size; ++i )
     {
-        // TODO: This is extremely slow!  Around half of the total vertex lighting
-        //       computation time is tied up in these pow() calls.
-        attenuated_lighting[i] = 
-            gmtl::Math::pow( 0.75f, attenuation_power[i] ) *
-            gmtl::Math::pow( 0.75f, ambient_occlusion_power );
+        Scalar power = Block::MAX_LIGHT_LEVEL[i] - average_lighting[i] + ambient_occlusion_power;
+        attenuated_lighting[i] = get_lighting_attenuation( power );
     }
 
     return attenuated_lighting;

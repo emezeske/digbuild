@@ -47,7 +47,7 @@ const Sky::Profile SKY_PROFILES[] =
         Vector3f( 1.00f, 0.41f, 0.10f ),
         Vector3f( 0.00f, 0.00f, 0.00f ),
         Vector3f( 1.00f, 1.00f, 1.00f ),
-        Vector3f( 0.10f, 0.10f, 0.30f )
+        Vector3f( 0.20f, 0.20f, 0.50f )
     )
 };
 
