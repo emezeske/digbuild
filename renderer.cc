@@ -379,6 +379,8 @@ Renderer::Renderer()
     materials_[BLOCK_MATERIAL_CLAY].reset   ( new RendererMaterial( "clay" ) );
     materials_[BLOCK_MATERIAL_STONE].reset  ( new RendererMaterial( "stone" ) );
     materials_[BLOCK_MATERIAL_BEDROCK].reset( new RendererMaterial( "bedrock" ) );
+    materials_[BLOCK_MATERIAL_TREE_TRUNK].reset( new RendererMaterial( "tree-trunk" ) );
+    materials_[BLOCK_MATERIAL_TREE_LEAF].reset( new RendererMaterial( "tree-leaf" ) );
     materials_[BLOCK_MATERIAL_MAGMA].reset  ( new RendererMaterial( "magma" ) );
 }
 

@@ -2,6 +2,7 @@
 #include <boost/random/variate_generator.hpp>
 #include <boost/random/linear_congruential.hpp>
 
+#include "random.h"
 #include "bicubic_patch.h"
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -38,11 +39,6 @@ gmtl::Matrix<Scalar, 16, 16> make_a_inverse()
 }
 
 const gmtl::Matrix<Scalar, 16, 16> A_INVERSE = make_a_inverse();
-
-uint64_t get_seed_for_coordinates( const uint64_t base_seed, const Vector2i position )
-{
-    return base_seed ^ ( position[0] * 91387 + position[1] * 75181 ); // TODO: Are these prime numbers good?
-}
 
 struct BicubicPatchCorner
 {

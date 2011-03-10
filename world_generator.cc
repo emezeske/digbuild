@@ -1,3 +1,8 @@
+#include <boost/random/uniform_int.hpp>
+#include <boost/random/variate_generator.hpp>
+#include <boost/random/linear_congruential.hpp>
+
+#include "random.h"
 #include "world_generator.h"
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -83,7 +88,7 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     );
 
     const BicubicPatchCornerFeatures octave_corner_features(
-        Vector2f( 0.0f, 64.0f ),
+        Vector2f( -32.0f, 32.0f ),
         Vector2f( -64.0f, 64.0f ),
         Vector2f( -64.0f, 64.0f ),
         Vector2f( -64.0f, 64.0f )
@@ -103,7 +108,11 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     {
         for ( int z = 0; z < CHUNKS_PER_REGION_EDGE; ++z )
         {
-            ChunkV column_chunks = generate_chunk_column( region_features, position, Vector2i( x, z ) );
+            const Vector2i column_position( position + Vector2i( x, z ) * int( Chunk::CHUNK_SIZE ) );
+            unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE];
+            ChunkV column_chunks;
+            generate_chunk_column( column_chunks, region_features, position, column_position, heights );
+            populate_trees( column_chunks, column_position, heights );
             chunks.insert( chunks.end(), column_chunks.begin(), column_chunks.end() );
         }
     }
@@ -111,21 +120,19 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     return chunks;
 }
 
-ChunkV WorldGenerator::generate_chunk_column(
+void WorldGenerator::generate_chunk_column(
+    ChunkV& chunks,
     const RegionFeatures& features,
     const Vector2i& region_position,
-    const Vector2i& column_index
+    const Vector2i& column_position,
+    unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
 )
 {
-    ChunkV chunks;
-
-    const Vector2i column_position = region_position + column_index * int( Chunk::CHUNK_SIZE );
-
     for ( int x = 0; x < Chunk::CHUNK_SIZE; ++x )
     {
         for ( int z = 0; z < Chunk::CHUNK_SIZE; ++z )
         {
-            const Vector2i relative_position = column_index * int( Chunk::CHUNK_SIZE ) + Vector2i( x, z );
+            const Vector2i relative_position = column_position - region_position + Vector2i( x, z );
 
             const Scalar fundamental_height =
                 features.get_fundamental_patch().interpolate( vector_cast<Scalar>( relative_position ) / Scalar( REGION_SIZE ) );
@@ -138,8 +145,9 @@ ChunkV WorldGenerator::generate_chunk_column(
             );
 
             const Scalar
-                octave_height = octave_patch.interpolate( octave_position ),
-                total_height = fundamental_height + octave_height;
+                // NOTE: Remove the abs(), 64.0f, and negation here to undo the ridge experiment.
+                octave_height = abs( octave_patch.interpolate( octave_position ) ),
+                total_height = 64.0f + fundamental_height - octave_height;
 
             const std::pair<BlockMaterial, Scalar> layers[] = 
             {
@@ -162,17 +170,7 @@ ChunkV WorldGenerator::generate_chunk_column(
 
                 for ( unsigned y = bottom; y <= top; ++y )
                 {
-                    const unsigned chunk_index = y / Chunk::CHUNK_SIZE;
-
-                    if ( chunk_index >= chunks.size() )
-                    {
-                        ChunkSP new_chunk( new Chunk( Vector3i( column_position[0], y, column_position[1] ) ) );
-                        chunks.push_back( new_chunk );
-                    }
-
-                    ChunkSP chunk = chunks[chunk_index];
-
-                    Block& block = chunk->get_block( Vector3i( x, y % Chunk::CHUNK_SIZE, z ) );
+                    Block& block = get_block( chunks, column_position, x, z, y );
 
                     // TODO: Ensure that the components of this vector are clamped (or repeated) to [0.0,1.0].
                     const Vector3f box_position(
@@ -198,8 +196,91 @@ ChunkV WorldGenerator::generate_chunk_column(
 
                 bottom = top;
             }
+
+            heights[x][z] = bottom;
         }
     }
+}
 
-    return chunks;
+void WorldGenerator::populate_trees(
+    ChunkV& chunks,
+    const Vector2i& column_position,
+    const unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
+)
+{
+    const int
+        MIN_TREE_RADIUS = 3,
+        MAX_TREE_RADIUS = 5,
+        MIN_TREE_HEIGHT = 8,
+        MAX_TREE_HEIGHT = 24,
+        TREES_PER_CHUNK = 4;
+
+    boost::rand48 tree_generator( get_seed_for_coordinates( world_seed_, column_position ) );
+
+    boost::uniform_int<> tree_position_distribution( MAX_TREE_RADIUS, Chunk::CHUNK_SIZE - MAX_TREE_RADIUS - 1 );
+    boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+        tree_position_random( tree_generator, tree_position_distribution );
+
+    boost::uniform_int<> tree_height_distribution( MIN_TREE_HEIGHT, MAX_TREE_HEIGHT );
+    boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+        tree_height_random( tree_generator, tree_height_distribution );
+
+    boost::uniform_int<> tree_radius_distribution( MIN_TREE_RADIUS, MAX_TREE_RADIUS );
+    boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+        tree_radius_random( tree_generator, tree_radius_distribution );
+
+    for ( int i = 0; i < TREES_PER_CHUNK; ++i )
+    {
+        const int
+            x = tree_position_random(),
+            z = tree_position_random(),
+            height = tree_height_random(),
+            radius = tree_radius_random();
+
+        const int bottom = heights[x][z];
+        Block& bottom_block = get_block( chunks, column_position, x, z, bottom );
+
+        if ( bottom_block.get_material() == BLOCK_MATERIAL_GRASS )
+        {
+            for ( int y = 0; y < height; ++y )
+            {
+                Block& trunk_block = get_block( chunks, column_position, x, z, bottom + y );
+                trunk_block.set_material( BLOCK_MATERIAL_TREE_TRUNK );
+
+                const int leaf_height = y - ( height - radius - 1 );
+
+                if ( leaf_height >= 0 )
+                {
+                    for ( int u = -radius + leaf_height; u <= radius - leaf_height; ++u )
+                    {
+                        for ( int v = -radius + leaf_height; v <= radius - leaf_height; ++v )
+                        {
+                            if ( u != 0 || v != 0 )
+                            {
+                                Block& leaf_block = get_block( chunks, column_position, x + u, z + v, bottom + y );
+
+                                if ( leaf_block.get_material() == BLOCK_MATERIAL_NONE )
+                                {
+                                    leaf_block.set_material( BLOCK_MATERIAL_TREE_LEAF );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+Block& WorldGenerator::get_block( ChunkV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
+{
+    const unsigned chunk_index = height / Chunk::CHUNK_SIZE;
+
+    if ( chunk_index >= chunks.size() )
+    {
+        ChunkSP new_chunk( new Chunk( Vector3i( column_position[0], height, column_position[1] ) ) );
+        chunks.push_back( new_chunk );
+    }
+
+    return chunks[chunk_index]->get_block( Vector3i( x, height % Chunk::CHUNK_SIZE, z ) );
 }

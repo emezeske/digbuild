@@ -98,7 +98,7 @@ Sky::Profile Sky::Profile::lerp( const Scalar t, const Profile& other )const
 //////////////////////////////////////////////////////////////////////////////////
 
 Sky::Sky( const uint64_t world_seed ) :
-    time_of_day_( 0.0f ),
+    time_of_day_( 0.25f ),
     profile_( SKY_PROFILES[SKY_MODE_NIGHT] ),
     sun_angle_( 0.0f, 0.0f ),
     moon_angle_( 0.0f, 0.0f )

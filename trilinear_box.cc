@@ -2,20 +2,8 @@
 #include <boost/random/variate_generator.hpp>
 #include <boost/random/linear_congruential.hpp>
 
+#include "random.h"
 #include "trilinear_box.h"
-
-//////////////////////////////////////////////////////////////////////////////////
-// Local definitions:
-//////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-uint64_t get_seed_for_coordinates( const uint64_t base_seed, const Vector3i position )
-{
-    return base_seed ^ ( position[0] * 91387 + position[1] * 75181 + position[2] * 40591 ); // TODO: Are these prime numbers good?
-}
-
-} // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for TrilinearBox:

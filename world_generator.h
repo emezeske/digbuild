@@ -21,11 +21,21 @@ struct WorldGenerator
 
 protected:
 
-    ChunkV generate_chunk_column(
+    void generate_chunk_column(
+        ChunkV& chunks,
         const RegionFeatures& features,
         const Vector2i& region_position,
-        const Vector2i& column_index
+        const Vector2i& column_position,
+        unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
     );
+
+    void populate_trees(
+        ChunkV& chunks,
+        const Vector2i& column_position,
+        const unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
+    );
+
+    Block& get_block( ChunkV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height );
     
     const uint64_t world_seed_;
 };
@@ -57,14 +67,12 @@ struct RegionFeatures
         assert( index[1] >= 0 );
         assert( index[0] < BICUBIC_OCTAVE_HARMONIC );
         assert( index[1] < BICUBIC_OCTAVE_HARMONIC );
-
         return octave_patches_[index[0]][index[1]];
     }
 
     const TrilinearBox& get_box( const unsigned index ) const
     {
         assert( index < NUM_TRILINEAR_BOXES );
-
         return boxes_[index];
     }
 
