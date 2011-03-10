@@ -29,6 +29,7 @@ inline Scalar get_lighting_attenuation( const Scalar power )
 {
     const int MAX_POWER = 32;
     const int GRANULARITY = 10;
+
     static Scalar lighting_attenuation_table[MAX_POWER * GRANULARITY + 1];
     static bool initialized = false;
 

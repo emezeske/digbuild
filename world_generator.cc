@@ -158,7 +158,7 @@ ChunkV WorldGenerator::generate_chunk_column(
             {
                 const BlockMaterial material = layers[i].first;
                 const Scalar height = std::max( layers[i].second, Scalar( bottom + 1 ) );
-                const unsigned top = unsigned( gmtl::Math::round( height ) );
+                const unsigned top = unsigned( roundf( height ) );
 
                 for ( unsigned y = bottom; y <= top; ++y )
                 {

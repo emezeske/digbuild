@@ -10,14 +10,12 @@ CCFLAGS = [
     '-g',
     '-ffast-math',
     '-fassociative-math',
-#    '-flto',
     '-Wall',
     '-W',
     '-Wshadow',
     '-Wpointer-arith',
     '-Wcast-qual',
     '-Wwrite-strings',
-#    '-Wconversion',
     '-Wredundant-decls',
     '-Wno-unused',
     '-Wno-deprecated'
@@ -26,7 +24,7 @@ CCFLAGS = [
 LINKFLAGS = []
 
 CCFLAGS += [ '-O3' ]
-#CCFLAGS += [ '-DNDEBUG' ]
+CCFLAGS += [ '-DNDEBUG' ]
 LINKFLAGS += [ '-Wl,--strip-all' ]
 
 #CCFLAGS += [ '-pg' ]
