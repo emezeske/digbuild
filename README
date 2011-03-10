@@ -42,3 +42,12 @@ The following build targets may be useful:
     run      # Run the binary (after building it if necessary).
     prof     # Run the binary and generate profiling output when it exits.
     src/tags # Build an exuberant-ctags database file.
+
+###########################################################################
+# CREDITS
+###########################################################################
+
+Author: Evan Mezeske
+
+Special thanks to Paul Bourke for his excellent free textures:
+    http://paulbourke.net/texture_colour/
