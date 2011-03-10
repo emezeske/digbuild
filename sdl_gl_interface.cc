@@ -58,7 +58,7 @@ void SDL_GL_Window::create_window()
         SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
         SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
         SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 8 );
-        SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 16 );
+        SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
         SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
 
         // TODO: Antialiasing level should be configurable.
@@ -213,7 +213,9 @@ void SDL_GL_Interface::main_loop()
             double( current_time.tv_sec - last_time.tv_sec ) +
             double( current_time.tv_nsec - last_time.tv_nsec ) / 1000000000.0;
 
-        if ( step_time_seconds > 1.0 / fps_limit_ )
+        const double seconds_until_next_frame = 1.0f / fps_limit_ - step_time_seconds;
+
+        if ( seconds_until_next_frame <= 0.0 )
         {
             last_time = current_time;
             
@@ -226,5 +228,6 @@ void SDL_GL_Interface::main_loop()
             render();
             SDL_GL_SwapBuffers();
         }
+        else SDL_Delay( int( seconds_until_next_frame * 1000.0 ) );
     }
 }

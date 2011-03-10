@@ -58,15 +58,10 @@ typedef std::map<BlockMaterial, ChunkVertexBufferSP> ChunkVertexBufferMap;
 
 struct ChunkRenderer
 {
-    ChunkRenderer();
-
     void render( const Sky& sky, const RendererMaterialV& materials );
-    void initialize( const Chunk& chunk );
-    bool initialized() const { return initialized_; }
+    void rebuild( const Chunk& chunk );
 
 protected:
-
-    bool initialized_;
 
     ChunkVertexBufferMap vbos_;
 };
@@ -116,6 +111,8 @@ protected:
 struct Renderer
 {
     Renderer();
+
+    void note_chunk_changes( const Chunk& chunk );
 
     void render( const Camera& camera, const World& world );
 

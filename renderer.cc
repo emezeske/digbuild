@@ -62,23 +62,28 @@ void VertexBuffer::bind()
 // Function definitions for ChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
 
-ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices ) :
-    VertexBuffer( boost::numeric_cast<GLsizei>( vertices.size() ) )
+ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices )
 {
     assert( vertices.size() > 0 );
 
-    bind();
-    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
-
     std::vector<GLuint> indices;
-    indices.resize( vertices.size() );
+    indices.reserve( vertices.size() + vertices.size() / 2 );
 
-    for ( int i = 0; i < int( vertices.size() ); ++i )
+    for ( int i = 0; i < int( vertices.size() ); i += 4 )
     {
-        indices[i] = i;
+        indices.push_back( i + 0 );
+        indices.push_back( i + 3 );
+        indices.push_back( i + 2 );
+
+        indices.push_back( i + 0 );
+        indices.push_back( i + 2 );
+        indices.push_back( i + 1 );
     }
 
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, vertices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    bind();
+    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    num_elements_ = indices.size();
 }
 
 void ChunkVertexBuffer::render()
@@ -108,11 +113,6 @@ void ChunkVertexBuffer::render()
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for ChunkRenderer:
 //////////////////////////////////////////////////////////////////////////////////
-
-ChunkRenderer::ChunkRenderer() :
-    initialized_( false )
-{
-}
 
 void ChunkRenderer::render( const Sky& sky, const RendererMaterialV& materials )
 {
@@ -147,12 +147,11 @@ void ChunkRenderer::render( const Sky& sky, const RendererMaterialV& materials )
         glBindTexture( GL_TEXTURE_2D, 0 );
         glDisable( GL_TEXTURE_2D );
 
-        // TODO: Use a guard object instead.
         renderer_material.shader().disable();
     }
 }
 
-void ChunkRenderer::initialize( const Chunk& chunk )
+void ChunkRenderer::rebuild( const Chunk& chunk )
 {
     const BlockFaceV& faces = chunk.get_external_faces();
 
@@ -164,23 +163,19 @@ void ChunkRenderer::initialize( const Chunk& chunk )
     {
         BlockVertexV& v = material_vertices[face_it->material_];
 
-        // TODO: Clean this up.  We can send less vertices down to the GPU by mucking with the indices.
-        v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
         v.push_back( BlockVertex( face_it->vertices_[1].position_, face_it->normal_, Vector2f( 1.0f, 0.0f ), face_it->vertices_[1].lighting_ ) );
-        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
-
-        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
-        v.push_back( BlockVertex( face_it->vertices_[3].position_, face_it->normal_, Vector2f( 0.0f, 1.0f ), face_it->vertices_[3].lighting_ ) );
         v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[3].position_, face_it->normal_, Vector2f( 0.0f, 1.0f ), face_it->vertices_[3].lighting_ ) );
     }
+
+    vbos_.clear();
 
     for ( MaterialVertexMap::const_iterator it = material_vertices.begin(); it != material_vertices.end(); ++it )
     {
         ChunkVertexBufferSP vbo( new ChunkVertexBuffer( it->second ) );
         vbos_[it->first] = vbo;
     }
-
-    initialized_ = true;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -387,6 +382,12 @@ Renderer::Renderer()
     materials_[BLOCK_MATERIAL_MAGMA].reset  ( new RendererMaterial( "magma" ) );
 }
 
+void Renderer::note_chunk_changes( const Chunk& chunk )
+{
+    ChunkRenderer& chunk_renderer = chunk_renderers_[chunk.get_position()];
+    chunk_renderer.rebuild( chunk );
+}
+
 void Renderer::render( const Camera& camera, const World& world )
 {
     camera.rotate();
@@ -455,29 +456,27 @@ void Renderer::render_chunks( const Sky& sky, const ChunkMap& chunks )
         const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
         const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
 
+        ++chunks_total;
+
         if ( gmtl::isInVolume( view_frustum, chunk_box ) )
         {
-            ChunkRenderer& chunk_renderer = chunk_renderers_[chunk_position];
+            ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk_position );
 
-            if ( !chunk_renderer.initialized() )
+            if ( chunk_renderer_it != chunk_renderers_.end() )
             {
-                // TODO: Do Chunk initialization at the time when a new Region is
-                //       generated/modified, rather than when the Chunk is first seen.
-                chunk_renderer.initialize( *chunk_it->second );
+                chunk_renderer_it->second.render( sky, materials_ );
+                ++chunks_rendered;
             }
-
-            chunk_renderer.render( sky, materials_ );
-            ++chunks_rendered;
         }
-        ++chunks_total;
     }
-
-    glDisable( GL_DEPTH_TEST );
-    glDisable( GL_BLEND );
-    glDisable( GL_CULL_FACE );
 
     // TODO: Just for development.
     // static unsigned c = 0;
     // if ( ++c % 60 == 0 )
     //     std::cout << "Chunks rendered: " << chunks_rendered << " / " << chunks_total << std::endl;
+
+    glDisable( GL_DEPTH_TEST );
+    glDisable( GL_BLEND );
+    glDisable( GL_CULL_FACE );
+
 }

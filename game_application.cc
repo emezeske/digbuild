@@ -11,6 +11,16 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
     world_( 0x58afe359358eafd3 ) // FIXME: Using a constant for performance measurements.
 {
+    SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
+
+    for ( ChunkMap::const_iterator chunk_it = world_.get_chunks().begin();
+          chunk_it != world_.get_chunks().end();
+          ++chunk_it )
+    {
+        renderer_.note_chunk_changes( *chunk_it->second );
+    }
+
+    SCOPE_TIMER_END
 }
 
 GameApplication::~GameApplication()
@@ -52,7 +62,8 @@ void GameApplication::handle_key_down_event( const int key, const int mod )
             break;
 
         case SDLK_SPACE:
-            printf( "Camera: pitch: %f, yaw: %f\n", camera_.pitch_, camera_.yaw_ );
+            SDL_ShowCursor( SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE ? SDL_DISABLE : SDL_ENABLE );
+            SDL_WM_GrabInput( SDL_WM_GrabInput( SDL_GRAB_QUERY ) == SDL_GRAB_ON ? SDL_GRAB_OFF : SDL_GRAB_ON );
             break;
 
         default:
