@@ -89,6 +89,8 @@ struct StarVertexBuffer : public VertexBuffer
     void render();
 };
 
+typedef boost::shared_ptr<StarVertexBuffer> StarVertexBufferSP;
+
 struct SkyRenderer
 {
     SkyRenderer();
@@ -107,6 +109,8 @@ protected:
     SkydomeVertexBuffer skydome_vbo_;
 
     Shader skydome_shader_;
+
+    StarVertexBufferSP star_vbo_;
 };
 
 struct Renderer

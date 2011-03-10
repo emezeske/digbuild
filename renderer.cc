@@ -328,9 +328,13 @@ void SkyRenderer::render( const Sky& sky )
         rotate_sky( sky.get_moon_angle() );
         if ( sky.get_star_intensity() > gmtl::GMTL_EPSILON )
         {
-            StarVertexBuffer star_vbo( sky.get_stars() );
+            if ( !star_vbo_ )
+            {
+                star_vbo_.reset( new StarVertexBuffer( sky.get_stars() ) );
+            }
+
             glColor4f( 1.0f, 1.0f, 1.0f, sky.get_star_intensity() );
-            star_vbo.render();
+            star_vbo_->render();
         }
         render_celestial_body( moon_texture_.texture_id(), sky.get_moon_color() );
     glPopMatrix();
