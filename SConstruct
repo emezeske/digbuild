@@ -5,7 +5,7 @@ import subprocess
 HEADERS = Glob( 'src/*.h' )
 SOURCES = Glob( 'src/*.cc' )
 BINARY = 'digbuild'
-LIBRARY_DEPENDENCIES = [ 'sdl', 'SDL_image', 'gl', 'glew', 'glu' ]
+LIBRARY_DEPENDENCIES = [ 'sdl', 'SDL_image', 'gl', 'glew', 'glu', 'CEGUI-OPENGL' ]
 HEADER_DEPENDENCIES = [ 'boost/shared_ptr.hpp', 'gmtl/gmtl.h' ]
 INCLUDE_DIRECTORY_NAMES = [ 'boost_include_dir', 'gmtl_include_dir' ]
 
@@ -66,7 +66,6 @@ env.Append( CCFLAGS = [
 for name in INCLUDE_DIRECTORY_NAMES:
     directory = GetOption( name )
     env.Append( CPPPATH = [ directory ] )
-    env.Append( CCFLAGS = [ '-isystem%s' % directory ] ) 
 
 if OPTIMIZE_BINARY:
     env.Append( CCFLAGS = [ '-O3', '-ffast-math', '-fassociative-math' ] )
@@ -99,6 +98,9 @@ env = conf.Finish()
 
 for library in LIBRARY_DEPENDENCIES:
     env.MergeFlags( [ '!pkg-config %s --cflags --libs' % library ] )
+
+for path in env['CPPPATH']:
+    env.Append( CCFLAGS = [ '-isystem%s' % path ] ) 
 
 env.Program( source = SOURCES, target = BINARY )
 env.Command( 'src/tags', SOURCES + HEADERS, 'ctags -o $TARGET $SOURCES' )

@@ -15,6 +15,9 @@ struct VertexBuffer : public boost::noncopyable
     virtual ~VertexBuffer();
 
     void bind();
+    void unbind();
+
+protected:
 
     GLuint
         vbo_id_,

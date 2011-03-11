@@ -174,9 +174,9 @@ World::World( const uint64_t world_seed ) :
 {
     SCOPE_TIMER_BEGIN( "World generation" )
 
-    for ( int x = 0; x < 3; ++x )
+    for ( int x = 0; x < 1; ++x )
     {
-        for ( int z = 0; z < 3; ++z )
+        for ( int z = 0; z < 1; ++z )
         {
             const Vector2i position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
             ChunkV new_chunks = generator_.generate_region( position );

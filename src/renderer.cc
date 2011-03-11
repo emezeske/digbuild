@@ -59,6 +59,12 @@ void VertexBuffer::bind()
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, ibo_id_ );
 }
 
+void VertexBuffer::unbind()
+{
+    glBindBuffer( GL_ARRAY_BUFFER, 0 );
+    glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
+}
+
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for ChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
@@ -85,6 +91,7 @@ ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices )
     glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
     glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
     num_elements_ = indices.size();
+    unbind();
 }
 
 void ChunkVertexBuffer::render()
@@ -109,6 +116,8 @@ void ChunkVertexBuffer::render()
     glDisableClientState( GL_TEXTURE_COORD_ARRAY );
     glDisableClientState( GL_NORMAL_ARRAY );
     glDisableClientState( GL_VERTEX_ARRAY );
+
+    unbind();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -234,6 +243,7 @@ SkydomeVertexBuffer::SkydomeVertexBuffer()
     glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SimplePositionVertex ), &vertices[0], GL_STATIC_DRAW );
     glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
     num_elements_ = indices.size();
+    unbind();
 }
 
 void SkydomeVertexBuffer::render()
@@ -243,6 +253,7 @@ void SkydomeVertexBuffer::render()
     glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
     glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
     glDisableClientState( GL_VERTEX_ARRAY );
+    unbind();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -289,6 +300,7 @@ StarVertexBuffer::StarVertexBuffer( const Sky::StarV& stars )
     glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SimplePositionVertex ), &vertices[0], GL_STATIC_DRAW );
     glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
     num_elements_ = indices.size();
+    unbind();
 }
 
 void StarVertexBuffer::render()
@@ -298,6 +310,7 @@ void StarVertexBuffer::render()
     glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
     glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
     glDisableClientState( GL_VERTEX_ARRAY );
+    unbind();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -411,10 +424,12 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
 
 void Renderer::render( const Camera& camera, const World& world )
 {
-    camera.rotate();
-    render_sky( world.get_sky() );
-    camera.translate();
-    render_chunks( camera.get_position(), world.get_sky(), world.get_chunks() );
+    glPushMatrix();
+        camera.rotate();
+        render_sky( world.get_sky() );
+        camera.translate();
+        render_chunks( camera.get_position(), world.get_sky(), world.get_chunks() );
+    glPopMatrix();
 }
 
 void Renderer::render_sky( const Sky& sky )
@@ -503,7 +518,6 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, c
     glDisable( GL_DEPTH_TEST );
     glDisable( GL_BLEND );
     glDisable( GL_CULL_FACE );
-
 }
 
 gmtl::Matrix44f Renderer::get_opengl_matrix( const GLenum matrix )
