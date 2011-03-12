@@ -106,11 +106,15 @@ void ChunkVertexBuffer::render()
 
     glClientActiveTexture( GL_TEXTURE0 );
     glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
 
     glClientActiveTexture( GL_TEXTURE1 );
     glEnableClientState( GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 32 ) );
+    glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 36 ) );
+
+    glClientActiveTexture( GL_TEXTURE2 );
+    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 44 ) );
 
     glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
     glDisableClientState( GL_TEXTURE_COORD_ARRAY );
@@ -152,14 +156,34 @@ void ChunkRenderer::render_opaque( const Sky& sky, const RendererMaterialV& mate
         renderer_material.shader().set_uniform_vec3f( "moon_light_color", sky.get_moon_light_color() );
 
         glEnable( GL_TEXTURE_2D );
+
         glActiveTexture( GL_TEXTURE0 );
         glClientActiveTexture( GL_TEXTURE0 );
         glBindTexture( GL_TEXTURE_2D, renderer_material.texture().texture_id() );
-        renderer_material.shader().set_uniform_int( "texture", 0 );
+        renderer_material.shader().set_uniform_int( "material_texture", 0 );
+
+        glActiveTexture( GL_TEXTURE1 );
+        glClientActiveTexture( GL_TEXTURE1 );
+        glBindTexture( GL_TEXTURE_2D, renderer_material.specular_map().texture_id() );
+        renderer_material.shader().set_uniform_int( "material_specular_map", 1 );
+
+        glActiveTexture( GL_TEXTURE2 );
+        glClientActiveTexture( GL_TEXTURE2 );
+        glBindTexture( GL_TEXTURE_2D, renderer_material.bump_map().texture_id() );
+        renderer_material.shader().set_uniform_int( "material_bump_map", 2 );
 
         vbo.render();
 
         glBindTexture( GL_TEXTURE_2D, 0 );
+
+        glActiveTexture( GL_TEXTURE1 );
+        glClientActiveTexture( GL_TEXTURE1 );
+        glBindTexture( GL_TEXTURE_2D, 0 );
+
+        glActiveTexture( GL_TEXTURE0 );
+        glClientActiveTexture( GL_TEXTURE0 );
+        glBindTexture( GL_TEXTURE_2D, 0 );
+
         glDisable( GL_TEXTURE_2D );
 
         renderer_material.shader().disable();
@@ -178,10 +202,10 @@ void ChunkRenderer::rebuild( const Chunk& chunk )
     {
         BlockVertexV& v = material_vertices[face_it->material_];
 
-        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
-        v.push_back( BlockVertex( face_it->vertices_[1].position_, face_it->normal_, Vector2f( 1.0f, 0.0f ), face_it->vertices_[1].lighting_ ) );
-        v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
-        v.push_back( BlockVertex( face_it->vertices_[3].position_, face_it->normal_, Vector2f( 0.0f, 1.0f ), face_it->vertices_[3].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[0].position_, face_it->normal_, face_it->tangent_, Vector2f( 0.0f, 0.0f ), face_it->vertices_[0].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[1].position_, face_it->normal_, face_it->tangent_, Vector2f( 1.0f, 0.0f ), face_it->vertices_[1].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[2].position_, face_it->normal_, face_it->tangent_, Vector2f( 1.0f, 1.0f ), face_it->vertices_[2].lighting_ ) );
+        v.push_back( BlockVertex( face_it->vertices_[3].position_, face_it->normal_, face_it->tangent_, Vector2f( 0.0f, 1.0f ), face_it->vertices_[3].lighting_ ) );
     }
 
     vbos_.clear();

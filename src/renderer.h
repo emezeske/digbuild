@@ -32,9 +32,16 @@ struct BlockVertex
     {
     }
 
-    BlockVertex( const Vector3f& position, const Vector3f& normal, const Vector2f& texcoords, const Vector4f& lighting ) :
+    BlockVertex(
+        const Vector3f& position,
+        const Vector3f& normal,
+        const Vector3f& tangent,
+        const Vector2f& texcoords,
+        const Vector4f& lighting
+    ) :
         x_( position[0] ), y_( position[1] ), z_( position[2] ),
         nx_( normal[0] ), ny_( normal[1] ), nz_( normal[2] ),
+        tx_( tangent[0] ), ty_( tangent[1] ), tz_( tangent[2] ),
         s_( texcoords[0] ), t_( texcoords[1] ),
         lr_( lighting[0] ), lg_( lighting[1] ), lb_( lighting[2] ), ls_( lighting[3] )
     {
@@ -42,6 +49,7 @@ struct BlockVertex
 
     GLfloat x_, y_, z_;
     GLfloat nx_, ny_, nz_;
+    GLfloat tx_, ty_, tz_;
     GLfloat s_, t_;
     GLfloat lr_, lg_, lb_, ls_;
 

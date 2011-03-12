@@ -37,7 +37,7 @@ inline Scalar get_lighting_attenuation( const Scalar power )
     {
         for ( int i = 0; i <= MAX_POWER * GRANULARITY; ++i )
         {
-            lighting_attenuation_table[i] = gmtl::Math::pow( 0.70f, Scalar( i ) / Scalar( GRANULARITY ) );
+            lighting_attenuation_table[i] = gmtl::Math::pow( 0.75f, Scalar( i ) / Scalar( GRANULARITY ) );
         }
 
         initialized = true;
@@ -59,6 +59,20 @@ inline Vector3i cardinal_relation_vector( const CardinalRelation relation )
         case CARDINAL_RELATION_SOUTH: return Vector3i(  0,  0, -1 );
         case CARDINAL_RELATION_EAST:  return Vector3i(  1,  0,  0 );
         case CARDINAL_RELATION_WEST:  return Vector3i( -1,  0,  0 );
+        default: throw std::runtime_error( "Invalid cardinal relation." );
+    }
+}
+
+inline CardinalRelation cardinal_relation_tangent( const CardinalRelation relation )
+{
+    switch ( relation )
+    {
+        case CARDINAL_RELATION_ABOVE: return CARDINAL_RELATION_NORTH;
+        case CARDINAL_RELATION_BELOW: return CARDINAL_RELATION_SOUTH;
+        case CARDINAL_RELATION_NORTH: return CARDINAL_RELATION_EAST;
+        case CARDINAL_RELATION_SOUTH: return CARDINAL_RELATION_WEST;
+        case CARDINAL_RELATION_EAST:  return CARDINAL_RELATION_ABOVE;
+        case CARDINAL_RELATION_WEST:  return CARDINAL_RELATION_BELOW;
         default: throw std::runtime_error( "Invalid cardinal relation." );
     }
 }
@@ -89,11 +103,11 @@ void breadth_first_flood_fill_light(
             blocks_visited.push_back( flood_block.first.block_ );
             flood_block.first.block_->set_visited( true );
 
-            Vector4i block_light_level = flood_block.first.block_->get_light_level() + flood_block.second;
+            Vector4i block_light_level;
 
             for ( int i = 0; i < Vector4i::Size; ++i )
             {
-                block_light_level[i] = std::min( block_light_level[i], Block::MAX_LIGHT_LEVEL[i] );
+                block_light_level[i] = std::max( flood_block.first.block_->get_light_level()[i], flood_block.second[i] );
             }
 
             flood_block.first.block_->set_light_level( block_light_level );
@@ -115,11 +129,7 @@ void breadth_first_flood_fill_light(
                     if ( neighbor.block_ &&
                          neighbor.block_->get_material() == BLOCK_MATERIAL_NONE &&
                          !neighbor.block_->is_visited() &&
-                         ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) &&
-                         ( neighbor.block_->get_light_level()[0] < attenuated_light_level[0] ||
-                           neighbor.block_->get_light_level()[1] < attenuated_light_level[1] ||
-                           neighbor.block_->get_light_level()[2] < attenuated_light_level[2] ||
-                           neighbor.block_->get_light_level()[3] < attenuated_light_level[3] ) )
+                         ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) )
                     {
                         queue.push_back( std::make_pair( neighbor, attenuated_light_level ) );
                     }
@@ -219,7 +229,13 @@ void Chunk::update_geometry()
 
 void Chunk::add_external_face( const Vector3i& block_index, const Vector3f& block_position, const Block& block, const CardinalRelation relation, const Vector3i& relation_vector )
 {
-    external_faces_.push_back( BlockFace( vector_cast<Scalar>( relation_vector ), block.get_material() ) );
+    external_faces_.push_back(
+        BlockFace(
+            vector_cast<Scalar>( relation_vector ),
+            vector_cast<Scalar>( cardinal_relation_vector( cardinal_relation_tangent( relation ) ) ),
+            block.get_material()
+        )
+    );
 
     #define V( x, y, z, nax, nay, naz, nbx, nby, nbz )\
         BlockFace::Vertex( block_position + Vector3f( x, y, z ),\
@@ -325,8 +341,12 @@ Vector4f Chunk::calculate_vertex_lighting(
     
     for ( int i = 0; i < Vector4i::Size; ++i )
     {
-        Scalar power = Block::MAX_LIGHT_LEVEL[i] - average_lighting[i] + ambient_occlusion_power;
-        attenuated_lighting[i] = get_lighting_attenuation( power );
+        if ( average_lighting[i] > gmtl::GMTL_EPSILON )
+        {
+            Scalar power = Block::MAX_LIGHT_LEVEL[i] - average_lighting[i] + ambient_occlusion_power * 2;
+            attenuated_lighting[i] = get_lighting_attenuation( power );
+        }
+        else attenuated_lighting[i] = 0.0f;
     }
 
     return attenuated_lighting;

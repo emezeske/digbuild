@@ -40,6 +40,10 @@ Texture::Texture( const std::string& filename ) :
                 {
                     texture_format = ( surface->format->Rmask == 0x000000ff ) ? GL_RGB : GL_BGR;
                 } 
+                else if ( num_colors == 1 ) // Luminance map.
+                {
+                    texture_format = GL_LUMINANCE;
+                } 
         
                 if ( texture_format )
                 {
@@ -53,7 +57,6 @@ Texture::Texture( const std::string& filename ) :
         
                     if ( SDL_LockSurface( surface ) != -1 )
                     {
-                        // glTexImage2D( GL_TEXTURE_2D, 0, num_colors, surface->w, surface->h, 0, texture_format, GL_UNSIGNED_BYTE, surface->pixels );
                         gluBuild2DMipmaps( GL_TEXTURE_2D, num_colors, surface->w, surface->h, texture_format, GL_UNSIGNED_BYTE, surface->pixels );
                         SDL_UnlockSurface( surface );
                     }
@@ -93,6 +96,8 @@ const std::string
 
 RendererMaterial::RendererMaterial( const std::string& name ) :
     texture_( TEXTURE_DIRECTORY + "/" + name + ".png" ),
+    specular_map_( TEXTURE_DIRECTORY + "/" + name + ".specular.png" ),
+    bump_map_( TEXTURE_DIRECTORY + "/" + name + ".bump.png" ),
     shader_( SHADER_DIRECTORY + "/default.vertex.glsl", SHADER_DIRECTORY + "/default.fragment.glsl" )
 {
 }

@@ -36,11 +36,16 @@ struct RendererMaterial
     RendererMaterial( const std::string& name );
 
     const Texture& texture() const { return texture_; }
+    const Texture& specular_map() const { return specular_map_; }
+    const Texture& bump_map() const { return bump_map_; }
     const Shader& shader() const { return shader_; }
 
 private:
 
-    Texture texture_;
+    Texture
+        texture_,
+        specular_map_,
+        bump_map_;
 
     Shader shader_;
 };

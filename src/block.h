@@ -118,15 +118,18 @@ struct BlockFace
     {
     }
 
-    BlockFace( const Vector3f& normal, const BlockMaterial material ) :
+    BlockFace( const Vector3f& normal, const Vector3f& tangent, const BlockMaterial material ) :
         normal_( normal ),
+        tangent_( tangent ),
         material_( material )
     {
     }
 
     Vertex vertices_[NUM_VERTICES];
 
-    Vector3f normal_;
+    Vector3f
+        normal_,
+        tangent_;
 
     BlockMaterial material_;
 };

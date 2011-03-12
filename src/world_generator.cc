@@ -242,7 +242,7 @@ void WorldGenerator::populate_trees(
 
         if ( bottom_block.get_material() == BLOCK_MATERIAL_GRASS )
         {
-            for ( int y = 0; y < height; ++y )
+            for ( int y = 1; y < height; ++y )
             {
                 Block& trunk_block = get_block( chunks, column_position, x, z, bottom + y );
                 trunk_block.set_material( BLOCK_MATERIAL_TREE_TRUNK );
