@@ -71,7 +71,7 @@ struct ChunkRenderer
 {
     ChunkRenderer( const Vector3f& centroid = Vector3f() );
 
-    void render_opaque( const Sky& sky, const RendererMaterialV& materials );
+    void render_opaque( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials );
     void rebuild( const Chunk& chunk );
     const Vector3f& get_centroid() const { return centroid_; }
 

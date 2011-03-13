@@ -133,7 +133,7 @@ ChunkRenderer::ChunkRenderer( const Vector3f& centroid ) :
 {
 }
 
-void ChunkRenderer::render_opaque( const Sky& sky, const RendererMaterialV& materials )
+void ChunkRenderer::render_opaque( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials )
 {
     for ( ChunkVertexBufferMap::iterator it = vbos_.begin(); it != vbos_.end(); ++it )
     {
@@ -148,6 +148,8 @@ void ChunkRenderer::render_opaque( const Sky& sky, const RendererMaterialV& mate
         const Vector3f
             sun_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_sun_angle()[0], sky.get_sun_angle()[1] ) ),
             moon_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_moon_angle()[0], sky.get_moon_angle()[1] ) );
+
+        renderer_material.shader().set_uniform_vec3f( "camera_position", camera_position );
 
         renderer_material.shader().set_uniform_vec3f( "sun_direction", sun_direction );
         renderer_material.shader().set_uniform_vec3f( "moon_direction", moon_direction );
@@ -529,7 +531,7 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, c
 
     for ( ChunkRendererSet::iterator it = visible_chunks.begin(); it != visible_chunks.end(); ++it )
     {
-        it->second->render_opaque( sky, materials_ );
+        it->second->render_opaque( camera_position, sky, materials_ );
     }
 
     // TODO: Render the translucent parts of the chunks from back to front.
