@@ -127,7 +127,7 @@ void breadth_first_flood_fill_light(
                     BlockIterator neighbor = flood_block.first.chunk_->get_block_neighbor( flood_block.first.index_, relation_vector );
 
                     if ( neighbor.block_ &&
-                         neighbor.block_->get_material() == BLOCK_MATERIAL_NONE &&
+                         neighbor.block_->get_material_attributes().translucent_ &&
                          !neighbor.block_->is_visited() &&
                          ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) )
                     {
@@ -170,7 +170,7 @@ void Chunk::reset_lighting()
 
                 if ( above_ground )
                 {
-                    if ( block.get_material() == BLOCK_MATERIAL_NONE )
+                    if ( block.get_material_attributes().translucent_ )
                     {
                         block.set_sunlight_source( true );
                     }
@@ -196,7 +196,7 @@ void Chunk::update_geometry()
         const Vector3i block_index( x, y, z );
         const Block& block = get_block( block_index );
 
-        if ( block.get_material() != BLOCK_MATERIAL_NONE )
+        if ( block.get_material() != BLOCK_MATERIAL_AIR )
         {
             const Vector3f block_position = vector_cast<Scalar>( Vector3i( position_ + block_index ) );
             bool block_visible = false;
@@ -206,7 +206,9 @@ void Chunk::update_geometry()
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
                 const Block* block_neighbor = get_block_neighbor( block_index, relation_vector ).block_;
 
-                if ( !block_neighbor || block_neighbor->get_material() == BLOCK_MATERIAL_NONE )
+                if ( !block_neighbor ||
+                     ( block_neighbor->get_material_attributes().translucent_ &&
+                       block.get_material() != block_neighbor->get_material() ) )
                 {
                     add_external_face(
                         block_index,
@@ -306,8 +308,8 @@ Vector4f Chunk::calculate_vertex_lighting(
 
     bool neighbor_ab_may_contribute = false;
 
-    if ( !neighbors[1].block_ || neighbors[1].block_->get_material() == BLOCK_MATERIAL_NONE ||
-         !neighbors[2].block_ || neighbors[2].block_->get_material() == BLOCK_MATERIAL_NONE )
+    if ( !neighbors[1].block_ || neighbors[1].block_->get_material_attributes().translucent_ ||
+         !neighbors[2].block_ || neighbors[2].block_->get_material_attributes().translucent_ )
     {
         neighbor_ab_may_contribute = true;
         neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
@@ -322,7 +324,7 @@ Vector4f Chunk::calculate_vertex_lighting(
 
         if ( block )
         {
-            if ( block->get_material() == BLOCK_MATERIAL_NONE )
+            if ( block->get_material_attributes().translucent_ )
             {
                 total_lighting += block->get_light_level();
                 ++num_contributors;

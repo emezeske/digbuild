@@ -66,18 +66,41 @@ struct ChunkVertexBuffer : public VertexBuffer
 
 typedef boost::shared_ptr<ChunkVertexBuffer> ChunkVertexBufferSP;
 typedef std::map<BlockMaterial, ChunkVertexBufferSP> ChunkVertexBufferMap;
+typedef std::vector<Vector3f> Vector3fV;
+
+struct SortableChunkVertexBuffer : public ChunkVertexBuffer
+{
+    SortableChunkVertexBuffer( const BlockVertexV& vertices );
+
+    void render( const Vector3f& camera_position );
+
+private:
+
+    static const unsigned VERTICES_PER_FACE = 4;
+
+    Vector3fV centroids_;
+};
+
+typedef boost::shared_ptr<SortableChunkVertexBuffer> SortableChunkVertexBufferSP;
+typedef std::map<BlockMaterial, SortableChunkVertexBufferSP> SortableChunkVertexBufferMap;
 
 struct ChunkRenderer
 {
     ChunkRenderer( const Vector3f& centroid = Vector3f() );
 
     void render_opaque( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials );
+    void render_translucent( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials );
     void rebuild( const Chunk& chunk );
     const Vector3f& get_centroid() const { return centroid_; }
 
 protected:
 
-    ChunkVertexBufferMap vbos_;
+    void configure_material( const Vector3f& camera_position, const Sky& sky, const RendererMaterial& renderer_material );
+    void deconfigure_material( const RendererMaterial& renderer_material );
+    void get_vertices_for_face( const BlockFace& face, BlockVertexV& vertices ) const;
+
+    ChunkVertexBufferMap opaque_vbos_;
+    SortableChunkVertexBufferMap translucent_vbos_;
 
     Vector3f centroid_;
 };

@@ -11,8 +11,8 @@
 
 enum BlockMaterial
 {
-    BLOCK_MATERIAL_NONE = 0xff,
-    BLOCK_MATERIAL_GRASS = 0,
+    BLOCK_MATERIAL_AIR = 0,
+    BLOCK_MATERIAL_GRASS,
     BLOCK_MATERIAL_DIRT,
     BLOCK_MATERIAL_CLAY,
     BLOCK_MATERIAL_STONE,
@@ -20,8 +20,21 @@ enum BlockMaterial
     BLOCK_MATERIAL_MAGMA,
     BLOCK_MATERIAL_TREE_TRUNK,
     BLOCK_MATERIAL_TREE_LEAF,
+    BLOCK_MATERIAL_GLASS,
     BLOCK_MATERIAL_SIZE
 };
+
+struct BlockMaterialAttributes
+{
+    BlockMaterialAttributes( const bool translucent ) :
+        translucent_( translucent )
+    {
+    }
+
+    const bool translucent_;
+};
+
+const BlockMaterialAttributes& get_block_material_attributes( const BlockMaterial material );
 
 struct Block
 {
@@ -30,7 +43,7 @@ struct Block
         MAX_LIGHT_LEVEL;
 
     Block() :
-        material_( BLOCK_MATERIAL_NONE ),
+        material_( BLOCK_MATERIAL_AIR ),
         sunlight_source_( 0 ),
         visited_( 0 ),
         light_level_r_( 0 ),
@@ -48,6 +61,7 @@ struct Block
     }
 
     BlockMaterial get_material() const { return BlockMaterial( material_ ); }
+    const BlockMaterialAttributes& get_material_attributes() const { return get_block_material_attributes( get_material() ); }
 
     void set_sunlight_source( const bool sunlight_source ) { sunlight_source_ = sunlight_source; }
     bool is_sunlight_source() const { return sunlight_source_; }

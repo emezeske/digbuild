@@ -21,13 +21,13 @@ void main()
     bump_direction.z = bump_direction.z * 2.0f - 1.0f;
     bump_direction = normalize( bump_direction );
 
-    float sun_bump = 0.25f + 0.75f * clamp( dot( tangent_sun_direction, bump_direction ), 0.0f, 1.0f );
+    float bump_factor = clamp( dot( tangent_sun_direction, bump_direction ), 0.0f, 1.0f );
+    vec3 sun_bump = 0.50f * bump_factor * sun_lighting;
 
     vec3 reflected_sun_direction = reflect( -tangent_sun_direction, bump_direction );
     float sun_specularity = max( dot( tangent_camera_direction, reflected_sun_direction ), 0.0f );
     float material_specularity = texture2D( material_specular_map, texture_coordinates ).r;
     vec3 sun_specular = material_specularity * pow( sun_specularity, 16 ) * sun_lighting;
 
-    // FIXME: The bump factor should only affect light from the sun.
-    gl_FragColor = vec4( texture_color.rgb * base_lighting * sun_bump + sun_specular, texture_color.a );
+    gl_FragColor = vec4( texture_color.rgb * ( base_lighting + sun_bump ) + sun_specular, texture_color.a );
 }

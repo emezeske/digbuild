@@ -31,14 +31,12 @@ void main()
     vec4 light_level = gl_MultiTexCoord2;
     sun_lighting = sun_light_color * light_level.a;
 
-    float sun_incidence = 0.65f + 0.35f * dot( sun_direction, gl_Normal );
-    vec3 sun_diffuse = sun_lighting * sun_incidence;
-
     float moon_incidence = 0.65f + 0.35f * dot( moon_direction, gl_Normal );
-    vec3 moon_diffuse = moon_light_color * light_level.a * moon_incidence;
+    vec3 moon_lighting = moon_light_color * light_level.a;
+    vec3 moon_diffuse = moon_lighting * moon_incidence;
 
-    const vec3 ambient_light = vec3( 0.03f, 0.03f, 0.03f );
-    base_lighting = ambient_light + light_level.rgb + sun_diffuse + moon_diffuse;
+    vec3 ambient_light = vec3( 0.06f, 0.06f, 0.06f ) + 0.50f * sun_lighting + 0.45f * moon_lighting;
+    base_lighting = ambient_light + light_level.rgb + moon_diffuse;
 
     texture_coordinates = gl_MultiTexCoord1.st;
 

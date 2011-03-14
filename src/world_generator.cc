@@ -187,7 +187,7 @@ void WorldGenerator::generate_chunk_column(
 
                         if ( densityA > 0.45 && densityA < 0.55 && densityB > 0.45 && densityB < 0.55 )
                         {
-                            block.set_material( BLOCK_MATERIAL_NONE );
+                            block.set_material( BLOCK_MATERIAL_AIR );
                         }
                         else block.set_material( material );
                     }
@@ -259,7 +259,7 @@ void WorldGenerator::populate_trees(
                             {
                                 Block& leaf_block = get_block( chunks, column_position, x + u, z + v, bottom + y );
 
-                                if ( leaf_block.get_material() == BLOCK_MATERIAL_NONE )
+                                if ( leaf_block.get_material() == BLOCK_MATERIAL_AIR )
                                 {
                                     leaf_block.set_material( BLOCK_MATERIAL_TREE_LEAF );
                                 }
