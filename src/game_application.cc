@@ -12,8 +12,8 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     SDL_GL_Interface( initializer, fps ),
     show_gui_( false ),
     camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f ),
-    world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
-    //world_( 0x58afe359358eafd3 ) // FIXME: Using a constant for performance measurements.
+    // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
+    world_( 0xeaafa35aaa8eafdf ) // FIXME: Using a constant for performance measurements.
 {
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
 

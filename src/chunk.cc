@@ -131,7 +131,21 @@ void breadth_first_flood_fill_light(
                          !neighbor.block_->is_visited() &&
                          ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) )
                     {
-                        queue.push_back( std::make_pair( neighbor, attenuated_light_level ) );
+                        bool already_lit = true;
+
+                        for ( int i = 0; i < Vector4i::Size; ++i )
+                        {
+                            if ( neighbor.block_->get_light_level()[i] < attenuated_light_level[i] )
+                            {
+                                already_lit = false;
+                                break;
+                            }
+                        }
+
+                        if ( !already_lit )
+                        {
+                            queue.push_back( std::make_pair( neighbor, attenuated_light_level ) );
+                        }
                     }
                 }
             }
