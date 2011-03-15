@@ -1,19 +1,21 @@
 #include "sdl_utilities.h"
 #include "game_application.h"
 
-#include <CEGUI.h>
-#include <RendererModules/OpenGL/CEGUIOpenGLRenderer.h>
-
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for GameApplication:
 //////////////////////////////////////////////////////////////////////////////////
 
-GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
-    SDL_GL_Interface( initializer, fps ),
-    show_gui_( false ),
+GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limit ) :
+    run_( false ),
+    fps_limit_( fps_limit ),
+    fps_last_time_( 0 ),
+    fps_frame_count_( 0 ),
+    window_( window ),
+    gui_focused_( false ),
     camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f ),
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
-    world_( 0xeaafa35aaa8eafdf ) // FIXME: Using a constant for performance measurements.
+    world_( 0xeaafa35aaa8eafdf ), // FIXME: Using a constant for performance measurements.
+    gui_( window_.get_screen() )
 {
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
 
@@ -25,74 +27,125 @@ GameApplication::GameApplication( SDL_GL_Window &initializer, const int fps ) :
     }
 
     SCOPE_TIMER_END
-
-    initialize_gui();
 }
 
 GameApplication::~GameApplication()
 {
+    SDL_Quit();
 }
 
-void GameApplication::initialize_gui()
+void GameApplication::main_loop()
 {
-    using namespace CEGUI;
+    run_ = true;
 
-    OpenGLRenderer& renderer = OpenGLRenderer::bootstrapSystem();
-    renderer.enableExtraStateSettings( true );
+    // TODO: Pull the high-resolution clock stuff below out into a class, and add
+    //       similar calculations for Windows using QueryPerformanceTimer.
 
-    DefaultResourceProvider* rp =
-        static_cast<DefaultResourceProvider*>( System::getSingleton().getResourceProvider() );
+    timespec
+        resolution,
+        last_time,
+        current_time;
+
+    int clock_result = clock_getres( CLOCK_MONOTONIC_RAW, &resolution );
+
+    if ( clock_result == -1 )
+    {
+        throw std::runtime_error( "Unable to determine clock resolution" );
+    }
+
+    clock_result = clock_gettime( CLOCK_MONOTONIC_RAW, &last_time );
+
+    if ( clock_result == -1 )
+    {
+        throw std::runtime_error( "Unable to read clock" );
+    }
+
+    while ( run_ )
+    {
+        clock_result = clock_gettime( CLOCK_MONOTONIC_RAW, &current_time );
+
+        if ( clock_result == -1 )
+        {
+            throw std::runtime_error( "Unable to read clock" );
+        }
+
+        const double step_time_seconds = 
+            double( current_time.tv_sec - last_time.tv_sec ) +
+            double( current_time.tv_nsec - last_time.tv_nsec ) / 1000000000.0;
+
+        const double seconds_until_next_frame = 1.0f / fps_limit_ - step_time_seconds;
+
+        process_events();
+
+        if ( seconds_until_next_frame <= 0.0 )
+        {
+            last_time = current_time;
+            do_one_step( float( step_time_seconds ) );
+            render();
+        }
+        else SDL_Delay( int( seconds_until_next_frame * 1000.0 ) );
+    }
+}
+
+void GameApplication::process_events()
+{
+    SDL_Event event;
+
+    while( SDL_PollEvent( &event ) ) 
+    {
+        handle_event( event );
+    }
+}
+
+void GameApplication::handle_event( SDL_Event &event )
+{
+    if ( event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE )
+    {
+        toggle_gui_focus();
+        return;
+    }
+
+    if ( gui_focused_ )
+    {
+        gui_.handle_event( event );
+        return;
+    }
+
+    switch ( event.type )
+    {
+        case SDL_KEYDOWN:
+            handle_key_down_event( event.key.keysym.sym, event.key.keysym.mod );
+            break;
+
+        case SDL_KEYUP:
+            handle_key_up_event( event.key.keysym.sym, event.key.keysym.mod );
+            break;
+
+        case SDL_MOUSEMOTION:
+            handle_mouse_motion_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
+            break;
+
+        case SDL_MOUSEBUTTONDOWN:
+            handle_mouse_down_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
+            break;
+
+        case SDL_MOUSEBUTTONUP:
+            handle_mouse_up_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
+            break;
     
-    rp->setResourceGroupDirectory( "schemes", "media/cegui/schemes/" );
-    rp->setResourceGroupDirectory( "imagesets", "media/cegui/imagesets/" );
-    rp->setResourceGroupDirectory( "fonts", "media/cegui/fonts/" );
-    rp->setResourceGroupDirectory( "layouts", "media/cegui/layouts/" );
-    rp->setResourceGroupDirectory( "looknfeels", "media/cegui/looknfeel/" );
-    rp->setResourceGroupDirectory( "schemas", "media/cegui/xml_schemas/" );
-
-    Scheme::setDefaultResourceGroup( "schemes" );
-    Imageset::setDefaultResourceGroup( "imagesets" );
-    Font::setDefaultResourceGroup( "fonts" );
-    WindowManager::setDefaultResourceGroup( "layouts" );
-    WidgetLookManager::setDefaultResourceGroup( "looknfeels" );
-
-    XMLParser* parser = System::getSingleton().getXMLParser();
-    if ( parser->isPropertyPresent( "SchemaDefaultResourceGroup" ) )
-            parser->setProperty( "SchemaDefaultResourceGroup", "schemas" );
-
-    ImagesetManager::getSingleton().create( "Vanilla.imageset" );
-    ImagesetManager::getSingleton().create( "WindowsLook.imageset" );
-    SchemeManager::getSingleton().create( "VanillaSkin.scheme" );
-    FontManager::getSingleton().create( "Vera-12.font" );
-
-    System::getSingleton().setDefaultFont( "Vera-12" );
-    System::getSingleton().setDefaultMouseCursor( "Vanilla-Images", "MouseArrow" );
-
-    WindowManager& wm = WindowManager::getSingleton();
-    Window* root = wm.createWindow( "DefaultWindow", "root" );
-    System::getSingleton().setGUISheet( root );
-
-    Window* engine_stats = wm.loadWindowLayout( "digbuild.layout" );
-    root->addChildWindow( engine_stats );
-
-    MouseCursor::getSingleton().hide();
-
-    Window* fps_text = wm.getWindow( "Root/EngineStats/FPS" );
-    fps_text->setText( "FPS: 42" );
-
-    Window* chunk_text = wm.getWindow( "Root/EngineStats/Chunks" );
-    chunk_text->setText( "Chunks: 42/43" );
-}
-
-void GameApplication::handle_resize_event( const int w, const int h )
-{
-    CEGUI::System::getSingleton().getRenderer()->setDisplaySize( CEGUI::Size( w, h ) );
+        case SDL_VIDEORESIZE:
+            window_.reshape_window( event.resize.w, event.resize.h );
+            gui_.handle_event( event );
+            break;
+    
+        case SDL_QUIT:
+            run_ = false;
+            break;
+    }
 }
 
 void GameApplication::handle_key_down_event( const int key, const int mod )
 {
-    bool handled = true;
-
     switch ( key )
     {
         case SDLK_LSHIFT:
@@ -123,17 +176,7 @@ void GameApplication::handle_key_down_event( const int key, const int mod )
             camera_.move_down( true );
             break;
 
-        case SDLK_SPACE:
-            SDL_ShowCursor( SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE ? SDL_DISABLE : SDL_ENABLE );
-            SDL_WM_GrabInput( SDL_WM_GrabInput( SDL_GRAB_QUERY ) == SDL_GRAB_ON ? SDL_GRAB_OFF : SDL_GRAB_ON );
-            break;
-
-        case SDLK_F1:
-            show_gui_ = !show_gui_;
-            break;
-
         default:
-            handled = false;
             break;
     }
 }
@@ -196,20 +239,59 @@ void GameApplication::handle_mouse_down_event( const int button, const int x, co
     }
 }
 
+void GameApplication::handle_mouse_up_event( const int button, const int x, const int y, const int xrel, const int yrel )
+{
+    switch ( button )
+    {
+        case SDL_BUTTON_LEFT:
+            break;
+        case SDL_BUTTON_RIGHT:
+            break;
+    }
+}
+
+void GameApplication::toggle_fullscreen()
+{
+    SDL_Surface* s = SDL_GetVideoSurface();
+
+    if( !s || ( SDL_WM_ToggleFullScreen( s ) != 1 ) )
+    {
+        LOG( "Unable to toggle fullscreen: " << SDL_GetError() );
+    }
+}
+
+void GameApplication::toggle_gui_focus()
+{
+    SDL_ShowCursor( SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE ? SDL_DISABLE : SDL_ENABLE );
+    SDL_WM_GrabInput( SDL_WM_GrabInput( SDL_GRAB_QUERY ) == SDL_GRAB_ON ? SDL_GRAB_OFF : SDL_GRAB_ON );
+    gui_focused_ = !gui_focused_;
+}
+
 void GameApplication::do_one_step( const float step_time )
 {
     camera_.do_one_step( step_time );
     world_.do_one_step( step_time );
-
-    CEGUI::System::getSingleton().injectTimePulse( step_time );
+    gui_.do_one_step( step_time );
 }
 
 void GameApplication::render()
 {
-    renderer_.render( camera_, world_ );
+    ++fps_frame_count_;
+    const unsigned now = SDL_GetTicks();
 
-    if ( show_gui_ )
+    if ( fps_last_time_ + 1000 < now )
     {
-        CEGUI::System::getSingleton().renderGUI();
+        fps_last_time_ = now;
+        gui_.set_engine_fps( fps_frame_count_ );
+        fps_frame_count_ = 0;
     }
+
+    glClear( GL_DEPTH_BUFFER_BIT );
+    window_.reshape_window(); // FIXME: This makes Agar work.  Patch Agar instead?
+
+    renderer_.render( camera_, world_ );
+    gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size() );
+    gui_.render();
+
+    SDL_GL_SwapBuffers();
 }

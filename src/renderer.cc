@@ -525,7 +525,8 @@ void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f
 // Function definitions for Renderer:
 //////////////////////////////////////////////////////////////////////////////////
 
-Renderer::Renderer()
+Renderer::Renderer() :
+    num_chunks_drawn_( 0 )
 {
     materials_.resize( BLOCK_MATERIAL_SIZE );
     materials_[BLOCK_MATERIAL_GRASS].reset  ( new RendererMaterial( "grass" ) );
@@ -621,10 +622,9 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, c
         }
     }
 
-    // TODO: Just for development.
-    // static unsigned c = 0;
-    // if ( ++c % 60 == 0 )
-    //     std::cout << "Visible chunks: " << visible_chunks.size() << " / " << chunks.size() << std::endl;
+    num_chunks_drawn_ = visible_chunks.size();
+
+    // TODO: Consider using glAttribPush() and glAttribPop().
 
     glEnable( GL_CULL_FACE );
     glEnable( GL_DEPTH_TEST );

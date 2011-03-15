@@ -1,7 +1,6 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
-#include "sdl_gl_interface.h"
 #include "math.h"
 
 struct Camera

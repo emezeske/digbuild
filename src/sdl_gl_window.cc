@@ -1,0 +1,105 @@
+#include <GL/glew.h>
+
+#define NO_SDL_GLEXT
+#include <SDL/SDL_opengl.h>
+
+#include <stdexcept>
+#include <time.h>
+#include <assert.h>
+
+#include "sdl_gl_window.h"
+#include "log.h"
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for SDL_GL_Window:
+//////////////////////////////////////////////////////////////////////////////////
+
+SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uint32 flags, const std::string &title ) :
+    screen_( 0 ),
+    screen_width_( w ), 
+    screen_height_( h ), 
+    screen_bpp_( bpp ),
+    sdl_video_flags_( flags ),
+    title_( title )
+{
+    if( SDL_Init( SDL_INIT_VIDEO ) == -1 )
+    {
+        throw std::runtime_error( std::string( "Error initializing SDL: " ) + SDL_GetError() );
+    }
+
+    // TODO: Check return values here, and verify that they have not changed after the SDL_SetVideoMode() call.
+    SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_DEPTH_SIZE, 24 );
+    SDL_GL_SetAttribute( SDL_GL_DOUBLEBUFFER, 1 );
+
+    // TODO: Antialiasing level should be configurable.
+    SDL_GL_SetAttribute( SDL_GL_MULTISAMPLEBUFFERS, 1 );
+    SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 4 );
+
+    // TODO: Vsync should be configurable.
+    SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, 1 ); 
+
+    screen_ = SDL_SetVideoMode( screen_width_, screen_height_, screen_bpp_, sdl_video_flags_ );
+
+    if ( !screen_ )
+    {
+        throw std::runtime_error( std::string( "Error setting video mode: " ) + SDL_GetError() );
+    }
+
+    glEnable( GL_MULTISAMPLE );
+
+    SDL_WM_SetCaption( title_.c_str(), NULL );
+    SDL_FillRect( screen_, NULL, SDL_MapRGBA( screen_->format, 0, 0, 0, 0 ) );
+
+    SDL_ShowCursor( SDL_DISABLE );
+    SDL_WM_GrabInput( SDL_GRAB_ON );
+
+    init_GL();
+    reshape_window();
+}
+
+void SDL_GL_Window::init_GL()
+{
+    GLenum glew_result = glewInit();
+
+    if ( glew_result != GLEW_OK )
+    {
+        throw std::runtime_error( "Error initializing GLEW: " +
+            std::string( reinterpret_cast<const char*>( glewGetErrorString( glew_result ) ) ) );
+    }
+
+    if ( !glewIsSupported( "GL_VERSION_2_0" ) )
+    {
+        throw std::runtime_error( "OpenGL 2.0 not supported" );
+    }
+
+    glShadeModel( GL_SMOOTH );
+    glClearDepth( 1.0f );
+    glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );
+    glHint( GL_GENERATE_MIPMAP_HINT, GL_NICEST );
+    glHint( GL_TEXTURE_COMPRESSION_HINT, GL_NICEST );
+    glHint( GL_FOG_HINT, GL_NICEST );
+}
+
+void SDL_GL_Window::reshape_window( const int w, const int h )
+{
+    screen_width_ = w;
+    screen_height_ = h;
+
+    reshape_window();
+}
+
+void SDL_GL_Window::reshape_window()
+{
+    glViewport( 0, 0,( GLsizei )( screen_width_ ), ( GLsizei )( screen_height_ ) );
+
+    glMatrixMode( GL_PROJECTION );
+    glLoadIdentity();
+    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 1.0f, 500.0f );
+
+    glMatrixMode( GL_MODELVIEW );
+    glLoadIdentity();
+}

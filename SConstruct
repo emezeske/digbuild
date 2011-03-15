@@ -5,18 +5,27 @@ import subprocess
 HEADERS = Glob( 'src/*.h' )
 SOURCES = Glob( 'src/*.cc' )
 BINARY = 'digbuild'
-LIBRARY_DEPENDENCIES = [ 'sdl', 'SDL_image', 'gl', 'glew', 'glu', 'CEGUI-OPENGL' ]
+LIBRARY_DEPENDENCIES = [ 'agar', 'sdl', 'SDL_image', 'gl', 'glew', 'glu' ]
 HEADER_DEPENDENCIES = [ 'boost/shared_ptr.hpp', 'gmtl/gmtl.h' ]
 INCLUDE_DIRECTORY_NAMES = [ 'boost_include_dir', 'gmtl_include_dir' ]
 
 def CheckPackageConfig( context, library ):
     context.Message( 'Checking for library %s...' % library )
-    if subprocess.call( [ 'pkg-config', '--exists', library ] ) == 0:
+    command = None
+
+    with open( '/dev/null', 'w' ) as null:
+        if subprocess.call( [ 'pkg-config', '--exists', library ], stdout = null ) == 0:
+            command = [ 'pkg-config', library, '--cflags', '--libs' ]
+        elif subprocess.call( [ 'which', '%s-config' % library ], stdout = null ) == 0:
+            command = [ '%s-config' % library, '--cflags', '--libs' ]
+
+    if command is not None:
         context.Result( 'ok' )
-        return True
+        flags = subprocess.Popen( command, stdout = subprocess.PIPE ).communicate()[0]
+        return True, flags
     else:
         context.Result( 'failed' )
-        return False
+        return False, ''
 
 AddOption(
     '--boost-include-dir',
@@ -90,14 +99,14 @@ for header in HEADER_DEPENDENCIES:
         Exit( 1 )
 
 for library in LIBRARY_DEPENDENCIES:
-    if not conf.CheckPackageConfig( library ):
+    success, flags = conf.CheckPackageConfig( library )
+    if success:
+        env.MergeFlags( flags )
+    else:
         print '*** Required library %s could not be found.  Aborting.' % library
         Exit( 1 )
 
 env = conf.Finish()
-
-for library in LIBRARY_DEPENDENCIES:
-    env.MergeFlags( [ '!pkg-config %s --cflags --libs' % library ] )
 
 for path in env['CPPPATH']:
     env.Append( CCFLAGS = [ '-isystem%s' % path ] ) 

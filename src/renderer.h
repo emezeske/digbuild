@@ -155,6 +155,8 @@ struct Renderer
 
     void render( const Camera& camera, const World& world );
 
+    unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
+
 protected:
 
     void render_chunks( const Vector3f& camera_position, const Sky& sky, const ChunkMap& chunks );
@@ -167,6 +169,8 @@ protected:
     SkyRenderer sky_renderer_;
 
     RendererMaterialV materials_;
+
+    unsigned num_chunks_drawn_;
 };
 
 #endif // RENDERER_H
