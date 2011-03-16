@@ -41,7 +41,7 @@ struct BlockIterator
 
 struct Chunk : public boost::noncopyable
 {
-    enum { CHUNK_SIZE = 32 };
+    enum { CHUNK_SIZE = 16 };
 
     Chunk( const Vector3i& position );
 

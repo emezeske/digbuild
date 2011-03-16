@@ -81,23 +81,114 @@ Texture::~Texture()
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for RendererMaterial:
+//////////////////////////////////////////////////////////////////////////////////
+
+RendererMaterial::RendererMaterial( const std::string& name, ShaderSP shader ) :
+    texture_( RendererMaterialManager::TEXTURE_DIRECTORY + "/" + name + ".png" ),
+    specular_map_( RendererMaterialManager::TEXTURE_DIRECTORY + "/" + name + ".specular.png" ),
+    bump_map_( RendererMaterialManager::TEXTURE_DIRECTORY + "/" + name + ".bump.png" ),
+    shader_( shader )
+{
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Static constant definitions for RendererMaterial:
 //////////////////////////////////////////////////////////////////////////////////
 
 const std::string
-    RendererMaterial::TEXTURE_DIRECTORY = "./media/materials/textures",
-    RendererMaterial::SHADER_DIRECTORY  = "./media/materials/shaders";
+    RendererMaterialManager::TEXTURE_DIRECTORY = "./media/materials/textures",
+    RendererMaterialManager::SHADER_DIRECTORY  = "./media/materials/shaders";
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for RendererMaterial:
+// Function definitions for RendererMaterialManager:
 //////////////////////////////////////////////////////////////////////////////////
 
-// TODO: Only load textures/shaders once, and keep referenes to them.
-
-RendererMaterial::RendererMaterial( const std::string& name ) :
-    texture_( TEXTURE_DIRECTORY + "/" + name + ".png" ),
-    specular_map_( TEXTURE_DIRECTORY + "/" + name + ".specular.png" ),
-    bump_map_( TEXTURE_DIRECTORY + "/" + name + ".bump.png" ),
-    shader_( SHADER_DIRECTORY + "/default.vertex.glsl", SHADER_DIRECTORY + "/default.fragment.glsl" )
+RendererMaterialManager::RendererMaterialManager() :
+    current_material_( BLOCK_MATERIAL_AIR )
 {
+    ShaderSP default_block_shader(
+        new Shader( SHADER_DIRECTORY + "/default.vertex.glsl", SHADER_DIRECTORY + "/default.fragment.glsl" )
+    );
+
+    materials_.resize( BLOCK_MATERIAL_SIZE );
+    materials_[BLOCK_MATERIAL_GRASS].reset     ( new RendererMaterial( "grass",      default_block_shader ) );
+    materials_[BLOCK_MATERIAL_DIRT].reset      ( new RendererMaterial( "dirt",       default_block_shader ) );
+    materials_[BLOCK_MATERIAL_CLAY].reset      ( new RendererMaterial( "clay",       default_block_shader ) );
+    materials_[BLOCK_MATERIAL_STONE].reset     ( new RendererMaterial( "stone",      default_block_shader ) );
+    materials_[BLOCK_MATERIAL_BEDROCK].reset   ( new RendererMaterial( "bedrock",    default_block_shader ) );
+    materials_[BLOCK_MATERIAL_TREE_TRUNK].reset( new RendererMaterial( "tree-trunk", default_block_shader ) );
+    materials_[BLOCK_MATERIAL_TREE_LEAF].reset ( new RendererMaterial( "tree-leaf",  default_block_shader ) );
+    materials_[BLOCK_MATERIAL_GLASS].reset     ( new RendererMaterial( "glass",      default_block_shader ) );
+    materials_[BLOCK_MATERIAL_MAGMA].reset     ( new RendererMaterial( "magma",      default_block_shader ) );
+}
+
+void RendererMaterialManager::configure_block_material( const Vector3f& camera_position, const Sky& sky, const BlockMaterial material )
+{
+    assert( material >= 0 && material < static_cast<int>( materials_.size() ) && material != BLOCK_MATERIAL_AIR );
+
+    if ( material == current_material_ )
+    {
+        return;
+    }
+
+    current_material_ = material;
+    const RendererMaterial& renderer_material = *materials_[material];
+
+    glEnable( GL_TEXTURE_2D );
+
+    glActiveTexture( GL_TEXTURE0 );
+    glBindTexture( GL_TEXTURE_2D, renderer_material.get_texture().get_texture_id() );
+
+    glActiveTexture( GL_TEXTURE1 );
+    glBindTexture( GL_TEXTURE_2D, renderer_material.get_specular_map().get_texture_id() );
+
+    glActiveTexture( GL_TEXTURE2 );
+    glBindTexture( GL_TEXTURE_2D, renderer_material.get_bump_map().get_texture_id() );
+
+    if ( renderer_material.get_shader().get() == current_shader_.get() )
+    {
+        return;
+    }
+
+    current_shader_ = renderer_material.get_shader();
+    current_shader_->enable();
+
+    const Vector3f
+        sun_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_sun_angle()[0], sky.get_sun_angle()[1] ) ),
+        moon_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_moon_angle()[0], sky.get_moon_angle()[1] ) );
+
+    current_shader_->set_uniform_vec3f( "camera_position", camera_position );
+
+    current_shader_->set_uniform_vec3f( "sun_direction", sun_direction );
+    current_shader_->set_uniform_vec3f( "moon_direction", moon_direction );
+
+    current_shader_->set_uniform_vec3f( "sun_light_color", sky.get_sun_light_color() );
+    current_shader_->set_uniform_vec3f( "moon_light_color", sky.get_moon_light_color() );
+
+    current_shader_->set_uniform_int( "material_texture", 0 );
+    current_shader_->set_uniform_int( "material_specular_map", 1 );
+    current_shader_->set_uniform_int( "material_bump_map", 2 );
+}
+
+void RendererMaterialManager::deconfigure_block_material()
+{
+    glActiveTexture( GL_TEXTURE2 );
+    glBindTexture( GL_TEXTURE_2D, 0 );
+
+    glActiveTexture( GL_TEXTURE1 );
+    glBindTexture( GL_TEXTURE_2D, 0 );
+
+    glActiveTexture( GL_TEXTURE0 );
+    glBindTexture( GL_TEXTURE_2D, 0 );
+
+    glDisable( GL_TEXTURE_2D );
+
+    if ( current_shader_.get() )
+    {
+        current_shader_->disable();
+        current_shader_.reset();
+    }
+
+    current_material_ = BLOCK_MATERIAL_AIR;
 }

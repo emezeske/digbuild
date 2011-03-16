@@ -28,6 +28,15 @@ gmtl::VecBase<ToDataType, Size> vector_cast( const gmtl::VecBase<FromDataType, S
     return to;
 }
 
+inline Vector3f spherical_to_cartesian( const Vector3f& spherical )
+{
+    return Vector3f(
+        spherical[0] * gmtl::Math::sin( spherical[1] ) * gmtl::Math::sin( spherical[2] ),
+        spherical[0] * gmtl::Math::cos( spherical[1] ),
+        spherical[0] * gmtl::Math::sin( spherical[1] ) * gmtl::Math::cos( spherical[2] )
+    );
+}
+
 template <typename T>
 struct Vector2LexicographicLess : std::binary_function <T, T, bool>
 {

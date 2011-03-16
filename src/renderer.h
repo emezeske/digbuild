@@ -3,6 +3,8 @@
 
 #include <GL/glew.h>
 
+#include <set>
+
 #include <boost/utility.hpp>
 
 #include "camera.h"
@@ -66,41 +68,59 @@ struct ChunkVertexBuffer : public VertexBuffer
 
 typedef boost::shared_ptr<ChunkVertexBuffer> ChunkVertexBufferSP;
 typedef std::map<BlockMaterial, ChunkVertexBufferSP> ChunkVertexBufferMap;
+typedef std::vector<BlockMaterial> BlockMaterialV;
 typedef std::vector<Vector3f> Vector3fV;
 
 struct SortableChunkVertexBuffer : public ChunkVertexBuffer
 {
-    SortableChunkVertexBuffer( const BlockVertexV& vertices );
+    SortableChunkVertexBuffer( const BlockMaterialV& materials, const BlockVertexV& vertices );
 
-    void render( const Vector3f& camera_position );
+    void render( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager );
 
 private:
 
     static const unsigned VERTICES_PER_FACE = 4;
 
+    // TODO: While using a std::set is convenient here, it is very slow.
+    typedef std::pair<Scalar, GLuint> DistanceIndexPair;
+    typedef std::set<DistanceIndexPair> DistanceIndexSet;
+
+    void render_sorted(
+        const DistanceIndexSet distance_indices,
+        const Vector3f& camera_position,
+        const Sky& sky,
+        const BlockMaterial material,
+        RendererMaterialManager& material_manager
+    );
+
+    BlockMaterialV materials_;
+
     Vector3fV centroids_;
 };
 
 typedef boost::shared_ptr<SortableChunkVertexBuffer> SortableChunkVertexBufferSP;
-typedef std::map<BlockMaterial, SortableChunkVertexBufferSP> SortableChunkVertexBufferMap;
+typedef std::set<BlockMaterial> BlockMaterialSet;
 
 struct ChunkRenderer
 {
     ChunkRenderer( const Vector3f& centroid = Vector3f() );
 
-    void render_opaque( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials );
-    void render_translucent( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials );
+    void render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager );
+    void render_translucent( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager );
     void rebuild( const Chunk& chunk );
+
     const Vector3f& get_centroid() const { return centroid_; }
+    const BlockMaterialSet& get_opaque_materials() const { return opaque_materials_; }
 
 protected:
 
-    void configure_material( const Vector3f& camera_position, const Sky& sky, const RendererMaterial& renderer_material );
-    void deconfigure_material( const RendererMaterial& renderer_material );
     void get_vertices_for_face( const BlockFace& face, BlockVertexV& vertices ) const;
 
+    BlockMaterialSet opaque_materials_;
+
     ChunkVertexBufferMap opaque_vbos_;
-    SortableChunkVertexBufferMap translucent_vbos_;
+
+    SortableChunkVertexBufferSP translucent_vbo_;
 
     Vector3f centroid_;
 };
@@ -163,12 +183,12 @@ protected:
     void render_sky( const Sky& sky );
     gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 
+    RendererMaterialManager material_manager_;
+
     typedef std::map<Vector3i, ChunkRenderer, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
     ChunkRendererMap chunk_renderers_;
 
     SkyRenderer sky_renderer_;
-
-    RendererMaterialV materials_;
 
     unsigned num_chunks_drawn_;
 };

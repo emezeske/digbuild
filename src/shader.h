@@ -4,6 +4,8 @@
 #include <GL/glew.h>
 #include <string>
 
+#include <boost/shared_ptr.hpp>
+
 #include "math.h"
 
 struct Shader
@@ -31,6 +33,8 @@ protected:
     void check_shader_status( const GLuint shader, const GLenum status_type ) const;
     int get_uniform_location( const std::string& name ) const;
 };
+
+typedef boost::shared_ptr<Shader> ShaderSP;
 
 #endif // SHADER_H
 

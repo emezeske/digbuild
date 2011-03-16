@@ -2,8 +2,6 @@
 
 #include <GL/glew.h>
 
-#include <set>
-
 #include <boost/numeric/conversion/cast.hpp>
 
 #include "renderer.h"
@@ -24,15 +22,6 @@ struct SimplePositionVertex
     GLfloat x_, y_, z_;
 
 } __attribute__( ( packed ) );
-
-Vector3f spherical_to_cartesian( const Vector3f& spherical )
-{
-    return Vector3f(
-        spherical[0] * gmtl::Math::sin( spherical[1] ) * gmtl::Math::sin( spherical[2] ),
-        spherical[0] * gmtl::Math::cos( spherical[1] ),
-        spherical[0] * gmtl::Math::sin( spherical[1] ) * gmtl::Math::cos( spherical[2] )
-    );
-}
 
 } // anonymous namespace
 
@@ -128,9 +117,13 @@ void ChunkVertexBuffer::render()
 // Function definitions for SortableChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
 
-SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockVertexV& vertices ) :
-    ChunkVertexBuffer( vertices )
+SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockMaterialV& materials, const BlockVertexV& vertices ) :
+    ChunkVertexBuffer( vertices ),
+    materials_( materials )
 {
+    assert( materials.size() > 0 );
+    assert( materials.size() == vertices.size() / VERTICES_PER_FACE );
+
     for ( size_t i = 0; i < vertices.size(); i += VERTICES_PER_FACE )
     {
         Vector3f centroid;
@@ -142,31 +135,53 @@ SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockVertexV& vertic
         }
 
         centroid /= VERTICES_PER_FACE;
-
         centroids_.push_back( centroid );
     }
 }
 
-void SortableChunkVertexBuffer::render( const Vector3f& camera_position )
+void SortableChunkVertexBuffer::render( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager )
 {
-    typedef std::pair<Scalar, GLuint> DistanceIndexPair;
-    typedef std::set<DistanceIndexPair> DistanceIndexSet;
-
     DistanceIndexSet distance_indices;
+    BlockMaterial current_material_ = materials_.front();
     GLuint index = 0;
 
-    for ( Vector3fV::const_iterator centroid_it = centroids_.begin();
-          centroid_it != centroids_.end();
-          ++centroid_it )
+    // Since these faces are translucent, they must be rendered strictly in back to front order.
+    // As an optimization, if adjacent depth-sorted faces use the same material, the indices of
+    // their vertices are combined into a single glDrawElements() call.
+
+    for ( unsigned i = 0; i < materials_.size(); ++i )
     {
-        const Vector3f camera_to_centroid = camera_position - *centroid_it;
+        const BlockMaterial material = materials_[i];
+
+        if ( material != current_material_ )
+        {
+            render_sorted( distance_indices, camera_position, sky, material, material_manager );
+            distance_indices.clear();
+            current_material_ = material;
+        }
+
+        const Vector3f camera_to_centroid = camera_position - centroids_[i];
         const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
-        distance_indices.insert( std::make_pair( distance_squared, index ) );
-        index += VERTICES_PER_FACE;
+        distance_indices.insert( std::make_pair( distance_squared, i * VERTICES_PER_FACE ) );
     }
 
+    if ( !distance_indices.empty() )
+    {
+        render_sorted( distance_indices, camera_position, sky, current_material_, material_manager );
+    }
+
+    unbind();
+}
+
+void SortableChunkVertexBuffer::render_sorted(
+    const DistanceIndexSet distance_indices,
+    const Vector3f& camera_position,
+    const Sky& sky,
+    const BlockMaterial material,
+    RendererMaterialManager& material_manager
+)
+{
     std::vector<GLuint> indices;
-    indices.reserve( num_elements_ );
 
     for ( DistanceIndexSet::const_reverse_iterator index_it = distance_indices.rbegin();
           index_it != distance_indices.rend();
@@ -183,8 +198,8 @@ void SortableChunkVertexBuffer::render( const Vector3f& camera_position )
 
     bind();
     glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
-    unbind();
-
+    num_elements_ = indices.size();
+    material_manager.configure_block_material( camera_position, sky, material );
     ChunkVertexBuffer::render();
 }
 
@@ -197,37 +212,22 @@ ChunkRenderer::ChunkRenderer( const Vector3f& centroid ) :
 {
 }
 
-void ChunkRenderer::render_opaque( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials )
+void ChunkRenderer::render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager )
 {
-    for ( ChunkVertexBufferMap::iterator it = opaque_vbos_.begin(); it != opaque_vbos_.end(); ++it )
+    ChunkVertexBufferMap::iterator vbo_it = opaque_vbos_.find( material );
+    
+    if ( vbo_it != opaque_vbos_.end() )
     {
-        const BlockMaterial material = it->first;
-        ChunkVertexBuffer& vbo = *it->second;
-
-        assert( material >= 0 && material < static_cast<int>( materials.size() ) && material != BLOCK_MATERIAL_AIR );
-        const RendererMaterial& renderer_material = *materials[material];
-
-        configure_material( camera_position, sky, renderer_material );
+        ChunkVertexBuffer& vbo = *vbo_it->second;
         vbo.render();
-        deconfigure_material( renderer_material );
     }
 }
 
-void ChunkRenderer::render_translucent( const Vector3f& camera_position, const Sky& sky, const RendererMaterialV& materials )
+void ChunkRenderer::render_translucent( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager )
 {
-    // TODO: Factor out common stuff
-
-    for ( SortableChunkVertexBufferMap::iterator it = translucent_vbos_.begin(); it != translucent_vbos_.end(); ++it )
+    if ( translucent_vbo_ )
     {
-        const BlockMaterial material = it->first;
-        SortableChunkVertexBuffer& vbo = *it->second;
-
-        assert( material >= 0 && material < static_cast<int>( materials.size() ) && material != BLOCK_MATERIAL_AIR );
-        const RendererMaterial& renderer_material = *materials[material];
-
-        configure_material( camera_position, sky, renderer_material );
-        vbo.render( camera_position );
-        deconfigure_material( renderer_material );
+        translucent_vbo_->render( camera_position, sky, material_manager );
     }
 }
 
@@ -236,84 +236,40 @@ void ChunkRenderer::rebuild( const Chunk& chunk )
     const BlockFaceV& faces = chunk.get_external_faces();
 
     typedef std::map<BlockMaterial, BlockVertexV> MaterialVertexMap;
+    MaterialVertexMap opaque_vertices;
 
-    MaterialVertexMap material_vertices;
+    BlockMaterialV translucent_materials;
+    BlockVertexV translucent_vertices;
 
     for ( BlockFaceV::const_iterator face_it = faces.begin(); face_it != faces.end(); ++face_it )
     {
-        get_vertices_for_face( *face_it, material_vertices[face_it->material_] );
+        const BlockMaterial material = face_it->material_;
+
+        if ( get_block_material_attributes( material ).translucent_ )
+        {
+            translucent_materials.push_back( material );
+            get_vertices_for_face( *face_it, translucent_vertices );
+        }
+        else get_vertices_for_face( *face_it, opaque_vertices[material] );
     }
 
     opaque_vbos_.clear();
-    translucent_vbos_.clear();
 
-    for ( MaterialVertexMap::const_iterator it = material_vertices.begin(); it != material_vertices.end(); ++it )
+    for ( MaterialVertexMap::const_iterator it = opaque_vertices.begin(); it != opaque_vertices.end(); ++it )
     {
         const BlockMaterial material = it->first;
         const BlockVertexV& vertices = it->second;
 
-        if ( get_block_material_attributes( material ).translucent_ )
-        {
-            SortableChunkVertexBufferSP vbo( new SortableChunkVertexBuffer( vertices ) );
-            translucent_vbos_[material] = vbo;
-        }
-        else
-        {
-            ChunkVertexBufferSP vbo( new ChunkVertexBuffer( vertices ) );
-            opaque_vbos_[material] = vbo;
-        }
+        ChunkVertexBufferSP vbo( new ChunkVertexBuffer( vertices ) );
+        opaque_vbos_[material] = vbo;
+        opaque_materials_.insert( material );
     }
-}
 
-void ChunkRenderer::configure_material( const Vector3f& camera_position, const Sky& sky, const RendererMaterial& renderer_material )
-{
-    renderer_material.shader().enable();
-
-    const Vector3f
-        sun_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_sun_angle()[0], sky.get_sun_angle()[1] ) ),
-        moon_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_moon_angle()[0], sky.get_moon_angle()[1] ) );
-
-    renderer_material.shader().set_uniform_vec3f( "camera_position", camera_position );
-
-    renderer_material.shader().set_uniform_vec3f( "sun_direction", sun_direction );
-    renderer_material.shader().set_uniform_vec3f( "moon_direction", moon_direction );
-
-    renderer_material.shader().set_uniform_vec3f( "sun_light_color", sky.get_sun_light_color() );
-    renderer_material.shader().set_uniform_vec3f( "moon_light_color", sky.get_moon_light_color() );
-
-    glEnable( GL_TEXTURE_2D );
-
-    glActiveTexture( GL_TEXTURE0 );
-    glClientActiveTexture( GL_TEXTURE0 );
-    glBindTexture( GL_TEXTURE_2D, renderer_material.texture().texture_id() );
-    renderer_material.shader().set_uniform_int( "material_texture", 0 );
-
-    glActiveTexture( GL_TEXTURE1 );
-    glClientActiveTexture( GL_TEXTURE1 );
-    glBindTexture( GL_TEXTURE_2D, renderer_material.specular_map().texture_id() );
-    renderer_material.shader().set_uniform_int( "material_specular_map", 1 );
-
-    glActiveTexture( GL_TEXTURE2 );
-    glClientActiveTexture( GL_TEXTURE2 );
-    glBindTexture( GL_TEXTURE_2D, renderer_material.bump_map().texture_id() );
-    renderer_material.shader().set_uniform_int( "material_bump_map", 2 );
-}
-
-void ChunkRenderer::deconfigure_material( const RendererMaterial& renderer_material )
-{
-    glBindTexture( GL_TEXTURE_2D, 0 );
-
-    glActiveTexture( GL_TEXTURE1 );
-    glClientActiveTexture( GL_TEXTURE1 );
-    glBindTexture( GL_TEXTURE_2D, 0 );
-
-    glActiveTexture( GL_TEXTURE0 );
-    glClientActiveTexture( GL_TEXTURE0 );
-    glBindTexture( GL_TEXTURE_2D, 0 );
-
-    glDisable( GL_TEXTURE_2D );
-
-    renderer_material.shader().disable();
+    if ( !translucent_materials.empty() )
+    {
+        translucent_vbo_.reset( new SortableChunkVertexBuffer( translucent_materials, translucent_vertices ) );
+    }
+    else translucent_vbo_.reset();
 }
 
 void ChunkRenderer::get_vertices_for_face( const BlockFace& face, BlockVertexV& vertices ) const
@@ -453,10 +409,10 @@ void StarVertexBuffer::render()
 //////////////////////////////////////////////////////////////////////////////////
 
 SkyRenderer::SkyRenderer() :
-    sun_texture_( RendererMaterial::TEXTURE_DIRECTORY + "/sun.png" ),
-    moon_texture_( RendererMaterial::TEXTURE_DIRECTORY + "/moon.png" ),
-    skydome_shader_( RendererMaterial::SHADER_DIRECTORY + "/skydome.vertex.glsl",
-                     RendererMaterial::SHADER_DIRECTORY + "/skydome.fragment.glsl" )
+    sun_texture_( RendererMaterialManager::TEXTURE_DIRECTORY + "/sun.png" ),
+    moon_texture_( RendererMaterialManager::TEXTURE_DIRECTORY + "/moon.png" ),
+    skydome_shader_( RendererMaterialManager::SHADER_DIRECTORY + "/skydome.vertex.glsl",
+                     RendererMaterialManager::SHADER_DIRECTORY + "/skydome.fragment.glsl" )
 {
 }
 
@@ -473,10 +429,11 @@ void SkyRenderer::render( const Sky& sky )
     glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
     glEnable( GL_TEXTURE_2D );
 
-    glPushMatrix();
-        rotate_sky( sky.get_moon_angle() );
-        if ( sky.get_star_intensity() > gmtl::GMTL_EPSILON )
-        {
+    if ( sky.get_star_intensity() > gmtl::GMTL_EPSILON )
+    {
+        glPushMatrix();
+            rotate_sky( sky.get_moon_angle() );
+
             if ( !star_vbo_ )
             {
                 star_vbo_.reset( new StarVertexBuffer( sky.get_stars() ) );
@@ -484,13 +441,17 @@ void SkyRenderer::render( const Sky& sky )
 
             glColor4f( 1.0f, 1.0f, 1.0f, sky.get_star_intensity() );
             star_vbo_->render();
-        }
-        render_celestial_body( moon_texture_.texture_id(), sky.get_moon_color() );
-    glPopMatrix();
+        glPopMatrix();
+    }
 
     glPushMatrix();
         rotate_sky( sky.get_sun_angle() );
-        render_celestial_body( sun_texture_.texture_id(), sky.get_sun_color() );
+        render_celestial_body( sun_texture_.get_texture_id(), sky.get_sun_color() );
+    glPopMatrix();
+
+    glPushMatrix();
+        rotate_sky( sky.get_moon_angle() );
+        render_celestial_body( moon_texture_.get_texture_id(), sky.get_moon_color() );
     glPopMatrix();
 
     glDisable( GL_BLEND );
@@ -528,16 +489,6 @@ void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f
 Renderer::Renderer() :
     num_chunks_drawn_( 0 )
 {
-    materials_.resize( BLOCK_MATERIAL_SIZE );
-    materials_[BLOCK_MATERIAL_GRASS].reset  ( new RendererMaterial( "grass" ) );
-    materials_[BLOCK_MATERIAL_DIRT].reset   ( new RendererMaterial( "dirt" ) );
-    materials_[BLOCK_MATERIAL_CLAY].reset   ( new RendererMaterial( "clay" ) );
-    materials_[BLOCK_MATERIAL_STONE].reset  ( new RendererMaterial( "stone" ) );
-    materials_[BLOCK_MATERIAL_BEDROCK].reset( new RendererMaterial( "bedrock" ) );
-    materials_[BLOCK_MATERIAL_TREE_TRUNK].reset( new RendererMaterial( "tree-trunk" ) );
-    materials_[BLOCK_MATERIAL_TREE_LEAF].reset( new RendererMaterial( "tree-leaf" ) );
-    materials_[BLOCK_MATERIAL_GLASS].reset  ( new RendererMaterial( "glass" ) );
-    materials_[BLOCK_MATERIAL_MAGMA].reset  ( new RendererMaterial( "magma" ) );
 }
 
 void Renderer::note_chunk_changes( const Chunk& chunk )
@@ -576,28 +527,23 @@ void Renderer::render_sky( const Sky& sky )
 
 void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, const ChunkMap& chunks )
 {
+    // TODO: Decompose this function.
+
     // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
-
-    // TODO: Look into glMultiDrawElements or display lists to reduce the number of OpenGL library calls.
-
-    // const GLfloat fog_color[] = { 0.81f, 0.89f, 0.89f, 1.0f };
-    // glEnable( GL_FOG );
-    // glFogi( GL_FOG_MODE, GL_LINEAR );
-    // glFogfv( GL_FOG_COLOR, fog_color );
-    // glFogf( GL_FOG_DENSITY, 1.0f );
-    // glHint( GL_FOG_HINT, GL_NICEST );
-    // glFogf( GL_FOG_START, 0.0f );
-    // glFogf( GL_FOG_END, 1000.0f );
-    // glFogi( GL_FOG_COORD_SRC, GL_FRAGMENT_DEPTH );
 
     gmtl::Frustumf view_frustum(
         get_opengl_matrix( GL_MODELVIEW_MATRIX ),
         get_opengl_matrix( GL_PROJECTION_MATRIX )
     );
 
+    // TODO: While using a std::set is convenient here, it is very slow.
     typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
     typedef std::set<DistanceChunkPair> ChunkRendererSet;
     ChunkRendererSet visible_chunks;
+
+    // TODO: While using a std::set is convenient here, it is very slow.
+    typedef std::map<BlockMaterial, ChunkRendererSet> MaterialRendererMap;
+    MaterialRendererMap material_chunks;
 
     for ( ChunkMap::const_iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
     {
@@ -612,24 +558,42 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, c
 
             if ( chunk_renderer_it != chunk_renderers_.end() )
             {
-                const Vector3f camera_to_centroid =
-                    camera_position - chunk_renderer_it->second.get_centroid();
-                const Scalar distance_squared =
-                    gmtl::dot( camera_to_centroid, camera_to_centroid );
+                ChunkRenderer& chunk_renderer = chunk_renderer_it->second;
 
-                visible_chunks.insert( std::make_pair( distance_squared, &chunk_renderer_it->second ) );
+                const Vector3f camera_to_centroid = camera_position - chunk_renderer.get_centroid();
+                const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
+                DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
+                visible_chunks.insert( distance_chunk );
+
+                const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
+
+                for ( BlockMaterialSet::iterator material_it = materials.begin();
+                      material_it != materials.end();
+                      ++material_it )
+                {
+                    material_chunks[*material_it].insert( distance_chunk );
+                }
             }
         }
     }
 
-    num_chunks_drawn_ = visible_chunks.size();
-
-    // TODO: Consider using glAttribPush() and glAttribPop().
+    // TODO: Add fog so that distant objects fade out nicely.
+    //
+    // const GLfloat fog_color[] = { 0.81f, 0.89f, 0.89f, 1.0f };
+    // glEnable( GL_FOG );
+    // glFogi( GL_FOG_MODE, GL_LINEAR );
+    // glFogfv( GL_FOG_COLOR, fog_color );
+    // glFogf( GL_FOG_DENSITY, 1.0f );
+    // glHint( GL_FOG_HINT, GL_NICEST );
+    // glFogf( GL_FOG_START, 0.0f );
+    // glFogf( GL_FOG_END, 1000.0f );
+    // glFogi( GL_FOG_COORD_SRC, GL_FRAGMENT_DEPTH );
 
     glEnable( GL_CULL_FACE );
     glEnable( GL_DEPTH_TEST );
     glDepthFunc( GL_LEQUAL );
 
+    // TODO: Fix comment
     // Draw the opaque parts of the Chunks from nearest to farthest.  This will result in many
     // of the farthest chunks being fully occluded, and thus their fragments will be rejected
     // without running any expensive fragment shaders.
@@ -639,24 +603,41 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, c
     // TODO: Group chunks with the same material attributes together, to avoid
     //       the overhead of switching texture units/shaders?
 
-    for ( ChunkRendererSet::iterator it = visible_chunks.begin(); it != visible_chunks.end(); ++it )
+    for ( MaterialRendererMap::iterator material_renderer_it = material_chunks.begin();
+          material_renderer_it != material_chunks.end();
+          ++material_renderer_it )
     {
-        it->second->render_opaque( camera_position, sky, materials_ );
+        const BlockMaterial material = material_renderer_it->first;
+        const ChunkRendererSet chunk_renderers = material_renderer_it->second;
+
+        material_manager_.configure_block_material( camera_position, sky, material );
+
+        for ( ChunkRendererSet::iterator chunk_renderer_it = chunk_renderers.begin();
+              chunk_renderer_it != chunk_renderers.end();
+              ++chunk_renderer_it )
+        {
+            chunk_renderer_it->second->render_opaque( material, material_manager_ );
+        }
     }
 
     glDisable( GL_CULL_FACE );
     glEnable( GL_BLEND );
     glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 
-    // Now draw the translucent parts of the Chunks from farthest to nearest.
+    // Now draw the translucent parts of the Chunks from farthest to nearest.  Since they have
+    // to be rendered strictly in back to front order, we can't perform material grouping on them
+    // like with the opaque materials.
 
     for ( ChunkRendererSet::reverse_iterator it = visible_chunks.rbegin(); it != visible_chunks.rend(); ++it )
     {
-        it->second->render_translucent( camera_position, sky, materials_ );
+        it->second->render_translucent( camera_position, sky, material_manager_ );
     }
 
     glDisable( GL_DEPTH_TEST );
     glDisable( GL_BLEND );
+
+    num_chunks_drawn_ = visible_chunks.size();
+    material_manager_.deconfigure_block_material();
 }
 
 gmtl::Matrix44f Renderer::get_opengl_matrix( const GLenum matrix )

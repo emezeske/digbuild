@@ -213,7 +213,7 @@ void WorldGenerator::populate_trees(
         MAX_TREE_RADIUS = 5,
         MIN_TREE_HEIGHT = 8,
         MAX_TREE_HEIGHT = 24,
-        TREES_PER_CHUNK = 4;
+        TREES_PER_CHUNK = 1;
 
     boost::rand48 tree_generator( get_seed_for_coordinates( world_seed_, column_position ) );
 
