@@ -77,6 +77,20 @@ inline CardinalRelation cardinal_relation_tangent( const CardinalRelation relati
     }
 }
 
+inline Chunk* get_bottom_chunk_in_column( Chunk* chunk )
+{
+    const Vector3i below = cardinal_relation_vector( CARDINAL_RELATION_BELOW );
+    Chunk* bottom = 0;
+
+    while ( chunk )
+    {
+        bottom = chunk;
+        chunk = chunk->get_neighbor( below );
+    }
+
+    return bottom;
+}
+
 typedef std::vector<Block*> BlockV;
 typedef std::pair<BlockIterator, Vector4i> FloodFillBlock;
 typedef std::deque<FloodFillBlock> FloodFillQueue;
@@ -205,6 +219,14 @@ void Chunk::update_geometry()
     external_faces_.clear();
     collision_boxes_.clear();
 
+    Chunk* column = get_bottom_chunk_in_column( this );
+    Chunk* neighbor_columns[NUM_CARDINAL_RELATIONS];
+    FOR_EACH_CARDINAL_RELATION( relation )
+    {
+        neighbor_columns[relation] = 
+            get_bottom_chunk_in_column( column->get_neighbor( cardinal_relation_vector( relation ) ) );
+    }
+
     FOREACH_BLOCK( x, y, z )
     {
         const Vector3i block_index( x, y, z );
@@ -220,17 +242,25 @@ void Chunk::update_geometry()
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
                 const Block* block_neighbor = get_block_neighbor( block_index, relation_vector ).block_;
 
-                if ( !block_neighbor ||
-                     ( block_neighbor->get_material_attributes().translucent_ &&
-                       block.get_material() != block_neighbor->get_material() ) )
+                bool add_face = false;
+
+                if ( block_neighbor )
                 {
-                    add_external_face(
-                        block_index,
-                        block_position,
-                        block,
-                        relation,
-                        relation_vector
-                    );
+                    // FIXME: Neighboring tranclucent materials currently result in z-fighting.
+                    add_face = ( block_neighbor->get_material_attributes().translucent_ &&
+                                 block.get_material() != block_neighbor->get_material() );
+                }
+                else
+                {
+                    // Don't add faces on the sides of the chunk in which there is not presently a column
+                    // of chunks.  Also, don't add faces on the bottom of the column, facing downward.
+                    add_face = ( relation == CARDINAL_RELATION_ABOVE ||
+                                 ( relation != CARDINAL_RELATION_BELOW && neighbor_columns[relation] ) );
+                }
+
+                if ( add_face )
+                {
+                    add_external_face( block_index, block_position, block, relation, relation_vector );
                     block_visible = true;
                 }
             }

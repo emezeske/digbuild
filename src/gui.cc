@@ -34,6 +34,10 @@ Gui::Gui( SDL_Surface* screen )
     AG_ExpandHoriz( chunks_label_ );
     AG_WidgetUpdate( chunks_label_ );
 
+    triangles_label_ = AG_LabelNewS( window, 0, "Triangles: 0" );
+    AG_ExpandHoriz( triangles_label_ );
+    AG_WidgetUpdate( triangles_label_ );
+
     AG_WindowSetGeometry( window, 8, 8, 300, 128 );
     AG_WindowShow( window );
 }
@@ -92,7 +96,8 @@ void Gui::set_engine_fps( const unsigned fps )
     AG_LabelText( fps_label_, "FPS: %d", fps );
 }
 
-void Gui::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total )
+void Gui::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn )
 {
     AG_LabelText( chunks_label_, "Chunks: %d/%d", chunks_drawn, chunks_total );
+    AG_LabelText( triangles_label_, "Triangles: %d", triangles_drawn );
 }

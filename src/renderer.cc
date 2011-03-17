@@ -207,8 +207,10 @@ void SortableChunkVertexBuffer::render_sorted(
 // Function definitions for ChunkRenderer:
 //////////////////////////////////////////////////////////////////////////////////
 
-ChunkRenderer::ChunkRenderer( const Vector3f& centroid ) :
-    centroid_( centroid )
+ChunkRenderer::ChunkRenderer( const Vector3f& centroid, const gmtl::AABoxf& aabb ) :
+    centroid_( centroid ),
+    aabb_( aabb ),
+    num_triangles_( 0 )
 {
 }
 
@@ -234,6 +236,7 @@ void ChunkRenderer::render_translucent( const Vector3f& camera_position, const S
 void ChunkRenderer::rebuild( const Chunk& chunk )
 {
     const BlockFaceV& faces = chunk.get_external_faces();
+    num_triangles_ = faces.size() * 2; // Two triangles per (square) face.
 
     typedef std::map<BlockMaterial, BlockVertexV> MaterialVertexMap;
     MaterialVertexMap opaque_vertices;
@@ -487,27 +490,35 @@ void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f
 //////////////////////////////////////////////////////////////////////////////////
 
 Renderer::Renderer() :
-    num_chunks_drawn_( 0 )
+    num_chunks_drawn_( 0 ),
+    num_triangles_drawn_( 0 )
 {
 }
 
 void Renderer::note_chunk_changes( const Chunk& chunk )
 {
-    ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk.get_position() );
-
-    if ( chunk_renderer_it == chunk_renderers_.end() )
+    if ( !chunk.get_external_faces().empty() )
     {
-        const Vector3f centroid = vector_cast<Scalar>( chunk.get_position() ) + Vector3f(
-            Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
-            Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
-            Scalar( Chunk::CHUNK_SIZE ) / 2.0f
-        );
+        ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk.get_position() );
 
-        chunk_renderer_it =
-            chunk_renderers_.insert( std::make_pair( chunk.get_position(), ChunkRenderer( centroid ) ) ).first;
+        if ( chunk_renderer_it == chunk_renderers_.end() )
+        {
+            const Vector3f centroid = vector_cast<Scalar>( chunk.get_position() ) + Vector3f(
+                Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
+                Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
+                Scalar( Chunk::CHUNK_SIZE ) / 2.0f
+            );
+
+            const Vector3f chunk_min = vector_cast<Scalar>( chunk.get_position() );
+            const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
+            const gmtl::AABoxf aabb( chunk_min, chunk_max );
+
+            chunk_renderer_it =
+                chunk_renderers_.insert( std::make_pair( chunk.get_position(), ChunkRenderer( centroid, aabb ) ) ).first;
+        }
+
+        chunk_renderer_it->second.rebuild( chunk );
     }
-
-    chunk_renderer_it->second.rebuild( chunk );
 }
 
 void Renderer::render( const Camera& camera, const World& world )
@@ -516,7 +527,7 @@ void Renderer::render( const Camera& camera, const World& world )
         camera.rotate();
         render_sky( world.get_sky() );
         camera.translate();
-        render_chunks( camera.get_position(), world.get_sky(), world.get_chunks() );
+        render_chunks( camera.get_position(), world.get_sky() );
     glPopMatrix();
 }
 
@@ -525,11 +536,9 @@ void Renderer::render_sky( const Sky& sky )
     sky_renderer_.render( sky );
 }
 
-void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, const ChunkMap& chunks )
+void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
 {
     // TODO: Decompose this function.
-
-    // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
 
     gmtl::Frustumf view_frustum(
         get_opengl_matrix( GL_MODELVIEW_MATRIX ),
@@ -545,35 +554,32 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky, c
     typedef std::map<BlockMaterial, ChunkRendererSet> MaterialRendererMap;
     MaterialRendererMap material_chunks;
 
-    for ( ChunkMap::const_iterator chunk_it = chunks.begin(); chunk_it != chunks.end(); ++chunk_it )
+    num_triangles_drawn_ = 0;
+
+    for ( ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.begin();
+          chunk_renderer_it != chunk_renderers_.end();
+          ++chunk_renderer_it )
     {
-        const Vector3i chunk_position = chunk_it->first;
-        const Vector3f chunk_min = vector_cast<Scalar>( chunk_position );
-        const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
-        const gmtl::AABoxf chunk_box( chunk_min, chunk_max );
+        ChunkRenderer& chunk_renderer = chunk_renderer_it->second;
 
-        if ( gmtl::isInVolume( view_frustum, chunk_box ) )
+        // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
+        if ( gmtl::isInVolume( view_frustum, chunk_renderer.get_aabb() ) )
         {
-            ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk_position );
+            const Vector3f camera_to_centroid = camera_position - chunk_renderer.get_centroid();
+            const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
+            DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
+            visible_chunks.insert( distance_chunk );
 
-            if ( chunk_renderer_it != chunk_renderers_.end() )
+            const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
+
+            for ( BlockMaterialSet::iterator material_it = materials.begin();
+                  material_it != materials.end();
+                  ++material_it )
             {
-                ChunkRenderer& chunk_renderer = chunk_renderer_it->second;
-
-                const Vector3f camera_to_centroid = camera_position - chunk_renderer.get_centroid();
-                const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
-                DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
-                visible_chunks.insert( distance_chunk );
-
-                const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
-
-                for ( BlockMaterialSet::iterator material_it = materials.begin();
-                      material_it != materials.end();
-                      ++material_it )
-                {
-                    material_chunks[*material_it].insert( distance_chunk );
-                }
+                material_chunks[*material_it].insert( distance_chunk );
             }
+
+            num_triangles_drawn_ += chunk_renderer.get_num_triangles();
         }
     }
 

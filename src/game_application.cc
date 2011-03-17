@@ -290,7 +290,7 @@ void GameApplication::render()
     window_.reshape_window(); // FIXME: This makes Agar work.  Patch Agar instead?
 
     renderer_.render( camera_, world_ );
-    gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size() );
+    gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
     gui_.render();
 
     SDL_GL_SwapBuffers();

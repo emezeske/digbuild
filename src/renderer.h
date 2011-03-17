@@ -103,14 +103,16 @@ typedef std::set<BlockMaterial> BlockMaterialSet;
 
 struct ChunkRenderer
 {
-    ChunkRenderer( const Vector3f& centroid = Vector3f() );
+    ChunkRenderer( const Vector3f& centroid = Vector3f(), const gmtl::AABoxf& aabb = gmtl::AABoxf() );
 
     void render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager );
     void render_translucent( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager );
     void rebuild( const Chunk& chunk );
 
-    const Vector3f& get_centroid() const { return centroid_; }
     const BlockMaterialSet& get_opaque_materials() const { return opaque_materials_; }
+    const Vector3f& get_centroid() const { return centroid_; }
+    const gmtl::AABoxf& get_aabb() const { return aabb_; }
+    unsigned get_num_triangles() const { return num_triangles_; }
 
 protected:
 
@@ -123,6 +125,10 @@ protected:
     SortableChunkVertexBufferSP translucent_vbo_;
 
     Vector3f centroid_;
+
+    gmtl::AABoxf aabb_;
+
+    unsigned num_triangles_;
 };
 
 struct SkydomeVertexBuffer : public VertexBuffer
@@ -176,10 +182,11 @@ struct Renderer
     void render( const Camera& camera, const World& world );
 
     unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
+    unsigned get_num_triangles_drawn() const { return num_triangles_drawn_; }
 
 protected:
 
-    void render_chunks( const Vector3f& camera_position, const Sky& sky, const ChunkMap& chunks );
+    void render_chunks( const Vector3f& camera_position, const Sky& sky );
     void render_sky( const Sky& sky );
     gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 
@@ -191,6 +198,8 @@ protected:
     SkyRenderer sky_renderer_;
 
     unsigned num_chunks_drawn_;
+
+    unsigned num_triangles_drawn_;
 };
 
 #endif // RENDERER_H
