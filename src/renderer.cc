@@ -23,6 +23,8 @@ struct SimplePositionVertex
 
 } __attribute__( ( packed ) );
 
+typedef std::vector<SimplePositionVertex> SimplePositionVertexV;
+
 } // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -204,10 +206,59 @@ void SortableChunkVertexBuffer::render_sorted(
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for AABoxVertexBuffer:
+//////////////////////////////////////////////////////////////////////////////////
+
+AABoxVertexBuffer::AABoxVertexBuffer( const gmtl::AABoxf& aabb )
+{
+    const Vector3f& min = aabb.getMin();
+    const Vector3f& max = aabb.getMax();
+
+    const SimplePositionVertex vertices[] =
+    {
+        SimplePositionVertex( Vector3f( min[0], min[1], min[2] ) ),
+        SimplePositionVertex( Vector3f( max[0], min[1], min[2] ) ),
+        SimplePositionVertex( Vector3f( max[0], max[1], min[2] ) ),
+        SimplePositionVertex( Vector3f( min[0], max[1], min[2] ) ),
+        SimplePositionVertex( Vector3f( min[0], min[1], max[2] ) ),
+        SimplePositionVertex( Vector3f( max[0], min[1], max[2] ) ),
+        SimplePositionVertex( Vector3f( max[0], max[1], max[2] ) ),
+        SimplePositionVertex( Vector3f( min[0], max[1], max[2] ) )
+    };
+
+    const GLuint indices[] =
+    {
+        0, 2, 1, 0, 3, 2,
+        5, 7, 4, 5, 6, 7,
+        1, 6, 5, 1, 2, 6,
+        4, 3, 0, 4, 7, 3,
+        3, 6, 2, 3, 7, 6,
+        4, 1, 5, 4, 0, 1
+    };
+
+    bind();
+    glBufferData( GL_ARRAY_BUFFER, sizeof( vertices ), vertices, GL_STATIC_DRAW );
+    glBufferData( GL_ELEMENT_ARRAY_BUFFER, sizeof( indices ), indices, GL_STATIC_DRAW );
+    num_elements_ = sizeof( indices ) / sizeof( GLuint );
+    unbind();
+}
+
+void AABoxVertexBuffer::render()
+{
+    bind();
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
+    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
+    glDisableClientState( GL_VERTEX_ARRAY );
+    unbind();
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for ChunkRenderer:
 //////////////////////////////////////////////////////////////////////////////////
 
 ChunkRenderer::ChunkRenderer( const Vector3f& centroid, const gmtl::AABoxf& aabb ) :
+    aabb_vbo_( aabb ),
     centroid_( centroid ),
     aabb_( aabb ),
     num_triangles_( 0 )
@@ -231,6 +282,11 @@ void ChunkRenderer::render_translucent( const Vector3f& camera_position, const S
     {
         translucent_vbo_->render( camera_position, sky, material_manager );
     }
+}
+
+void ChunkRenderer::render_aabb()
+{
+    aabb_vbo_.render();
 }
 
 void ChunkRenderer::rebuild( const Chunk& chunk )
@@ -297,7 +353,7 @@ SkydomeVertexBuffer::SkydomeVertexBuffer()
         TESSELATION_BETA = 32,
         TESSELATION_PHI = 32;
 
-    std::vector<SimplePositionVertex> vertices;
+    SimplePositionVertexV vertices;
 
     for ( int i = 0; i < TESSELATION_PHI; ++i )
     {
@@ -356,7 +412,7 @@ void SkydomeVertexBuffer::render()
 
 StarVertexBuffer::StarVertexBuffer( const Sky::StarV& stars )
 {
-    std::vector<SimplePositionVertex> vertices;
+    SimplePositionVertexV vertices;
     std::vector<GLuint> indices;
 
     for ( size_t i = 0; i < stars.size(); ++i )
@@ -513,11 +569,12 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
             const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
             const gmtl::AABoxf aabb( chunk_min, chunk_max );
 
+            ChunkRendererSP renderer( new ChunkRenderer( centroid, aabb ) );
             chunk_renderer_it =
-                chunk_renderers_.insert( std::make_pair( chunk.get_position(), ChunkRenderer( centroid, aabb ) ) ).first;
+                chunk_renderers_.insert( std::make_pair( chunk.get_position(), renderer ) ).first;
         }
 
-        chunk_renderer_it->second.rebuild( chunk );
+        chunk_renderer_it->second->rebuild( chunk );
     }
 }
 
@@ -548,37 +605,43 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
     // TODO: While using a std::set is convenient here, it is very slow.
     typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
     typedef std::set<DistanceChunkPair> ChunkRendererSet;
-    ChunkRendererSet visible_chunks;
+    ChunkRendererSet translucent_chunks;
 
-    // TODO: While using a std::set is convenient here, it is very slow.
+    // TODO: While using a std::map of std::sets is convenient here, it is very slow.
     typedef std::map<BlockMaterial, ChunkRendererSet> MaterialRendererMap;
     MaterialRendererMap material_chunks;
 
+    num_chunks_drawn_ = 0;
     num_triangles_drawn_ = 0;
 
     for ( ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.begin();
           chunk_renderer_it != chunk_renderers_.end();
           ++chunk_renderer_it )
     {
-        ChunkRenderer& chunk_renderer = chunk_renderer_it->second;
+        ChunkRenderer& chunk_renderer = *chunk_renderer_it->second.get();
 
         // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
         if ( gmtl::isInVolume( view_frustum, chunk_renderer.get_aabb() ) )
         {
             const Vector3f camera_to_centroid = camera_position - chunk_renderer.get_centroid();
             const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
-            DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
-            visible_chunks.insert( distance_chunk );
+            const DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
 
             const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
 
-            for ( BlockMaterialSet::iterator material_it = materials.begin();
+            for ( BlockMaterialSet::const_iterator material_it = materials.begin();
                   material_it != materials.end();
                   ++material_it )
             {
                 material_chunks[*material_it].insert( distance_chunk );
             }
 
+            if ( chunk_renderer.has_translucent_materials() )
+            {
+                translucent_chunks.insert( distance_chunk );
+            }
+
+            ++num_chunks_drawn_;
             num_triangles_drawn_ += chunk_renderer.get_num_triangles();
         }
     }
@@ -599,17 +662,14 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
     glEnable( GL_DEPTH_TEST );
     glDepthFunc( GL_LEQUAL );
 
-    // TODO: Fix comment
-    // Draw the opaque parts of the Chunks from nearest to farthest.  This will result in many
-    // of the farthest chunks being fully occluded, and thus their fragments will be rejected
-    // without running any expensive fragment shaders.
-    //
-    // TODO: Use an ARB_occlusion_query to avoid rendering fully occluded chunks?
-    //
-    // TODO: Group chunks with the same material attributes together, to avoid
-    //       the overhead of switching texture units/shaders?
+    // Group together all of the geometry by material type, and then render it from
+    // front to back.  Grouping by material decreases the number of shader/texture swaps,
+    // and rendering front to back results in many of the farthest chunks being fully occluded,
+    // and thus their fragments will be rejected without running any expensive fragment shaders.
 
-    for ( MaterialRendererMap::iterator material_renderer_it = material_chunks.begin();
+    // TODO: Use an ARB_occlusion_query to avoid rendering fully occluded chunks?
+
+    for ( MaterialRendererMap::const_iterator material_renderer_it = material_chunks.begin();
           material_renderer_it != material_chunks.end();
           ++material_renderer_it )
     {
@@ -618,13 +678,16 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
 
         material_manager_.configure_block_material( camera_position, sky, material );
 
-        for ( ChunkRendererSet::iterator chunk_renderer_it = chunk_renderers.begin();
+        for ( ChunkRendererSet::const_iterator chunk_renderer_it = chunk_renderers.begin();
               chunk_renderer_it != chunk_renderers.end();
               ++chunk_renderer_it )
         {
             chunk_renderer_it->second->render_opaque( material, material_manager_ );
         }
     }
+
+    // TODO: Add a debugging mode that draws the chunk AABBs in wireframe mode.
+    // chunk_renderer_it->second->render_aabb();
 
     glDisable( GL_CULL_FACE );
     glEnable( GL_BLEND );
@@ -634,7 +697,7 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
     // to be rendered strictly in back to front order, we can't perform material grouping on them
     // like with the opaque materials.
 
-    for ( ChunkRendererSet::reverse_iterator it = visible_chunks.rbegin(); it != visible_chunks.rend(); ++it )
+    for ( ChunkRendererSet::const_reverse_iterator it = translucent_chunks.rbegin(); it != translucent_chunks.rend(); ++it )
     {
         it->second->render_translucent( camera_position, sky, material_manager_ );
     }
@@ -642,7 +705,6 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
     glDisable( GL_DEPTH_TEST );
     glDisable( GL_BLEND );
 
-    num_chunks_drawn_ = visible_chunks.size();
     material_manager_.deconfigure_block_material();
 }
 

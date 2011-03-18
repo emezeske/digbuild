@@ -101,15 +101,24 @@ private:
 typedef boost::shared_ptr<SortableChunkVertexBuffer> SortableChunkVertexBufferSP;
 typedef std::set<BlockMaterial> BlockMaterialSet;
 
+struct AABoxVertexBuffer : public VertexBuffer
+{
+    AABoxVertexBuffer( const gmtl::AABoxf& aabb );
+
+    void render();
+};
+
 struct ChunkRenderer
 {
     ChunkRenderer( const Vector3f& centroid = Vector3f(), const gmtl::AABoxf& aabb = gmtl::AABoxf() );
 
     void render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager );
     void render_translucent( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager );
+    void render_aabb();
     void rebuild( const Chunk& chunk );
 
     const BlockMaterialSet& get_opaque_materials() const { return opaque_materials_; }
+    bool has_translucent_materials() const { return translucent_vbo_; }
     const Vector3f& get_centroid() const { return centroid_; }
     const gmtl::AABoxf& get_aabb() const { return aabb_; }
     unsigned get_num_triangles() const { return num_triangles_; }
@@ -124,12 +133,16 @@ protected:
 
     SortableChunkVertexBufferSP translucent_vbo_;
 
+    AABoxVertexBuffer aabb_vbo_;
+
     Vector3f centroid_;
 
     gmtl::AABoxf aabb_;
 
     unsigned num_triangles_;
 };
+
+typedef boost::shared_ptr<ChunkRenderer> ChunkRendererSP;
 
 struct SkydomeVertexBuffer : public VertexBuffer
 {
@@ -192,7 +205,7 @@ protected:
 
     RendererMaterialManager material_manager_;
 
-    typedef std::map<Vector3i, ChunkRenderer, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
+    typedef std::map<Vector3i, ChunkRendererSP, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
     ChunkRendererMap chunk_renderers_;
 
     SkyRenderer sky_renderer_;
