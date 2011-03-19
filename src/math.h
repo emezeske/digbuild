@@ -28,6 +28,38 @@ gmtl::VecBase<ToDataType, Size> vector_cast( const gmtl::VecBase<FromDataType, S
     return to;
 }
 
+template <typename DataType, unsigned Size>
+gmtl::VecBase<DataType, Size> pointwise_product(
+        const gmtl::VecBase<DataType, Size>& a,
+        const gmtl::VecBase<DataType, Size>& b
+)
+{
+    gmtl::VecBase<DataType, Size> result;
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        result[i] = DataType( a[i] * b[i] );
+    }
+
+    return result;
+}
+
+template <typename DataType, unsigned Size>
+gmtl::VecBase<DataType, Size> pointwise_quotient(
+        const gmtl::VecBase<DataType, Size>& n,
+        const gmtl::VecBase<DataType, Size>& d
+)
+{
+    gmtl::VecBase<DataType, Size> result;
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        result[i] = DataType( n[i] / d[i] );
+    }
+
+    return result;
+}
+
 inline Vector3f spherical_to_cartesian( const Vector3f& spherical )
 {
     return Vector3f(

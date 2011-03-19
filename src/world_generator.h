@@ -9,11 +9,8 @@ struct RegionFeatures;
 
 struct WorldGenerator
 {
-    enum
-    {
-        REGION_SIZE = 128,
-        CHUNKS_PER_REGION_EDGE = REGION_SIZE / Chunk::CHUNK_SIZE
-    };
+    static const int REGION_SIZE = 128;
+    static const Vector2i CHUNKS_PER_REGION_EDGE;
 
     WorldGenerator( const uint64_t world_seed );
 
@@ -21,18 +18,20 @@ struct WorldGenerator
 
 protected:
 
+    typedef unsigned ChunkHeightmap[Chunk::SIZE_X][Chunk::SIZE_Z];
+
     void generate_chunk_column(
         ChunkV& chunks,
         const RegionFeatures& features,
         const Vector2i& region_position,
         const Vector2i& column_position,
-        unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
+        ChunkHeightmap heights
     );
 
     void populate_trees(
         ChunkV& chunks,
         const Vector2i& column_position,
-        const unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
+        const ChunkHeightmap heights
     );
 
     Block& get_block( ChunkV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height );

@@ -108,7 +108,7 @@ RendererMaterialManager::RendererMaterialManager() :
     current_material_( BLOCK_MATERIAL_AIR )
 {
     ShaderSP default_block_shader(
-        new Shader( SHADER_DIRECTORY + "/default.vertex.glsl", SHADER_DIRECTORY + "/default.fragment.glsl" )
+        new Shader( SHADER_DIRECTORY + "/block.vertex.glsl", SHADER_DIRECTORY + "/block.fragment.glsl" )
     );
 
     materials_.resize( BLOCK_MATERIAL_SIZE );
@@ -159,6 +159,9 @@ void RendererMaterialManager::configure_block_material( const Vector3f& camera_p
         moon_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_moon_angle()[0], sky.get_moon_angle()[1] ) );
 
     current_shader_->set_uniform_vec3f( "camera_position", camera_position );
+    // FIXME: The fog_distance needs to be equal to the viewing distance.
+    // TODO: Make the viewing distance configurable.
+    current_shader_->set_uniform_float( "fog_distance", 250.0f );
 
     current_shader_->set_uniform_vec3f( "sun_direction", sun_direction );
     current_shader_->set_uniform_vec3f( "moon_direction", moon_direction );

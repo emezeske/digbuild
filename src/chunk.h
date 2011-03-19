@@ -41,7 +41,12 @@ struct BlockIterator
 
 struct Chunk : public boost::noncopyable
 {
-    enum { CHUNK_SIZE = 16 };
+    static const int
+        SIZE_X = 16,
+        SIZE_Y = 96,
+        SIZE_Z = 16;
+
+    static const Vector3i SIZE;
 
     Chunk( const Vector3i& position );
 
@@ -63,10 +68,10 @@ struct Chunk : public boost::noncopyable
         {
             if ( neighbor_index[i] == -1 )
             {
-                neighbor_index[i] = CHUNK_SIZE - 1;
+                neighbor_index[i] = SIZE[i] - 1;
                 neighbor_chunk_relation[i] = -1;
             }
-            else if ( neighbor_index[i] == CHUNK_SIZE )
+            else if ( neighbor_index[i] == SIZE[i] )
             {
                 neighbor_index[i] = 0;
                 neighbor_chunk_relation[i] = 1;
@@ -124,7 +129,7 @@ private:
     bool block_in_range( const Vector3i& index )
     {
         return index[0] >= 0 && index[1] >= 0 && index[2] >= 0 &&
-               index[0] < CHUNK_SIZE && index[1] < CHUNK_SIZE && index[2] < CHUNK_SIZE;
+               index[0] < SIZE_X && index[1] < SIZE_Y && index[2] < SIZE_Z;
     }
 
     Chunk*& get_neighbor_impl( const Vector3i& relation )
@@ -150,7 +155,7 @@ private:
 
     Vector3i position_;
 
-    Block blocks_[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE];
+    Block blocks_[SIZE_X][SIZE_Y][SIZE_Z];
 
     BlockFaceV external_faces_;
 

@@ -60,6 +60,13 @@ RegionFeatures::RegionFeatures(
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Static constant definitions for WorldGenerator:
+//////////////////////////////////////////////////////////////////////////////////
+
+const Vector2i
+    WorldGenerator::CHUNKS_PER_REGION_EDGE( REGION_SIZE / Chunk::SIZE_X, REGION_SIZE / Chunk::SIZE_Z );
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for WorldGenerator:
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -104,12 +111,12 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     RegionFeatures region_features( world_seed_, position, fundamental_features, octave_features );
     ChunkV chunks;
 
-    for ( int x = 0; x < CHUNKS_PER_REGION_EDGE; ++x )
+    for ( int x = 0; x < CHUNKS_PER_REGION_EDGE[0]; ++x )
     {
-        for ( int z = 0; z < CHUNKS_PER_REGION_EDGE; ++z )
+        for ( int z = 0; z < CHUNKS_PER_REGION_EDGE[1]; ++z )
         {
-            const Vector2i column_position( position + Vector2i( x, z ) * int( Chunk::CHUNK_SIZE ) );
-            unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE];
+            const Vector2i column_position( position + Vector2i( x * Chunk::SIZE_X, z * Chunk::SIZE_Z ) );
+            ChunkHeightmap heights;
             ChunkV column_chunks;
             generate_chunk_column( column_chunks, region_features, position, column_position, heights );
             populate_trees( column_chunks, column_position, heights );
@@ -125,12 +132,12 @@ void WorldGenerator::generate_chunk_column(
     const RegionFeatures& features,
     const Vector2i& region_position,
     const Vector2i& column_position,
-    unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
+    ChunkHeightmap heights
 )
 {
-    for ( int x = 0; x < Chunk::CHUNK_SIZE; ++x )
+    for ( int x = 0; x < Chunk::SIZE_X; ++x )
     {
-        for ( int z = 0; z < Chunk::CHUNK_SIZE; ++z )
+        for ( int z = 0; z < Chunk::SIZE_Z; ++z )
         {
             const Vector2i relative_position = column_position - region_position + Vector2i( x, z );
 
@@ -145,9 +152,9 @@ void WorldGenerator::generate_chunk_column(
             );
 
             const Scalar
-                // NOTE: Remove the abs(), 64.0f, and negation here to undo the ridge experiment.
+                // NOTE: Remove the abs(), 32.0f, and negation here to undo the ridge experiment.
                 octave_height = abs( octave_patch.interpolate( octave_position ) ),
-                total_height = 64.0f + fundamental_height - octave_height;
+                total_height = 32.0f + fundamental_height - octave_height;
 
             const std::pair<BlockMaterial, Scalar> layers[] = 
             {
@@ -205,7 +212,7 @@ void WorldGenerator::generate_chunk_column(
 void WorldGenerator::populate_trees(
     ChunkV& chunks,
     const Vector2i& column_position,
-    const unsigned heights[Chunk::CHUNK_SIZE][Chunk::CHUNK_SIZE]
+    const ChunkHeightmap heights
 )
 {
     const int
@@ -217,9 +224,13 @@ void WorldGenerator::populate_trees(
 
     boost::rand48 tree_generator( get_seed_for_coordinates( world_seed_, column_position ) );
 
-    boost::uniform_int<> tree_position_distribution( MAX_TREE_RADIUS, Chunk::CHUNK_SIZE - MAX_TREE_RADIUS - 1 );
+    boost::uniform_int<> tree_x_distribution( MAX_TREE_RADIUS, Chunk::SIZE_X - MAX_TREE_RADIUS - 1 );
     boost::variate_generator<boost::rand48&, boost::uniform_int<> >
-        tree_position_random( tree_generator, tree_position_distribution );
+        tree_x_random( tree_generator, tree_x_distribution );
+
+    boost::uniform_int<> tree_z_distribution( MAX_TREE_RADIUS, Chunk::SIZE_Z - MAX_TREE_RADIUS - 1 );
+    boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+        tree_z_random( tree_generator, tree_z_distribution );
 
     boost::uniform_int<> tree_height_distribution( MIN_TREE_HEIGHT, MAX_TREE_HEIGHT );
     boost::variate_generator<boost::rand48&, boost::uniform_int<> >
@@ -232,8 +243,8 @@ void WorldGenerator::populate_trees(
     for ( int i = 0; i < TREES_PER_CHUNK; ++i )
     {
         const int
-            x = tree_position_random(),
-            z = tree_position_random(),
+            x = tree_x_random(),
+            z = tree_z_random(),
             height = tree_height_random(),
             radius = tree_radius_random();
 
@@ -274,7 +285,7 @@ void WorldGenerator::populate_trees(
 
 Block& WorldGenerator::get_block( ChunkV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
 {
-    const unsigned chunk_index = height / Chunk::CHUNK_SIZE;
+    const unsigned chunk_index = height / Chunk::SIZE_Y;
 
     if ( chunk_index >= chunks.size() )
     {
@@ -282,5 +293,5 @@ Block& WorldGenerator::get_block( ChunkV& chunks, const Vector2i& column_positio
         chunks.push_back( new_chunk );
     }
 
-    return chunks[chunk_index]->get_block( Vector3i( x, height % Chunk::CHUNK_SIZE, z ) );
+    return chunks[chunk_index]->get_block( Vector3i( x, height % Chunk::SIZE_Y, z ) );
 }

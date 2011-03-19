@@ -5,9 +5,9 @@
 #include "chunk.h"
 
 #define FOREACH_BLOCK( x_name, y_name, z_name )\
-    for ( int x_name = 0; x_name < Chunk::CHUNK_SIZE; ++x_name )\
-        for ( int y_name = 0; y_name < Chunk::CHUNK_SIZE; ++y_name )\
-            for ( int z_name = 0; z_name < Chunk::CHUNK_SIZE; ++z_name )
+    for ( int x_name = 0; x_name < Chunk::SIZE_X; ++x_name )\
+        for ( int y_name = 0; y_name < Chunk::SIZE_Y; ++y_name )\
+            for ( int z_name = 0; z_name < Chunk::SIZE_Z; ++z_name )
 
 #define FOR_EACH_CARDINAL_RELATION( iterator_name )\
     for ( CardinalRelation iterator_name = CARDINAL_RELATION_ABOVE;\
@@ -170,6 +170,12 @@ void breadth_first_flood_fill_light(
 } // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
+// Static constant definitions for Chunk:
+//////////////////////////////////////////////////////////////////////////////////
+
+const Vector3i Chunk::SIZE( SIZE_X, SIZE_Y, SIZE_Z );
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for Chunk:
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -182,11 +188,11 @@ Chunk::Chunk( const Vector3i& position ) :
 
 void Chunk::reset_lighting()
 {
-    for ( int x = 0; x < CHUNK_SIZE; ++x )
+    for ( int x = 0; x < SIZE_X; ++x )
     {
-        for ( int z = 0; z < CHUNK_SIZE; ++z )
+        for ( int z = 0; z < SIZE_Z; ++z )
         {
-            const int y_max = CHUNK_SIZE - 1;
+            const int y_max = SIZE_Y - 1;
             const Vector3i top_block_index( x, y_max, z );
             const Block* block_above = get_block_neighbor( top_block_index, Vector3i( 0, 1, 0 ) ).block_;
             bool above_ground = !block_above || block_above->is_sunlight_source();
@@ -408,7 +414,8 @@ void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks )
     {
         const Vector3i relation( x, y, z );
 
-        ChunkMap::iterator neighbor_it = chunks.find( chunk->get_position() + relation * int( Chunk::CHUNK_SIZE ) );
+        ChunkMap::iterator neighbor_it =
+            chunks.find( chunk->get_position() + pointwise_product( relation, Chunk::SIZE ) );
 
         if ( neighbor_it != chunks.end() )
         {

@@ -559,14 +559,12 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
 
         if ( chunk_renderer_it == chunk_renderers_.end() )
         {
-            const Vector3f centroid = vector_cast<Scalar>( chunk.get_position() ) + Vector3f(
-                Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
-                Scalar( Chunk::CHUNK_SIZE ) / 2.0f,
-                Scalar( Chunk::CHUNK_SIZE ) / 2.0f
-            );
+            const Vector3f centroid =
+                vector_cast<Scalar>( chunk.get_position() ) +
+                vector_cast<Scalar>( Chunk::SIZE ) / 2.0f;
 
             const Vector3f chunk_min = vector_cast<Scalar>( chunk.get_position() );
-            const Vector3f chunk_max = chunk_min + Vector3f( Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE, Chunk::CHUNK_SIZE );
+            const Vector3f chunk_max = chunk_min + vector_cast<Scalar>( Chunk::SIZE );
             const gmtl::AABoxf aabb( chunk_min, chunk_max );
 
             ChunkRendererSP renderer( new ChunkRenderer( centroid, aabb ) );
@@ -646,21 +644,11 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
         }
     }
 
-    // TODO: Add fog so that distant objects fade out nicely.
-    //
-    // const GLfloat fog_color[] = { 0.81f, 0.89f, 0.89f, 1.0f };
-    // glEnable( GL_FOG );
-    // glFogi( GL_FOG_MODE, GL_LINEAR );
-    // glFogfv( GL_FOG_COLOR, fog_color );
-    // glFogf( GL_FOG_DENSITY, 1.0f );
-    // glHint( GL_FOG_HINT, GL_NICEST );
-    // glFogf( GL_FOG_START, 0.0f );
-    // glFogf( GL_FOG_END, 1000.0f );
-    // glFogi( GL_FOG_COORD_SRC, GL_FRAGMENT_DEPTH );
-
     glEnable( GL_CULL_FACE );
     glEnable( GL_DEPTH_TEST );
     glDepthFunc( GL_LEQUAL );
+    glEnable( GL_BLEND );
+    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 
     // Group together all of the geometry by material type, and then render it from
     // front to back.  Grouping by material decreases the number of shader/texture swaps,
@@ -690,8 +678,6 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
     // chunk_renderer_it->second->render_aabb();
 
     glDisable( GL_CULL_FACE );
-    glEnable( GL_BLEND );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 
     // Now draw the translucent parts of the Chunks from farthest to nearest.  Since they have
     // to be rendered strictly in back to front order, we can't perform material grouping on them

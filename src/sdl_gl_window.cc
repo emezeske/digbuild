@@ -98,7 +98,7 @@ void SDL_GL_Window::reshape_window()
 
     glMatrixMode( GL_PROJECTION );
     glLoadIdentity();
-    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 1.0f, 500.0f );
+    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 1.0f, 250.0f );
 
     glMatrixMode( GL_MODELVIEW );
     glLoadIdentity();

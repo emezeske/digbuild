@@ -1,12 +1,14 @@
 uniform sampler2D material_texture;
 uniform sampler2D material_specular_map;
 uniform sampler2D material_bump_map;
+uniform float fog_distance;
 
 varying vec3 tangent_sun_direction;
 varying vec3 tangent_camera_direction;
 varying vec3 base_lighting;
 varying vec3 sun_lighting;
 varying vec2 texture_coordinates;
+varying float fog_depth;
 
 void main()
 {
@@ -29,5 +31,7 @@ void main()
     float material_specularity = texture2D( material_specular_map, texture_coordinates ).r;
     vec3 sun_specular = material_specularity * pow( sun_specularity, 16 ) * sun_lighting;
 
-    gl_FragColor = vec4( texture_color.rgb * ( base_lighting + sun_bump ) + sun_specular, texture_color.a );
+    vec3 color = texture_color.rgb * ( base_lighting + sun_bump ) + sun_specular;
+    float fog_factor = clamp( ( fog_distance - fog_depth ) * 0.20f, 0.0f, 1.0f );
+    gl_FragColor = vec4( color, fog_factor * texture_color.a );
 }
