@@ -123,7 +123,7 @@ RendererMaterialManager::RendererMaterialManager() :
     materials_[BLOCK_MATERIAL_MAGMA].reset     ( new RendererMaterial( "magma",      default_block_shader ) );
 }
 
-void RendererMaterialManager::configure_block_material( const Vector3f& camera_position, const Sky& sky, const BlockMaterial material )
+void RendererMaterialManager::configure_block_material( const Camera& camera, const Sky& sky, const BlockMaterial material )
 {
     assert( material >= 0 && material < static_cast<int>( materials_.size() ) && material != BLOCK_MATERIAL_AIR );
 
@@ -158,10 +158,8 @@ void RendererMaterialManager::configure_block_material( const Vector3f& camera_p
         sun_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_sun_angle()[0], sky.get_sun_angle()[1] ) ),
         moon_direction = spherical_to_cartesian( Vector3f( 1.0f, sky.get_moon_angle()[0], sky.get_moon_angle()[1] ) );
 
-    current_shader_->set_uniform_vec3f( "camera_position", camera_position );
-    // FIXME: The fog_distance needs to be equal to the viewing distance.
-    // TODO: Make the viewing distance configurable.
-    current_shader_->set_uniform_float( "fog_distance", 250.0f );
+    current_shader_->set_uniform_vec3f( "camera_position", camera.get_position() );
+    current_shader_->set_uniform_float( "fog_distance", camera.get_draw_distance() );
 
     current_shader_->set_uniform_vec3f( "sun_direction", sun_direction );
     current_shader_->set_uniform_vec3f( "moon_direction", moon_direction );

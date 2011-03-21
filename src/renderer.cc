@@ -141,7 +141,7 @@ SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockMaterialV& mate
     }
 }
 
-void SortableChunkVertexBuffer::render( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager )
+void SortableChunkVertexBuffer::render( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager )
 {
     DistanceIndexSet distance_indices;
     BlockMaterial current_material_ = materials_.front();
@@ -157,19 +157,19 @@ void SortableChunkVertexBuffer::render( const Vector3f& camera_position, const S
 
         if ( material != current_material_ )
         {
-            render_sorted( distance_indices, camera_position, sky, material, material_manager );
+            render_sorted( distance_indices, camera, sky, material, material_manager );
             distance_indices.clear();
             current_material_ = material;
         }
 
-        const Vector3f camera_to_centroid = camera_position - centroids_[i];
-        const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
+        const Vector3f camera_to_centroid = camera.get_position() - centroids_[i];
+        const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
         distance_indices.insert( std::make_pair( distance_squared, i * VERTICES_PER_FACE ) );
     }
 
     if ( !distance_indices.empty() )
     {
-        render_sorted( distance_indices, camera_position, sky, current_material_, material_manager );
+        render_sorted( distance_indices, camera, sky, current_material_, material_manager );
     }
 
     unbind();
@@ -177,7 +177,7 @@ void SortableChunkVertexBuffer::render( const Vector3f& camera_position, const S
 
 void SortableChunkVertexBuffer::render_sorted(
     const DistanceIndexSet distance_indices,
-    const Vector3f& camera_position,
+    const Camera& camera,
     const Sky& sky,
     const BlockMaterial material,
     RendererMaterialManager& material_manager
@@ -201,7 +201,7 @@ void SortableChunkVertexBuffer::render_sorted(
     bind();
     glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
     num_elements_ = indices.size();
-    material_manager.configure_block_material( camera_position, sky, material );
+    material_manager.configure_block_material( camera, sky, material );
     ChunkVertexBuffer::render();
 }
 
@@ -209,7 +209,7 @@ void SortableChunkVertexBuffer::render_sorted(
 // Function definitions for AABoxVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
 
-AABoxVertexBuffer::AABoxVertexBuffer( const gmtl::AABoxf& aabb )
+AABoxVertexBuffer::AABoxVertexBuffer( const AABoxf& aabb )
 {
     const Vector3f& min = aabb.getMin();
     const Vector3f& max = aabb.getMax();
@@ -257,7 +257,7 @@ void AABoxVertexBuffer::render()
 // Function definitions for ChunkRenderer:
 //////////////////////////////////////////////////////////////////////////////////
 
-ChunkRenderer::ChunkRenderer( const Vector3f& centroid, const gmtl::AABoxf& aabb ) :
+ChunkRenderer::ChunkRenderer( const Vector3f& centroid, const AABoxf& aabb ) :
     aabb_vbo_( aabb ),
     centroid_( centroid ),
     aabb_( aabb ),
@@ -276,11 +276,11 @@ void ChunkRenderer::render_opaque( const BlockMaterial material, RendererMateria
     }
 }
 
-void ChunkRenderer::render_translucent( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager )
+void ChunkRenderer::render_translucent( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager )
 {
     if ( translucent_vbo_ )
     {
-        translucent_vbo_->render( camera_position, sky, material_manager );
+        translucent_vbo_->render( camera, sky, material_manager );
     }
 }
 
@@ -519,8 +519,8 @@ void SkyRenderer::render( const Sky& sky )
 
 void SkyRenderer::rotate_sky( const Vector2f& angle ) const
 {
-    glRotatef( 180 * angle[1] / gmtl::Math::PI, 0.0f, 1.0f, 0.0f );
-    glRotatef( -90 + 180 * angle[0] / gmtl::Math::PI, 1.0f, 0.0f, 0.0f );
+    glRotatef( 180.0f * angle[1] / gmtl::Math::PI, 0.0f, 1.0f, 0.0f );
+    glRotatef( -90.0f + 180.0f * angle[0] / gmtl::Math::PI, 1.0f, 0.0f, 0.0f );
 }
 
 void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f& color ) const
@@ -565,7 +565,7 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
 
             const Vector3f chunk_min = vector_cast<Scalar>( chunk.get_position() );
             const Vector3f chunk_max = chunk_min + vector_cast<Scalar>( Chunk::SIZE );
-            const gmtl::AABoxf aabb( chunk_min, chunk_max );
+            const AABoxf aabb( chunk_min, chunk_max );
 
             ChunkRendererSP renderer( new ChunkRenderer( centroid, aabb ) );
             chunk_renderer_it =
@@ -582,7 +582,7 @@ void Renderer::render( const Camera& camera, const World& world )
         camera.rotate();
         render_sky( world.get_sky() );
         camera.translate();
-        render_chunks( camera.get_position(), world.get_sky() );
+        render_chunks( camera, world.get_sky() );
     glPopMatrix();
 }
 
@@ -591,7 +591,7 @@ void Renderer::render_sky( const Sky& sky )
     sky_renderer_.render( sky );
 }
 
-void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
+void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 {
     // TODO: Decompose this function.
 
@@ -621,8 +621,8 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
         // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
         if ( gmtl::isInVolume( view_frustum, chunk_renderer.get_aabb() ) )
         {
-            const Vector3f camera_to_centroid = camera_position - chunk_renderer.get_centroid();
-            const Scalar distance_squared = gmtl::dot( camera_to_centroid, camera_to_centroid );
+            const Vector3f camera_to_centroid = camera.get_position() - chunk_renderer.get_centroid();
+            const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
             const DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
 
             const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
@@ -664,7 +664,7 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
         const BlockMaterial material = material_renderer_it->first;
         const ChunkRendererSet chunk_renderers = material_renderer_it->second;
 
-        material_manager_.configure_block_material( camera_position, sky, material );
+        material_manager_.configure_block_material( camera, sky, material );
 
         for ( ChunkRendererSet::const_iterator chunk_renderer_it = chunk_renderers.begin();
               chunk_renderer_it != chunk_renderers.end();
@@ -685,7 +685,7 @@ void Renderer::render_chunks( const Vector3f& camera_position, const Sky& sky )
 
     for ( ChunkRendererSet::const_reverse_iterator it = translucent_chunks.rbegin(); it != translucent_chunks.rend(); ++it )
     {
-        it->second->render_translucent( camera_position, sky, material_manager_ );
+        it->second->render_translucent( camera, sky, material_manager_ );
     }
 
     glDisable( GL_DEPTH_TEST );

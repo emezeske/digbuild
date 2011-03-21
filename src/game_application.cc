@@ -10,11 +10,12 @@ GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limi
     fps_limit_( fps_limit ),
     fps_last_time_( 0 ),
     fps_frame_count_( 0 ),
+    mouse_sensitivity_( 0.005f ),
     window_( window ),
     gui_focused_( false ),
-    camera_( Vector3f( -32.0f, 70.0f, -32.0f ), 0.15f, -25.0f, 225.0f ),
+    player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
-    world_( 0xeaafa35aaa8eafdf ), // FIXME: Using a constant for performance measurements.
+    world_( 0xeaafa35aaa8eafdf ), // FIXME: Using a constant for consistent performance measurements.
     gui_( window_.get_screen() )
 {
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
@@ -149,31 +150,35 @@ void GameApplication::handle_key_down_event( const int key, const int mod )
     switch ( key )
     {
         case SDLK_LSHIFT:
-            camera_.fast_move_mode( true );
+            player_.request_fast_move( true );
             break;
 
         case SDLK_w:
-            camera_.move_forward( true );
+            player_.request_move_forward( true );
             break;
 
         case SDLK_s:
-            camera_.move_backward( true );
+            player_.request_move_backward( true );
             break;
 
         case SDLK_a:
-            camera_.move_left( true );
+            player_.request_strafe_left( true );
             break;
 
         case SDLK_d:
-            camera_.move_right( true );
+            player_.request_strafe_right( true );
             break;
 
         case SDLK_e:
-            camera_.move_up( true );
+            player_.request_jump( true );
             break;
 
         case SDLK_q:
-            camera_.move_down( true );
+            player_.request_crouch( true );
+            break;
+
+        case SDLK_b:
+            player_.toggle_noclip();
             break;
 
         default:
@@ -186,31 +191,31 @@ void GameApplication::handle_key_up_event( const int key, const int mod )
     switch ( key )
     {
         case SDLK_LSHIFT:
-            camera_.fast_move_mode( false );
+            player_.request_fast_move( false );
             break;
 
         case SDLK_w:
-            camera_.move_forward( false );
+            player_.request_move_forward( false );
             break;
 
         case SDLK_s:
-            camera_.move_backward( false );
+            player_.request_move_backward( false );
             break;
 
         case SDLK_a:
-            camera_.move_left( false );
+            player_.request_strafe_left( false );
             break;
 
         case SDLK_d:
-            camera_.move_right( false );
+            player_.request_strafe_right( false );
             break;
 
         case SDLK_e:
-            camera_.move_up( false );
+            player_.request_jump( false );
             break;
 
         case SDLK_q:
-            camera_.move_down( false );
+            player_.request_crouch( false );
             break;
 
         case SDLK_ESCAPE:
@@ -225,7 +230,17 @@ void GameApplication::handle_key_up_event( const int key, const int mod )
 
 void GameApplication::handle_mouse_motion_event( const int button, const int x, const int y, const int xrel, const int yrel )
 {
-    camera_.handle_mouse_motion( xrel, yrel );
+    // When the SDL library is first started, it will generate a mouse motion event with the current
+    // position of the cursor.  We ignore it so that the initial camera settings remain intact.
+    static bool first_event = true;
+
+    if ( first_event )
+    {
+        first_event = false;
+        return;
+    }
+
+    player_.adjust_direction( mouse_sensitivity_ * Scalar( yrel ), mouse_sensitivity_ * Scalar( -xrel ) );
 }
 
 void GameApplication::handle_mouse_down_event( const int button, const int x, const int y, const int xrel, const int yrel )
@@ -269,7 +284,7 @@ void GameApplication::toggle_gui_focus()
 
 void GameApplication::do_one_step( const float step_time )
 {
-    camera_.do_one_step( step_time );
+    player_.do_one_step( step_time, world_ );
     world_.do_one_step( step_time );
     gui_.do_one_step( step_time );
 }
@@ -287,9 +302,10 @@ void GameApplication::render()
     }
 
     glClear( GL_DEPTH_BUFFER_BIT );
-    window_.reshape_window(); // FIXME: This makes Agar work.  Patch Agar instead?
+    window_.reshape_window();
 
-    renderer_.render( camera_, world_ );
+    Camera camera( player_.get_eye_position(), player_.get_pitch(), player_.get_yaw(), window_.get_draw_distance() );
+    renderer_.render( camera, world_ );
     gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
     gui_.render();
 

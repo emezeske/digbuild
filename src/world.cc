@@ -132,7 +132,7 @@ Sky::Sky( const uint64_t world_seed ) :
 void Sky::do_one_step( const float step_time )
 {
     time_of_day_ += DAY_CYCLE_SPEED * step_time;
-    time_of_day_ = time_of_day_ - gmtl::Math::floor( time_of_day_ );
+    time_of_day_ -= gmtl::Math::floor( time_of_day_ );
 
     // TODO: This is pretty ugly.  It would be nice to make it a bit more general.
 

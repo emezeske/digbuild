@@ -75,7 +75,7 @@ struct SortableChunkVertexBuffer : public ChunkVertexBuffer
 {
     SortableChunkVertexBuffer( const BlockMaterialV& materials, const BlockVertexV& vertices );
 
-    void render( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager );
+    void render( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager );
 
 private:
 
@@ -87,7 +87,7 @@ private:
 
     void render_sorted(
         const DistanceIndexSet distance_indices,
-        const Vector3f& camera_position,
+        const Camera& camera,
         const Sky& sky,
         const BlockMaterial material,
         RendererMaterialManager& material_manager
@@ -103,24 +103,24 @@ typedef std::set<BlockMaterial> BlockMaterialSet;
 
 struct AABoxVertexBuffer : public VertexBuffer
 {
-    AABoxVertexBuffer( const gmtl::AABoxf& aabb );
+    AABoxVertexBuffer( const AABoxf& aabb );
 
     void render();
 };
 
 struct ChunkRenderer
 {
-    ChunkRenderer( const Vector3f& centroid = Vector3f(), const gmtl::AABoxf& aabb = gmtl::AABoxf() );
+    ChunkRenderer( const Vector3f& centroid = Vector3f(), const AABoxf& aabb = AABoxf() );
 
     void render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager );
-    void render_translucent( const Vector3f& camera_position, const Sky& sky, RendererMaterialManager& material_manager );
+    void render_translucent( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager );
     void render_aabb();
     void rebuild( const Chunk& chunk );
 
     const BlockMaterialSet& get_opaque_materials() const { return opaque_materials_; }
     bool has_translucent_materials() const { return translucent_vbo_; }
     const Vector3f& get_centroid() const { return centroid_; }
-    const gmtl::AABoxf& get_aabb() const { return aabb_; }
+    const AABoxf& get_aabb() const { return aabb_; }
     unsigned get_num_triangles() const { return num_triangles_; }
 
 protected:
@@ -137,7 +137,7 @@ protected:
 
     Vector3f centroid_;
 
-    gmtl::AABoxf aabb_;
+    AABoxf aabb_;
 
     unsigned num_triangles_;
 };
@@ -199,7 +199,7 @@ struct Renderer
 
 protected:
 
-    void render_chunks( const Vector3f& camera_position, const Sky& sky );
+    void render_chunks( const Camera& camera, const Sky& sky );
     void render_sky( const Sky& sky );
     gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 

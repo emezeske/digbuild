@@ -42,6 +42,8 @@ struct Block
         MIN_LIGHT_LEVEL,
         MAX_LIGHT_LEVEL;
 
+    static const Vector3f SIZE;
+
     Block() :
         material_( BLOCK_MATERIAL_AIR ),
         sunlight_source_( 0 ),

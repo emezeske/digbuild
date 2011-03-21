@@ -32,6 +32,9 @@ void main()
     vec3 sun_specular = material_specularity * pow( sun_specularity, 16 ) * sun_lighting;
 
     vec3 color = texture_color.rgb * ( base_lighting + sun_bump ) + sun_specular;
+    // FIXME: Making the distant geometry fade out via alpha looks nice, but it will
+    //        do really weird stuff if, e.g., a player is inside a really tall house --
+    //        the sky will show through the roof!
     float fog_factor = clamp( ( fog_distance - fog_depth ) * 0.20f, 0.0f, 1.0f );
     gl_FragColor = vec4( color, fog_factor * texture_color.a );
 }

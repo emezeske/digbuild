@@ -20,6 +20,7 @@ SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uin
     screen_height_( h ), 
     screen_bpp_( bpp ),
     sdl_video_flags_( flags ),
+    draw_distance_( 250.0f ),
     title_( title )
 {
     if( SDL_Init( SDL_INIT_VIDEO ) == -1 )
@@ -98,7 +99,7 @@ void SDL_GL_Window::reshape_window()
 
     glMatrixMode( GL_PROJECTION );
     glLoadIdentity();
-    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 1.0f, 250.0f );
+    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 0.1f, draw_distance_ );
 
     glMatrixMode( GL_MODELVIEW );
     glLoadIdentity();

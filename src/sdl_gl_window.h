@@ -17,6 +17,9 @@ struct SDL_GL_Window
 
     SDL_Surface* get_screen() const { return screen_; }
 
+    float get_draw_distance() const { return draw_distance_; }
+    void set_draw_distance( const float draw_distance ) { draw_distance_ = draw_distance; }
+
 protected:
 
     void init_GL();
@@ -28,6 +31,8 @@ protected:
         screen_height_,
         screen_bpp_,
         sdl_video_flags_;
+
+    float draw_distance_;
 
     std::string title_;
 };

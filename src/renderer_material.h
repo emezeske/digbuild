@@ -59,7 +59,7 @@ struct RendererMaterialManager
 
     RendererMaterialManager();
 
-    void configure_block_material( const Vector3f& camera_position, const Sky& sky, const BlockMaterial material );
+    void configure_block_material( const Camera& camera, const Sky& sky, const BlockMaterial material );
     void deconfigure_block_material();
 
 protected:

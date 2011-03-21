@@ -21,7 +21,26 @@ enum CardinalRelation
     NUM_CARDINAL_RELATIONS
 };
 
-typedef std::vector<gmtl::AABoxf> AABoxfV;
+#define FOR_EACH_CARDINAL_RELATION( iterator_name )\
+    for ( CardinalRelation iterator_name = CARDINAL_RELATION_ABOVE;\
+          iterator_name != NUM_CARDINAL_RELATIONS;\
+          iterator_name = CardinalRelation( int( iterator_name ) + 1 ) )
+
+inline Vector3i cardinal_relation_vector( const CardinalRelation relation )
+{
+    switch ( relation )
+    {
+        case CARDINAL_RELATION_ABOVE: return Vector3i(  0,  1,  0 );
+        case CARDINAL_RELATION_BELOW: return Vector3i(  0, -1,  0 );
+        case CARDINAL_RELATION_NORTH: return Vector3i(  0,  0,  1 );
+        case CARDINAL_RELATION_SOUTH: return Vector3i(  0,  0, -1 );
+        case CARDINAL_RELATION_EAST:  return Vector3i(  1,  0,  0 );
+        case CARDINAL_RELATION_WEST:  return Vector3i( -1,  0,  0 );
+        default: throw std::runtime_error( "Invalid cardinal relation." );
+    }
+}
+
+typedef std::vector<AABoxf> AABoxfV;
 
 struct Chunk;
 

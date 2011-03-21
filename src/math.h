@@ -15,10 +15,13 @@ typedef gmtl::Vec<int32_t, 2> Vector2i;
 typedef gmtl::Vec<int32_t, 3> Vector3i;
 typedef gmtl::Vec<int32_t, 4> Vector4i;
 
+typedef gmtl::AABoxf AABoxf;
+typedef gmtl::AABox<int> AABoxi;
+
 template <typename ToDataType, typename FromDataType, unsigned Size>
-gmtl::VecBase<ToDataType, Size> vector_cast( const gmtl::VecBase<FromDataType, Size>& from )
+gmtl::Vec<ToDataType, Size> vector_cast( const gmtl::Vec<FromDataType, Size>& from )
 {
-    gmtl::VecBase<ToDataType, Size> to;
+    gmtl::Vec<ToDataType, Size> to;
 
     for ( unsigned i = 0; i < Size; ++i )
     {
@@ -29,34 +32,63 @@ gmtl::VecBase<ToDataType, Size> vector_cast( const gmtl::VecBase<FromDataType, S
 }
 
 template <typename DataType, unsigned Size>
-gmtl::VecBase<DataType, Size> pointwise_product(
-        const gmtl::VecBase<DataType, Size>& a,
-        const gmtl::VecBase<DataType, Size>& b
+gmtl::Vec<DataType, Size> pointwise_product(
+        const gmtl::Vec<DataType, Size>& a,
+        const gmtl::Vec<DataType, Size>& b
 )
 {
-    gmtl::VecBase<DataType, Size> result;
+    gmtl::Vec<DataType, Size> result;
 
     for ( unsigned i = 0; i < Size; ++i )
     {
-        result[i] = DataType( a[i] * b[i] );
+        result[i] = a[i] * b[i];
     }
 
     return result;
 }
 
 template <typename DataType, unsigned Size>
-gmtl::VecBase<DataType, Size> pointwise_quotient(
-        const gmtl::VecBase<DataType, Size>& n,
-        const gmtl::VecBase<DataType, Size>& d
-)
+gmtl::Vec<DataType, Size> pointwise_floor( const gmtl::Vec<DataType, Size>& v )
 {
-    gmtl::VecBase<DataType, Size> result;
+    gmtl::Vec<DataType, Size> result;
 
     for ( unsigned i = 0; i < Size; ++i )
     {
-        result[i] = DataType( n[i] / d[i] );
+        result[i] = gmtl::Math::floor( v[i] );
     }
 
+    return result;
+}
+
+template <typename DataType, unsigned Size>
+gmtl::Vec<DataType, Size> pointwise_ceil( const gmtl::Vec<DataType, Size>& v )
+{
+    gmtl::Vec<DataType, Size> result;
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        result[i] = gmtl::Math::ceil( v[i] );
+    }
+
+    return result;
+}
+
+template <typename DataType, unsigned Size>
+gmtl::Vec<DataType, Size> major_axis( const gmtl::Vec<DataType, Size>& v )
+{
+    gmtl::Vec<DataType, Size> result;
+    DataType max = 0.0f;
+    unsigned major = 0;
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        if ( v[i] > max )
+        {
+            major = i;
+        }
+    }
+
+    result[major] = 1.0f;
     return result;
 }
 

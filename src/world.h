@@ -1,6 +1,8 @@
 #ifndef WORLD_H
 #define WORLD_H
 
+#include <cstdlib>
+
 #include "world_generator.h"
 #include "chunk.h"
 
@@ -71,6 +73,31 @@ struct World
 
     const Sky& get_sky() const { return sky_; }
     const ChunkMap& get_chunks() const { return chunks_; }
+
+    const Block* get_block( const Vector3i& position ) const
+    {
+        // Use std::div() instead of '%' to ensure rounding towards zero.
+        const std::div_t
+            div_x = std::div( position[0], Chunk::SIZE_X ),
+            div_y = std::div( position[1], Chunk::SIZE_Y ),
+            div_z = std::div( position[2], Chunk::SIZE_Z );
+
+        // The remainder result of std::div() has the same sign of the numerator,
+        // but we just want its magnitude. 
+        const Vector3i block_index =
+            Vector3i( abs( div_x.rem ), abs( div_y.rem ), abs( div_z.rem ) );
+
+        const Vector3i chunk_position = position - block_index;
+
+        ChunkMap::const_iterator chunk_it = chunks_.find( chunk_position );
+
+        if ( chunk_it != chunks_.end() )
+        {
+            return &chunk_it->second->get_block( block_index );
+        }
+
+        return 0;
+    }
 
 protected:
 

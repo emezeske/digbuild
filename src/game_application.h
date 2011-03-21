@@ -5,7 +5,7 @@
 
 #include "sdl_gl_window.h"
 #include "renderer.h"
-#include "camera.h"
+#include "player.h"
 #include "world.h"
 #include "gui.h"
 
@@ -40,13 +40,15 @@ protected:
         fps_last_time_,
         fps_frame_count_;
 
+    Scalar mouse_sensitivity_;
+
     SDL_GL_Window &window_;
 
     bool gui_focused_;
 
     Renderer renderer_;
 
-    Camera camera_;
+    Player player_;
 
     World world_;
 
