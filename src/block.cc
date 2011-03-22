@@ -9,7 +9,8 @@ const Vector4i
     Block::MAX_LIGHT_LEVEL( 0x0f, 0x0f, 0x0f, 0x0f );
 
 const Vector3f
-    Block::SIZE( 1.0f, 1.0f, 1.0f );
+    Block::SIZE( 1.0f, 1.0f, 1.0f ),
+    Block::HALFSIZE( SIZE / 2.0f );
 
 //////////////////////////////////////////////////////////////////////////////////
 // Free function definitions:

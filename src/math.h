@@ -102,35 +102,16 @@ inline Vector3f spherical_to_cartesian( const Vector3f& spherical )
 }
 
 template <typename T>
-struct Vector2LexicographicLess : std::binary_function <T, T, bool>
+struct VectorLess : public std::binary_function <T, T, bool>
 {
     bool operator()( const T& x, const T& y ) const
     {
-        if ( x[0] < y[0] )
-            return true;
-        if ( x[0] > y[0] )
-            return false;
-        if ( x[1] < y[1] )
-            return true;
-        return false;
-    }
-};
+        for ( unsigned i = 0; i < T::Size; ++i )
+        {
+            if ( x[i] < y[i] ) return true;
+            else if ( x[i] > y[i] ) return false;
+        }
 
-template <typename T>
-struct Vector3LexicographicLess : std::binary_function <T, T, bool>
-{
-    bool operator()( const T& x, const T& y ) const
-    {
-        if ( x[0] < y[0] )
-            return true;
-        if ( x[0] > y[0] )
-            return false;
-        if ( x[1] < y[1] )
-            return true;
-        if ( x[1] > y[1] )
-            return false;
-        if ( x[2] < y[2] )
-            return true;
         return false;
     }
 };

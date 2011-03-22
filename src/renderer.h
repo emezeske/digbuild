@@ -9,6 +9,7 @@
 
 #include "camera.h"
 #include "world.h"
+#include "player.h"
 #include "renderer_material.h"
 
 struct VertexBuffer : public boost::noncopyable
@@ -192,7 +193,7 @@ struct Renderer
 
     void note_chunk_changes( const Chunk& chunk );
 
-    void render( const Camera& camera, const World& world );
+    void render( const Camera& camera, const World& world, const Player& player );
 
     unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
     unsigned get_num_triangles_drawn() const { return num_triangles_drawn_; }
@@ -205,7 +206,7 @@ protected:
 
     RendererMaterialManager material_manager_;
 
-    typedef std::map<Vector3i, ChunkRendererSP, Vector3LexicographicLess<Vector3i> > ChunkRendererMap;
+    typedef std::map<Vector3i, ChunkRendererSP, VectorLess<Vector3i> > ChunkRendererMap;
     ChunkRendererMap chunk_renderers_;
 
     SkyRenderer sky_renderer_;

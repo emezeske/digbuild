@@ -42,7 +42,9 @@ struct Block
         MIN_LIGHT_LEVEL,
         MAX_LIGHT_LEVEL;
 
-    static const Vector3f SIZE;
+    static const Vector3f
+        SIZE,
+        HALFSIZE;
 
     Block() :
         material_( BLOCK_MATERIAL_AIR ),

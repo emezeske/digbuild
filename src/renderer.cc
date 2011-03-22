@@ -576,13 +576,26 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
     }
 }
 
-void Renderer::render( const Camera& camera, const World& world )
+void Renderer::render( const Camera& camera, const World& world, const Player& player )
 {
     glPushMatrix();
         camera.rotate();
         render_sky( world.get_sky() );
         camera.translate();
         render_chunks( camera, world.get_sky() );
+
+        // FIXME: Collision debugging
+        glColor3f( 1.0f, 0.0f, 0.0f );
+        AABoxVertexBuffer obstructing_block_vbo( AABoxf( player.obstructing_block_position_, player.obstructing_block_position_ + Block::SIZE ) );
+        obstructing_block_vbo.render();
+
+        glEnable( GL_DEPTH_TEST );
+        glColor4f( 0.0f, 0.0f, 1.0f, 1.0f );
+        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+        AABoxVertexBuffer player_vbo( player.get_aabb() );
+        player_vbo.render();
+        glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+        glDisable( GL_DEPTH_TEST );
     glPopMatrix();
 }
 

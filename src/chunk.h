@@ -185,7 +185,7 @@ private:
 
 typedef boost::shared_ptr<Chunk> ChunkSP;
 typedef std::vector<ChunkSP> ChunkV;
-typedef std::map<Vector3i, ChunkSP, Vector3LexicographicLess<Vector3i> > ChunkMap;
+typedef std::map<Vector3i, ChunkSP, VectorLess<Vector3i> > ChunkMap;
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks );
 void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks );

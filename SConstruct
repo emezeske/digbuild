@@ -112,7 +112,7 @@ for path in env['CPPPATH']:
     env.Append( CCFLAGS = [ '-isystem%s' % path ] ) 
 
 env.Program( source = SOURCES, target = BINARY )
-env.Command( 'src/tags', SOURCES + HEADERS, 'ctags -o $TARGET $SOURCES' )
+env.Command( 'tags', SOURCES + HEADERS, 'ctags -o $TARGET $SOURCES' )
 
 env.Command( 'prof', BINARY, './%(binary)s && gprof %(binary)s > prof' % { 'binary' : BINARY } )
 env.Clean( 'prof', [ 'prof', 'gmon.out' ] )
@@ -121,4 +121,4 @@ env.AlwaysBuild( 'prof' )
 env.Command( 'run', BINARY, './' + BINARY )
 env.AlwaysBuild( 'run' )
 
-env.Default( [ BINARY, 'src/tags' ] )
+env.Default( [ BINARY, 'tags' ] )
