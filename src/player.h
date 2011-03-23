@@ -29,7 +29,7 @@ struct Player
     void request_crouch( const bool r ) { requesting_crouch_ = r; }
     void toggle_noclip() { noclip_mode_ = !noclip_mode_; }
 
-    Vector3f obstructing_block_position_;
+    Vector3f obstructing_block_position_; // FIXME For debugging.
 
 private:
 
@@ -88,9 +88,13 @@ private:
         NOCLIP_SPEED = 30.0f,
         NOCLIP_FAST_MOVE_FACTOR = 5.0f,
         GROUND_ACCELERATION = 100.0f,
-        AIR_ACCELERATION = 1.0f,
+        AIR_ACCELERATION = 10.0f,
         GRAVITY_ACCELERATION = -30.0f,
-        WALKING_SPEED = 5.0f;
+        WALKING_SPEED = 5.0f,
+        JUMP_VELOCITY = 9.0f;
+
+    static const long
+        JUMP_INTERVAL_MS = 300;
 
     Vector3f
         position_,
@@ -110,6 +114,8 @@ private:
         requesting_crouch_,
         noclip_mode_,
         feet_contacting_block_;
+
+    long last_jumped_at_;
 };
 
 #endif // PLAYER_H

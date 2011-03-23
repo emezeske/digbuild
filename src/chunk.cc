@@ -44,20 +44,6 @@ inline Scalar get_lighting_attenuation( const Scalar power )
     return lighting_attenuation_table[index];
 }
 
-inline CardinalRelation cardinal_relation_tangent( const CardinalRelation relation )
-{
-    switch ( relation )
-    {
-        case CARDINAL_RELATION_ABOVE: return CARDINAL_RELATION_NORTH;
-        case CARDINAL_RELATION_BELOW: return CARDINAL_RELATION_SOUTH;
-        case CARDINAL_RELATION_NORTH: return CARDINAL_RELATION_EAST;
-        case CARDINAL_RELATION_SOUTH: return CARDINAL_RELATION_WEST;
-        case CARDINAL_RELATION_EAST:  return CARDINAL_RELATION_ABOVE;
-        case CARDINAL_RELATION_WEST:  return CARDINAL_RELATION_BELOW;
-        default: throw std::runtime_error( "Invalid cardinal relation." );
-    }
-}
-
 inline Chunk* get_bottom_chunk_in_column( Chunk* chunk )
 {
     const Vector3i below = cardinal_relation_vector( CARDINAL_RELATION_BELOW );

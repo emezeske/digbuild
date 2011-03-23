@@ -116,4 +116,65 @@ struct VectorLess : public std::binary_function <T, T, bool>
     }
 };
 
+namespace gmtl
+{
+   // FIXME:  There is a bug in gmtl's default intersection function that causes it to
+   //         falsely report intersections if any component of the relative path between
+   //         box1 and box2 is zero.  I submitted a bug report with a patch, but until it
+   //         is merged in, I'm using this locally fixed version.
+
+    // FIXME: This function is really evolving into its own thing.  Maybe take it out
+    //        of the gmtl namespace, and stop calling it a bugfix.  And clean it up!
+    //
+    // TODO: Actually, is it broken at all?
+
+   template<class DATA_TYPE>
+   bool intersect_bugfix( const AABox<DATA_TYPE>& box1, const Vec<DATA_TYPE, 3>& path1,
+                          const AABox<DATA_TYPE>& box2,
+                          DATA_TYPE& intersection_time )
+   {
+      // Get the relative path (in normalized time)
+      const Vec<DATA_TYPE, 3> path = -path1;
+
+      Vec<DATA_TYPE, 3> axis_intersection_time(DATA_TYPE(0), DATA_TYPE(0), DATA_TYPE(0));
+
+      Vec<DATA_TYPE, 3> axis_gap_time(DATA_TYPE(1), DATA_TYPE(1), DATA_TYPE(1));
+
+      for (int i=0; i<3; ++i)
+      {
+         if ((box1.getMax()[i] < box2.getMin()[i]))
+         {
+            if (path[i] < DATA_TYPE(0))
+            {
+                axis_intersection_time[i] = (box1.getMax()[i] - box2.getMin()[i]) / path[i];
+            }
+            else return false;
+         }
+         else if ((box2.getMax()[i] < box1.getMin()[i]))
+         {
+            if (path[i] > DATA_TYPE(0))
+            {
+                axis_intersection_time[i] = (box1.getMin()[i] - box2.getMax()[i]) / path[i];
+            }
+            else return false;
+         }
+         else axis_intersection_time[i] = DATA_TYPE(0);
+
+         if ((box2.getMax()[i] > box1.getMin()[i]) && (path[i] < DATA_TYPE(0)))
+         {
+            axis_gap_time[i] = (box1.getMin()[i] - box2.getMax()[i]) / path[i];
+         }
+         else if ((box1.getMax()[i] > box2.getMin()[i]) && (path[i] > DATA_TYPE(0)))
+         {
+            axis_gap_time[i] = (box1.getMax()[i] - box2.getMin()[i]) / path[i];
+         }
+      }
+
+      intersection_time = Math::Max(axis_intersection_time[0], axis_intersection_time[1], axis_intersection_time[2]);
+      const DATA_TYPE gap_time = Math::Min(axis_gap_time[0], axis_gap_time[1], axis_gap_time[2]);
+
+      return intersection_time <= gap_time;
+   }
+}
+
 #endif // MATH_H

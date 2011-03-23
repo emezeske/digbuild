@@ -1,5 +1,8 @@
 #include <limits>
+#include <iomanip>
+#include <SDL/SDL.h>
 
+#include "cardinal_relation.h"
 #include "player.h"
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -26,7 +29,8 @@ Player::Player( const Vector3f& position, const Scalar pitch, const Scalar yaw )
     requesting_jump_( false ),
     requesting_crouch_( false ),
     noclip_mode_( true ),
-    feet_contacting_block_( false )
+    feet_contacting_block_( false ),
+    last_jumped_at_( 0 )
 {
 }
 
@@ -60,7 +64,9 @@ void Player::do_one_step_clip( const float step_time, const World& world )
     feet_contacting_block_ = false;
     Scalar time_simulated = 0.0f;
 
-    for ( int steps = 0; steps < 3 && time_simulated + gmtl::GMTL_EPSILON < step_time; ++steps ) // TODO: Sufficient?
+    // TODO: Is a maximum of 3 step slices sufficient?
+
+    for ( int steps = 0; steps < 3 && time_simulated < step_time; ++steps )
     {
         const Scalar step_time_slice = ( step_time - time_simulated );
         const Vector3f movement = velocity_ * step_time_slice;
@@ -74,8 +80,8 @@ void Player::do_one_step_clip( const float step_time, const World& world )
         }
         else
         {
-            time_simulated += step_time_slice;
             position_ += movement;
+            break;
         }
     }
 }
@@ -118,13 +124,15 @@ void Player::accelerate_vertical( const float step_time )
 {
     if ( feet_contacting_block_ )
     {
-        if ( requesting_jump_ )
+        const long now = SDL_GetTicks();
+
+        if ( requesting_jump_ && last_jumped_at_ + JUMP_INTERVAL_MS < now )
         {
-            velocity_[1] += 8.0f; // TODO Temporary
+            last_jumped_at_ = now;
+            velocity_[1] += JUMP_VELOCITY;
         }
     }
-
-    velocity_[1] += GRAVITY_ACCELERATION * step_time;
+    else velocity_[1] += GRAVITY_ACCELERATION * step_time;
 }
 
 bool Player::find_collision( const World& world, const Vector3f& movement, BlockCollision& collision )
@@ -138,69 +146,82 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
     PotentialObstructionSet potential_obstructions;
     get_potential_obstructions( world, movement, potential_obstructions );
 
+    // Determine whether each potential obstruction actually intersects with the Player's AABB at
+    // some point in its movement.  If there are multiple potential collisions, only return the
+    // one that would happen at the earliest point in time.
     for ( PotentialObstructionSet::const_iterator obstruction_it = potential_obstructions.begin();
           obstruction_it != potential_obstructions.end();
           ++obstruction_it )
     {
-        const Vector3f block_position = vector_cast<Scalar>( obstruction_it->block_position_ );
+        const Vector3f block_position = obstruction_it->block_position_;
         const Block& block = *obstruction_it->block_;
         const AABoxf
             player_bounds = get_aabb(),
             block_bounds( block_position, block_position + Block::SIZE );
 
-        Scalar
-            normalized_first_contact,
-            normalized_second_contact;
+        Scalar normalized_first_contact;
 
-        const bool intersected = gmtl::intersect(
-            player_bounds,
-            movement,
-            block_bounds,
-            Vector3f(),
-            normalized_first_contact,
-            normalized_second_contact
-        );
+        const bool intersected =
+            gmtl::intersect_bugfix( player_bounds, movement, block_bounds, normalized_first_contact );
 
+        // The normalized contact time can be outside the range [0,1], but we're only interested
+        // in values in [0,1], because they map to vectors within the movement vector.
         if ( intersected &&
              normalized_first_contact >= 0.0f &&
              normalized_first_contact <= 1.0f &&
              normalized_first_contact < collision.normalized_time_ )
         {
+            // Determine which face of the Block the Player is colliding with by measuring the
+            // distance between the corresponding pairs of AABB planes (e.g. bottom & top) on the
+            // Player and the Block, and choosing the face with the smallest distance.
             Scalar min_distance_squared = std::numeric_limits<Scalar>::max();
             Vector3f collision_normal;
             CardinalRelation collision_relation = CARDINAL_RELATION_BELOW;
 
             FOR_EACH_CARDINAL_RELATION( relation )
             {
-                const Vector3f
-                    player_centroid = position_ + HALFSIZE,
-                    block_centroid = block_position + Block::HALFSIZE,
-                    player_normal = vector_cast<Scalar>( cardinal_relation_vector( relation ) ),
-                    block_normal = -player_normal,
-                    player_plane_point = player_centroid + pointwise_product( player_normal, HALFSIZE ),
-                    block_plane_point = block_centroid + pointwise_product( block_normal, Block::HALFSIZE ),
-                    block_face_to_player_face = player_plane_point - block_plane_point;
+                // Make sure that the face that the Player is colliding with is reachable;
+                // e.g. its not obstructed by another block.
+                const Vector3i block_neighbor_offset =
+                    cardinal_relation_vector( cardinal_relation_reverse( relation ) );
+                const Block* block_neighbor =
+                    world.get_block( vector_cast<int>( block_position ) + block_neighbor_offset );
 
-                const Scalar distance_squared = gmtl::lengthSquared( block_face_to_player_face );
-
-                if ( distance_squared < min_distance_squared )
+                // TODO: Use a material attribute instead.
+                if ( !block_neighbor || block_neighbor->get_material() == BLOCK_MATERIAL_AIR )
                 {
-                    min_distance_squared = distance_squared;
-                    collision_normal = player_normal;
-                    collision_relation = relation;
+                    const Vector3f
+                        player_centroid = position_ + normalized_first_contact * movement + HALFSIZE,
+                        block_centroid = block_position + Block::HALFSIZE,
+                        player_normal = vector_cast<Scalar>( cardinal_relation_vector( relation ) ),
+                        block_normal = -player_normal,
+                        player_plane_point = player_centroid + pointwise_product( player_normal, HALFSIZE ),
+                        block_plane_point = block_centroid + pointwise_product( block_normal, Block::HALFSIZE );
+
+                    const Scalar
+                        player_plane_offset = dot( player_plane_point, player_normal ),
+                        block_plane_offset = dot( block_plane_point, player_normal ),
+                        dplane_offset = gmtl::Math::abs( player_plane_offset - block_plane_offset );
+
+                    if ( dplane_offset < min_distance_squared )
+                    {
+                        min_distance_squared = dplane_offset;
+                        collision_normal = player_normal;
+                        collision_relation = relation;
+                    }
                 }
             }
 
-            if ( collision_relation == CARDINAL_RELATION_BELOW )
+            // If normalized_first_contact is zero, it indicates that the Player was already intersecting
+            // with the Block before it moved.  In this case, the collision is ignored if the Player's
+            // velocity is directed away from the block.
+            if ( normalized_first_contact > 0.0f || gmtl::dot( movement, collision_normal ) > 0.0f )
             {
-                feet_contacting_block_ = true;
-            }
+                if ( collision_relation == CARDINAL_RELATION_BELOW )
+                {
+                    feet_contacting_block_ = true;
+                }
 
-            // If normalized_first_contact is very small, it indicates that the Player was already
-            // intersecting with the Block before it moved.  In this case, the collision is ignored
-            // if the Player's velocity is directed away from the block.
-            if ( normalized_first_contact > 1.0e-6f || gmtl::dot( movement, collision_normal ) > 0.001f )
-            {
                 collision_found = true;
                 collision.normalized_time_ = normalized_first_contact;
                 collision.block_position_ = block_position;
@@ -256,8 +277,6 @@ void Player::get_potential_obstructions( const World& world, const Vector3f& mov
 
 void Player::resolve_collision( const Vector3f& movement, BlockCollision& collision )
 {
-    // FIXME debugging
-    // std::cout << "p: " << position_ << ", m: " << movement << ", nt: " << collision.normalized_time_ << ", bp: " << collision.block_position_ << std::endl;
     position_ += movement * collision.normalized_time_;
 
     if ( collision.player_face_ == CARDINAL_RELATION_BELOW )
