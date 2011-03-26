@@ -2,6 +2,7 @@
 #define WORLD_H
 
 #include <cstdlib>
+#include <set>
 
 #include "world_generator.h"
 #include "chunk.h"
@@ -65,6 +66,8 @@ protected:
         moon_angle_;
 };
 
+typedef std::set<Chunk*> ChunkSet;
+
 struct World
 {
     World( const uint64_t world_seed );
@@ -74,7 +77,7 @@ struct World
     const Sky& get_sky() const { return sky_; }
     const ChunkMap& get_chunks() const { return chunks_; }
 
-    const Block* get_block( const Vector3i& position ) const
+    BlockIterator get_block( const Vector3i& position ) const
     {
         // Use std::div() instead of '%' to ensure rounding towards zero.
         const std::div_t
@@ -82,24 +85,59 @@ struct World
             div_y = std::div( position[1], Chunk::SIZE_Y ),
             div_z = std::div( position[2], Chunk::SIZE_Z );
 
-        // The remainder result of std::div() has the same sign of the numerator,
-        // but we just want its magnitude. 
-        const Vector3i block_index =
-            Vector3i( abs( div_x.rem ), abs( div_y.rem ), abs( div_z.rem ) );
+        BlockIterator result;
+        result.index_ = Vector3i( div_x.rem, div_y.rem, div_z.rem );
 
-        const Vector3i chunk_position = position - block_index;
+        // Wrap negative remainders back into the correct block index range.
+        for ( int i = 0; i < 3; ++i )
+        {
+            if ( result.index_[i] < 0 )
+            {
+                result.index_[i] += Chunk::SIZE[i];
+            }
+        }
 
+        const Vector3i chunk_position = position - result.index_;
         ChunkMap::const_iterator chunk_it = chunks_.find( chunk_position );
 
         if ( chunk_it != chunks_.end() )
         {
-            return &chunk_it->second->get_block( block_index );
+            result.chunk_ = chunk_it->second.get();
+            result.block_ = &chunk_it->second->get_block( result.index_ );
         }
 
-        return 0;
+        return result;
+    }
+
+    void mark_chunk_for_update( Chunk* chunk )
+    {
+        chunks_needing_update_.insert( chunk );
+    }
+
+    // This function updates the Chunk lighting and geometry, and returns the set
+    // of Chunks that have been modified.
+    ChunkSet update_chunks()
+    {
+        // TODO: Update the lighting on adjacent and upper Chunks.  Make sure
+        //       lighting is performed from the top town, to propagate sunlight.
+
+        ChunkSet chunks = chunks_needing_update_;
+        chunks_needing_update_.clear();
+
+        for ( ChunkSet::const_iterator chunk_it = chunks.begin();
+              chunk_it != chunks.end();
+              ++chunk_it )
+        {
+            chunk_apply_lighting( **chunk_it );
+            ( *chunk_it )->update_geometry();
+        }
+
+        return chunks;
     }
 
 protected:
+
+    ChunkSet chunks_needing_update_;
 
     WorldGenerator generator_;
 

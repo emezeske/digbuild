@@ -11,11 +11,12 @@ struct Player
 {
     Player( const Vector3f& position, const Scalar pitch, const Scalar yaw );
 
-    void do_one_step( const float step_time, const World& world );
+    void do_one_step( const float step_time, World& world );
     void adjust_direction( const Scalar dpitch, const Scalar dyaw );
 
     const Vector3f& get_position() const { return position_; }
     Vector3f get_eye_position() const;
+    Vector3f get_eye_direction() const;
     Scalar get_pitch() const { return pitch_; }
     Scalar get_yaw() const { return yaw_; }
     AABoxf get_aabb() const { return AABoxf( position_, position_ + SIZE ); }
@@ -27,6 +28,8 @@ struct Player
     void request_strafe_right( const bool r ) { requesting_strafe_right_ = r; }
     void request_jump( const bool r ) { requesting_jump_ = r; }
     void request_crouch( const bool r ) { requesting_crouch_ = r; }
+    void request_primary_fire( const bool r ) { requesting_primary_fire_ = r; }
+
     void toggle_noclip() { noclip_mode_ = !noclip_mode_; }
 
     Vector3f obstructing_block_position_; // FIXME For debugging.
@@ -74,13 +77,22 @@ private:
 
     void do_one_step_noclip( const float step_time );
     void do_one_step_clip( const float step_time, const World& world );
+    void do_primary_fire( const float step_time, World& world );
     void accelerate( const float step_time );
     void accelerate_lateral( const float step_time );
     void accelerate_vertical( const float step_time );
     bool find_collision( const World& world, const Vector3f& movement, BlockCollision& collision );
-    void get_potential_obstructions( const World& world, const Vector3f& movement, PotentialObstructionSet& potential_obstructions );
     void resolve_collision( const Vector3f& movement, BlockCollision& collision );
-    
+
+    // TODO: Make get_potential_obstructions() take a LineSegF argument instead of origin+movement?
+    void get_potential_obstructions(
+        const World& world,
+        const Vector3f& origin,
+        const Vector3f& movement,
+        const Vector3f& sweep_size,
+        PotentialObstructionSet& potential_obstructions
+    );
+
     void noclip_move_forward( const Scalar movement_units );
     void noclip_strafe( const Scalar movement_units );
 
@@ -91,10 +103,12 @@ private:
         AIR_ACCELERATION = 10.0f,
         GRAVITY_ACCELERATION = -30.0f,
         WALKING_SPEED = 5.0f,
-        JUMP_VELOCITY = 9.0f;
+        JUMP_VELOCITY = 9.0f,
+        PRIMARY_FIRE_DISTANCE = 3.0f;
 
     static const long
-        JUMP_INTERVAL_MS = 300;
+        JUMP_INTERVAL_MS = 300,
+        PRIMARY_FIRE_INTERVAL_MS = 300;
 
     Vector3f
         position_,
@@ -112,10 +126,13 @@ private:
         requesting_strafe_right_,
         requesting_jump_,
         requesting_crouch_,
+        requesting_primary_fire_,
         noclip_mode_,
         feet_contacting_block_;
 
-    long last_jumped_at_;
+    long
+        last_jump_at_,
+        last_primary_fire_at_;
 };
 
 #endif // PLAYER_H

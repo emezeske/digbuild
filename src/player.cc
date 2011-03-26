@@ -28,19 +28,22 @@ Player::Player( const Vector3f& position, const Scalar pitch, const Scalar yaw )
     requesting_strafe_right_( false ),
     requesting_jump_( false ),
     requesting_crouch_( false ),
+    requesting_primary_fire_( false ),
     noclip_mode_( true ),
     feet_contacting_block_( false ),
-    last_jumped_at_( 0 )
+    last_jump_at_( 0 )
 {
 }
 
-void Player::do_one_step( const float step_time, const World& world )
+void Player::do_one_step( const float step_time, World& world )
 {
     if ( noclip_mode_ )
     {
         do_one_step_noclip( step_time );
     }
     else do_one_step_clip( step_time, world );
+
+    do_primary_fire( step_time, world );
 }
 
 void Player::do_one_step_noclip( const float step_time )
@@ -86,6 +89,60 @@ void Player::do_one_step_clip( const float step_time, const World& world )
     }
 }
 
+void Player::do_primary_fire( const float step_time, World& world )
+{
+    const long now = SDL_GetTicks();
+
+    if ( requesting_primary_fire_ && last_primary_fire_at_ + PRIMARY_FIRE_INTERVAL_MS < now )
+    {
+        last_primary_fire_at_ = now;
+
+        const Vector3f
+            fire_begin = get_eye_position(),
+            fire_end = fire_begin + get_eye_direction() * PRIMARY_FIRE_DISTANCE;
+
+        const gmtl::LineSegf fire_line = gmtl::LineSegf( gmtl::Point3f( fire_begin ), gmtl::Point3f( fire_end ) );
+
+        PotentialObstructionSet potential_obstructions;
+        get_potential_obstructions( world, fire_line.mOrigin, fire_line.mDir, Vector3f(), potential_obstructions );
+
+        Scalar normalized_hit_time = std::numeric_limits<Scalar>::max();
+        bool hit_found;
+        Vector3i hit_block_position;
+
+        for ( PotentialObstructionSet::const_iterator obstruction_it = potential_obstructions.begin();
+              obstruction_it != potential_obstructions.end();
+              ++obstruction_it )
+        {
+            const Vector3f block_position = obstruction_it->block_position_;
+            const AABoxf block_bounds( block_position, block_position + Block::SIZE );
+
+            unsigned num_hits;
+
+            Scalar
+                normalized_time_in,
+                normalized_time_out;
+
+            const bool intersected =
+                gmtl::intersect( fire_line, block_bounds, num_hits, normalized_time_in, normalized_time_out );
+
+            if ( intersected && normalized_time_in < normalized_hit_time )
+            {
+                normalized_hit_time = normalized_time_in;
+                hit_found = true;
+                hit_block_position = vector_cast<int>( block_position );
+            }
+        }
+
+        if ( hit_found )
+        {
+            BlockIterator block_it = world.get_block( hit_block_position );
+            block_it.block_->set_material( BLOCK_MATERIAL_AIR );
+            world.mark_chunk_for_update( block_it.chunk_ ); 
+        }
+    }
+}
+
 void Player::accelerate( const float step_time )
 {
     accelerate_lateral( step_time );
@@ -126,9 +183,9 @@ void Player::accelerate_vertical( const float step_time )
     {
         const long now = SDL_GetTicks();
 
-        if ( requesting_jump_ && last_jumped_at_ + JUMP_INTERVAL_MS < now )
+        if ( requesting_jump_ && last_jump_at_ + JUMP_INTERVAL_MS < now )
         {
-            last_jumped_at_ = now;
+            last_jump_at_ = now;
             velocity_[1] += JUMP_VELOCITY;
         }
     }
@@ -144,7 +201,7 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
     collision.block_position_ = Vector3f();
 
     PotentialObstructionSet potential_obstructions;
-    get_potential_obstructions( world, movement, potential_obstructions );
+    get_potential_obstructions( world, vector_cast<Scalar>( position_ ), movement, vector_cast<Scalar>( SIZE ), potential_obstructions );
 
     // Determine whether each potential obstruction actually intersects with the Player's AABB at
     // some point in its movement.  If there are multiple potential collisions, only return the
@@ -185,7 +242,7 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
                 const Vector3i block_neighbor_offset =
                     cardinal_relation_vector( cardinal_relation_reverse( relation ) );
                 const Block* block_neighbor =
-                    world.get_block( vector_cast<int>( block_position ) + block_neighbor_offset );
+                    world.get_block( vector_cast<int>( block_position ) + block_neighbor_offset ).block_;
 
                 // TODO: Use a material attribute instead.
                 if ( !block_neighbor || block_neighbor->get_material() == BLOCK_MATERIAL_AIR )
@@ -231,48 +288,6 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
     }
 
     return collision_found;
-}
-
-void Player::get_potential_obstructions( const World& world, const Vector3f& movement, PotentialObstructionSet& potential_obstructions )
-{
-    // This function slides the Player's bounding box along its movement vector in steps
-    // of one unit, and collects all of the Blocks that the bounding box might intersect
-    // with along the way.  Right now it's overzealous, and probably returns more Blocks
-    // than it really needs to.
-
-    const float movement_magnitude_squared = gmtl::lengthSquared( movement );
-    const Vector3f unit_movement = movement / gmtl::Math::sqrt( movement_magnitude_squared );
-    Vector3f movement_step;
-
-    while ( gmtl::lengthSquared( movement_step ) < movement_magnitude_squared )
-    {
-        const AABoxi index_bounds(
-            vector_cast<int>( pointwise_floor( Vector3f( position_ + movement_step - Block::SIZE ) ) ),
-            vector_cast<int>( pointwise_ceil( Vector3f( position_ + movement_step + SIZE + Block::SIZE ) ) )
-        );
-
-        for ( int x = index_bounds.getMin()[0]; x < index_bounds.getMax()[0]; ++x )
-        {
-            for ( int y = index_bounds.getMin()[1]; y < index_bounds.getMax()[1]; ++y )
-            {
-                for ( int z = index_bounds.getMin()[2]; z < index_bounds.getMax()[2]; ++z )
-                {
-                    const Vector3i block_position( x, y, z );
-                    const Block* block = world.get_block( block_position );
-
-                    // TODO: Use a material attribute instead.
-                    if ( block && block->get_material() != BLOCK_MATERIAL_AIR )
-                    {
-                        potential_obstructions.insert(
-                            PotentialObstruction( vector_cast<Scalar>( block_position ), block )
-                        );
-                    }
-                }
-            }
-        }
-
-        movement_step += unit_movement;
-    }
 }
 
 void Player::resolve_collision( const Vector3f& movement, BlockCollision& collision )
@@ -326,9 +341,64 @@ Vector3f Player::get_eye_position() const
     return position_ + Vector3f( HALFSIZE[0], EYE_HEIGHT, HALFSIZE[2] );
 }
 
+Vector3f Player::get_eye_direction() const
+{
+    return spherical_to_cartesian( Vector3f( 1.0f, pitch_, yaw_ ) );
+}
+
+void Player::get_potential_obstructions(
+    const World& world,
+    const Vector3f& origin,
+    const Vector3f& sweep,
+    const Vector3f& sweep_size,
+    PotentialObstructionSet& potential_obstructions
+)
+{
+    // TODO: Fix this comment
+
+    // This function slides the Player's bounding box along its sweep vector in steps
+    // of one unit, and collects all of the Blocks that the bounding box might intersect
+    // with along the way.  Right now it's overzealous, and probably returns more Blocks
+    // than it really needs to.
+
+    const float sweep_length_squared = gmtl::lengthSquared( sweep );
+    const Vector3f unit_sweep = sweep / gmtl::Math::sqrt( sweep_length_squared );
+    Vector3f sweep_step;
+
+    while ( gmtl::lengthSquared( sweep_step ) < sweep_length_squared )
+    {
+        const AABoxi index_bounds(
+            vector_cast<int>( pointwise_floor( Vector3f( origin + sweep_step - Block::SIZE ) ) ),
+            vector_cast<int>( pointwise_ceil( Vector3f( origin + sweep_step + Block::SIZE + sweep_size ) ) )
+        );
+
+        for ( int x = index_bounds.getMin()[0]; x < index_bounds.getMax()[0]; ++x )
+        {
+            for ( int y = index_bounds.getMin()[1]; y < index_bounds.getMax()[1]; ++y )
+            {
+                for ( int z = index_bounds.getMin()[2]; z < index_bounds.getMax()[2]; ++z )
+                {
+                    const Vector3i block_position( x, y, z );
+                    const Block* block = world.get_block( block_position ).block_;
+
+                    // TODO: Use a material attribute instead.
+                    if ( block && block->get_material() != BLOCK_MATERIAL_AIR )
+                    {
+                        potential_obstructions.insert(
+                            PotentialObstruction( vector_cast<Scalar>( block_position ), block )
+                        );
+                    }
+                }
+            }
+        }
+
+        sweep_step += unit_sweep;
+    }
+}
+
 void Player::noclip_move_forward( const Scalar movement_units )
 {
-    position_ += spherical_to_cartesian( Vector3f( 1.0f, pitch_, yaw_ ) ) * movement_units;
+    position_ += get_eye_direction() * movement_units;
 }
 
 void Player::noclip_strafe( const Scalar movement_units )

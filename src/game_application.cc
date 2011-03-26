@@ -14,8 +14,8 @@ GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limi
     window_( window ),
     gui_focused_( false ),
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
-    // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 )
-    world_( 0xeaafa35aaa8eafdf ), // FIXME: Using a constant for consistent performance measurements.
+    world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
+    // world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
     gui_( window_.get_screen() )
 {
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
@@ -100,7 +100,7 @@ void GameApplication::process_events()
 
 void GameApplication::handle_event( SDL_Event &event )
 {
-    if ( event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_SPACE )
+    if ( event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_e )
     {
         toggle_gui_focus();
         return;
@@ -169,7 +169,7 @@ void GameApplication::handle_key_down_event( const int key, const int mod )
             player_.request_strafe_right( true );
             break;
 
-        case SDLK_e:
+        case SDLK_SPACE:
             player_.request_jump( true );
             break;
 
@@ -210,7 +210,7 @@ void GameApplication::handle_key_up_event( const int key, const int mod )
             player_.request_strafe_right( false );
             break;
 
-        case SDLK_e:
+        case SDLK_SPACE:
             player_.request_jump( false );
             break;
 
@@ -248,6 +248,7 @@ void GameApplication::handle_mouse_down_event( const int button, const int x, co
     switch ( button )
     {
         case SDL_BUTTON_LEFT:
+            player_.request_primary_fire( true );
             break;
         case SDL_BUTTON_RIGHT:
             break;
@@ -259,6 +260,7 @@ void GameApplication::handle_mouse_up_event( const int button, const int x, cons
     switch ( button )
     {
         case SDL_BUTTON_LEFT:
+            player_.request_primary_fire( false );
             break;
         case SDL_BUTTON_RIGHT:
             break;
@@ -287,6 +289,15 @@ void GameApplication::do_one_step( const float step_time )
     player_.do_one_step( step_time, world_ );
     world_.do_one_step( step_time );
     gui_.do_one_step( step_time );
+
+    ChunkSet chunks_needing_update = world_.update_chunks();
+
+    for ( ChunkSet::const_iterator chunk_it = chunks_needing_update.begin();
+          chunk_it != chunks_needing_update.end();
+          ++chunk_it )
+    {
+        renderer_.note_chunk_changes( **chunk_it );
+    }
 }
 
 void GameApplication::render()

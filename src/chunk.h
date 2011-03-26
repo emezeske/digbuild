@@ -47,6 +47,12 @@ struct Chunk : public boost::noncopyable
         return blocks_[index[0]][index[1]][index[2]];
     }
 
+    void set_block( const Vector3i& index, const Block& block )
+    {
+        assert( block_in_range( index ) );
+        blocks_[index[0]][index[1]][index[2]] = block;
+    }
+
     BlockIterator get_block_neighbor( const Vector3i& index, const Vector3i& relation )
     {
         assert( relation_in_range( relation ) );
