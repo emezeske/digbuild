@@ -10,8 +10,6 @@
 #include "cardinal_relation.h"
 #include "block.h"
 
-typedef std::vector<AABoxf> AABoxfV;
-
 struct Chunk;
 
 struct BlockIterator
@@ -105,12 +103,20 @@ struct Chunk : public boost::noncopyable
         get_neighbor_impl( relation ) = new_neighbor;
     }
 
+    Chunk* get_column_bottom()
+    {
+        return get_extreme( CARDINAL_RELATION_BELOW );
+    }
+
+    Chunk* get_column_top()
+    {
+        return get_extreme( CARDINAL_RELATION_ABOVE );
+    }
+
     void reset_lighting();
     void update_geometry();
 
     const BlockFaceV& get_external_faces() const { return external_faces_; }
-
-    const AABoxfV& get_collision_boxes() const { return collision_boxes_; }
 
 private:
 
@@ -133,6 +139,21 @@ private:
         return neighbors_[relation[0] + 1][relation[1] + 1][relation[2] + 1];
     }
 
+    Chunk* get_extreme( const CardinalRelation relation )
+    {
+        const Vector3i direction = cardinal_relation_vector( relation );
+        Chunk* chunk = this;
+        Chunk* bottom = 0;
+
+        while ( chunk )
+        {
+            bottom = chunk;
+            chunk = chunk->get_neighbor( direction );
+        }
+
+        return bottom;
+    }
+
     void add_external_face(
         const Vector3i& block_index,
         const Vector3f& block_position,
@@ -153,8 +174,6 @@ private:
     Block blocks_[SIZE_X][SIZE_Y][SIZE_Z];
 
     BlockFaceV external_faces_;
-
-    AABoxfV collision_boxes_;
 
     Chunk* neighbors_[3][3][3];
 };

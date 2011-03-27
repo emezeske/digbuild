@@ -77,6 +77,10 @@ struct World
     const Sky& get_sky() const { return sky_; }
     const ChunkMap& get_chunks() const { return chunks_; }
 
+    // This function updates the Chunk lighting and geometry, and returns the set
+    // of Chunks that have been modified.
+    ChunkSet update_chunks();
+
     BlockIterator get_block( const Vector3i& position ) const
     {
         // Use std::div() instead of '%' to ensure rounding towards zero.
@@ -111,33 +115,19 @@ struct World
 
     void mark_chunk_for_update( Chunk* chunk )
     {
-        chunks_needing_update_.insert( chunk );
-    }
-
-    // This function updates the Chunk lighting and geometry, and returns the set
-    // of Chunks that have been modified.
-    ChunkSet update_chunks()
-    {
-        // TODO: Update the lighting on adjacent and upper Chunks.  Make sure
-        //       lighting is performed from the top town, to propagate sunlight.
-
-        ChunkSet chunks = chunks_needing_update_;
-        chunks_needing_update_.clear();
-
-        for ( ChunkSet::const_iterator chunk_it = chunks.begin();
-              chunk_it != chunks.end();
-              ++chunk_it )
-        {
-            chunk_apply_lighting( **chunk_it );
-            ( *chunk_it )->update_geometry();
-        }
-
-        return chunks;
+        assert( chunk );
+        columns_needing_update_.insert( chunk->get_column_bottom() );
     }
 
 protected:
 
-    ChunkSet chunks_needing_update_;
+    Chunk* get_chunk( const Vector3i& position )
+    {
+        ChunkMap::const_iterator it = chunks_.find( position );
+        return it == chunks_.end() ? 0 : it->second.get();
+    }
+
+    ChunkSet columns_needing_update_;
 
     WorldGenerator generator_;
 

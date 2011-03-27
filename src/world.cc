@@ -227,3 +227,101 @@ void World::do_one_step( const float step_time )
 {
     sky_.do_one_step( step_time );
 }
+
+ChunkSet World::update_chunks()
+{
+    // If a Chunk is modified, it is not sufficient to simply rebuild the lighting/geometry
+    // for that Chunk.  Rather, all adjacent Chunks, and any Chunks below it or its neighbors
+    // must be updated, to ensure that lighting is propagated correctly (including sunlight).
+
+    // TODO: This function is (I think) technically correct now, but it needs to be optimized
+    //       massively.  It should probably be using worker threads so that a lot of this stuff
+    //       can be done in parallel.
+
+    ChunkSet reset_columns;
+    ChunkSet light_columns;
+
+    for ( ChunkSet::const_iterator column_it = columns_needing_update_.begin();
+          column_it != columns_needing_update_.end();
+          ++column_it )
+    {
+        const Vector3i base_position = ( *column_it )->get_position();
+
+        // TODO Explain
+        //
+        // A A A A A
+        // A R R R A
+        // A R R R A
+        // A R R R A
+        // A A A A A
+
+        for ( int x = -2; x <= 2; ++x )
+        {
+            for ( int z = -2; z <= 2; ++z )
+            {
+                const Vector3i position =
+                    base_position + Vector3i( x * Chunk::SIZE_X, 0, z * Chunk::SIZE_Z );
+
+                Chunk* chunk = get_chunk( position );
+                
+                if ( chunk )
+                {
+                    Chunk* column_top = chunk->get_column_top();
+                    light_columns.insert( column_top );
+
+                    if ( abs( x ) != 2 && abs( z ) != 2 )
+                    {
+                        reset_columns.insert( column_top );
+                    }
+                }
+            }
+        }
+    }
+
+    columns_needing_update_.clear();
+    ChunkSet chunks_updated;
+
+    // TODO: Remove some of this duplication.
+
+    for ( ChunkSet::const_iterator column_it = reset_columns.begin();
+          column_it != reset_columns.end();
+          ++column_it )
+    {
+        Chunk* chunk = *column_it;
+
+        while ( chunk )
+        {
+            chunk->reset_lighting();
+            chunks_updated.insert( chunk );
+            chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
+        }
+    }
+
+    for ( ChunkSet::const_iterator column_it = light_columns.begin();
+          column_it != light_columns.end();
+          ++column_it )
+    {
+        Chunk* chunk = *column_it;
+
+        while ( chunk )
+        {
+            chunk_apply_lighting( *chunk );
+            chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
+        }
+    }
+
+    for ( ChunkSet::const_iterator column_it = chunks_updated.begin();
+          column_it != chunks_updated.end();
+          ++column_it )
+    {
+        Chunk* chunk = *column_it;
+
+        while ( chunk )
+        {
+            chunk->update_geometry();
+            chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
+        }
+    }
+
+    return chunks_updated;
+}

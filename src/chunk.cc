@@ -44,20 +44,6 @@ inline Scalar get_lighting_attenuation( const Scalar power )
     return lighting_attenuation_table[index];
 }
 
-inline Chunk* get_bottom_chunk_in_column( Chunk* chunk )
-{
-    const Vector3i below = cardinal_relation_vector( CARDINAL_RELATION_BELOW );
-    Chunk* bottom = 0;
-
-    while ( chunk )
-    {
-        bottom = chunk;
-        chunk = chunk->get_neighbor( below );
-    }
-
-    return bottom;
-}
-
 typedef std::vector<Block*> BlockV;
 typedef std::pair<BlockIterator, Vector4i> FloodFillBlock;
 typedef std::deque<FloodFillBlock> FloodFillQueue;
@@ -190,14 +176,13 @@ void Chunk::reset_lighting()
 void Chunk::update_geometry()
 {
     external_faces_.clear();
-    collision_boxes_.clear();
 
-    Chunk* column = get_bottom_chunk_in_column( this );
+    Chunk* column = get_column_bottom();
     Chunk* neighbor_columns[NUM_CARDINAL_RELATIONS];
     FOR_EACH_CARDINAL_RELATION( relation )
     {
         neighbor_columns[relation] = 
-            get_bottom_chunk_in_column( column->get_neighbor( cardinal_relation_vector( relation ) ) );
+            column->get_neighbor( cardinal_relation_vector( relation ) )->get_column_bottom();
     }
 
     FOREACH_BLOCK( x, y, z )
@@ -208,7 +193,6 @@ void Chunk::update_geometry()
         if ( block.get_material() != BLOCK_MATERIAL_AIR )
         {
             const Vector3f block_position = vector_cast<Scalar>( Vector3i( position_ + block_index ) );
-            bool block_visible = false;
 
             FOR_EACH_CARDINAL_RELATION( relation )
             {
@@ -234,13 +218,7 @@ void Chunk::update_geometry()
                 if ( add_face )
                 {
                     add_external_face( block_index, block_position, block, relation, relation_vector );
-                    block_visible = true;
                 }
-            }
-
-            if ( block_visible )
-            {
-                collision_boxes_.push_back( AABoxf( block_position, block_position + Vector3f( 1.0f, 1.0f, 1.0f ) ) );
             }
         }
     }
