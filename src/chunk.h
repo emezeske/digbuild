@@ -142,16 +142,17 @@ private:
     Chunk* get_extreme( const CardinalRelation relation )
     {
         const Vector3i direction = cardinal_relation_vector( relation );
-        Chunk* chunk = this;
-        Chunk* bottom = 0;
+        Chunk* next = this;
+        Chunk* extreme = 0;
 
-        while ( chunk )
+        while ( next )
         {
-            bottom = chunk;
-            chunk = chunk->get_neighbor( direction );
+            extreme = next;
+            next = next->get_neighbor( direction );
         }
 
-        return bottom;
+        assert( extreme );
+        return extreme;
     }
 
     void add_external_face(

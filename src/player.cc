@@ -354,12 +354,9 @@ void Player::get_potential_obstructions(
     PotentialObstructionSet& potential_obstructions
 )
 {
-    // TODO: Fix this comment
-
-    // This function slides the Player's bounding box along its sweep vector in steps
-    // of one unit, and collects all of the Blocks that the bounding box might intersect
-    // with along the way.  Right now it's overzealous, and probably returns more Blocks
-    // than it really needs to.
+    // This function slides a moving bounding box along its sweep vector in steps of one unit,
+    // and collects all of the Blocks that the bounding box might intersect with along the way.
+    // Right now it's overzealous, and probably returns more Blocks than it really needs to.
 
     const float sweep_length_squared = gmtl::lengthSquared( sweep );
     const Vector3f unit_sweep = sweep / gmtl::Math::sqrt( sweep_length_squared );

@@ -313,6 +313,7 @@ void ChunkRenderer::rebuild( const Chunk& chunk )
     }
 
     opaque_vbos_.clear();
+    opaque_materials_.clear();
 
     for ( MaterialVertexMap::const_iterator it = opaque_vertices.begin(); it != opaque_vertices.end(); ++it )
     {
@@ -553,11 +554,11 @@ Renderer::Renderer() :
 
 void Renderer::note_chunk_changes( const Chunk& chunk )
 {
-    if ( !chunk.get_external_faces().empty() )
-    {
-        ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk.get_position() );
+    ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.find( chunk.get_position() );
 
-        if ( chunk_renderer_it == chunk_renderers_.end() )
+    if ( chunk_renderer_it == chunk_renderers_.end() )
+    {
+        if ( !chunk.get_external_faces().empty() )
         {
             const Vector3f centroid =
                 vector_cast<Scalar>( chunk.get_position() ) +
@@ -568,12 +569,15 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
             const AABoxf aabb( chunk_min, chunk_max );
 
             ChunkRendererSP renderer( new ChunkRenderer( centroid, aabb ) );
-            chunk_renderer_it =
-                chunk_renderers_.insert( std::make_pair( chunk.get_position(), renderer ) ).first;
+            renderer->rebuild( chunk );
+            chunk_renderers_.insert( std::make_pair( chunk.get_position(), renderer ) );
         }
-
-        chunk_renderer_it->second->rebuild( chunk );
     }
+    else if ( chunk.get_external_faces().empty() )
+    {
+        chunk_renderers_.erase( chunk_renderer_it );
+    }
+    else chunk_renderer_it->second->rebuild( chunk );
 }
 
 void Renderer::render( const Camera& camera, const World& world, const Player& player )
