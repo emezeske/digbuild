@@ -14,8 +14,8 @@ GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limi
     window_( window ),
     gui_focused_( false ),
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
-    world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
-    // world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
+    // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
+    world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
     gui_( window_.get_screen() )
 {
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
@@ -291,6 +291,14 @@ void GameApplication::do_one_step( const float step_time )
     gui_.do_one_step( step_time );
 
     ChunkSet chunks_needing_update = world_.update_chunks();
+
+    // FIXME: for profiling:
+    // while ( 1 )
+    // {
+    //     BlockIterator block_it = world_.get_block( Vector3i( 32, 32, 32 ) );
+    //     world_.mark_chunk_for_update( block_it.chunk_ ); 
+    //     world_.update_chunks();
+    // }
 
     for ( ChunkSet::const_iterator chunk_it = chunks_needing_update.begin();
           chunk_it != chunks_needing_update.end();

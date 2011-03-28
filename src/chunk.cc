@@ -1,4 +1,4 @@
-#include <deque>
+#include <queue>
 
 #include <string.h>
 
@@ -20,7 +20,7 @@
 
 namespace {
 
-inline Scalar get_lighting_attenuation( const Scalar power )
+Scalar get_lighting_attenuation( const Scalar power )
 {
     const int MAX_POWER = 32;
     const int GRANULARITY = 10;
@@ -44,80 +44,204 @@ inline Scalar get_lighting_attenuation( const Scalar power )
     return lighting_attenuation_table[index];
 }
 
-typedef std::vector<Block*> BlockV;
-typedef std::pair<BlockIterator, Vector4i> FloodFillBlock;
-typedef std::deque<FloodFillBlock> FloodFillQueue;
-
-void breadth_first_flood_fill_light(
-    FloodFillQueue& queue,
-    const BlockIterator& iterator,
-    const bool is_sunlight,
-    const Vector4i light_level,
-    BlockV& blocks_visited
-)
+// This function returns true if the incoming light affected the current light.
+bool mix_light_component( int& current, const int& incoming )
 {
-    blocks_visited.clear();
-    queue.clear();
-    queue.push_back( std::make_pair( iterator, light_level ) );
+    if ( current < incoming )
+    {
+        current = incoming;
+        return false;
+    }
 
+    return true;
+}
+
+// This function returns true if the light becomes fully attenuated.
+bool attenuate_light_component( int& light )
+{
+    light -= 1;
+
+    if ( light < Block::MIN_LIGHT_COMPONENT_LEVEL )
+    {
+        light = Block::MIN_LIGHT_COMPONENT_LEVEL;
+    }
+    else if ( light > Block::MIN_LIGHT_COMPONENT_LEVEL )
+    {
+        return false;
+    }
+
+    return true;
+}
+
+struct ColorLightStrategy
+{
+    typedef Vector3i LightLevel;
+    typedef std::pair<const BlockIterator, const Vector3i> FloodFillBlock;
+    typedef std::queue<FloodFillBlock> FloodFillQueue;
+
+    static LightLevel get_light( const Block& block )
+    {
+        return block.get_light_level();
+    }
+
+    static void set_light( Block& block, const LightLevel& light )
+    {
+        block.set_light_level( light );
+    }
+
+    static bool mix_light( LightLevel& current, const LightLevel& incoming )
+    {
+        bool already_lit = true;
+
+        for ( int i = 0; i < LightLevel::Size; ++i )
+        {
+            if ( !mix_light_component( current[i], incoming[i] ) )
+            {
+                already_lit = false;
+            }
+        }
+
+        return already_lit;
+    }
+
+    static bool attenuate_light( LightLevel& light )
+    {
+        bool fully_attenuated = true;
+
+        for ( int i = 0; i < LightLevel::Size; ++i )
+        {
+            if ( !attenuate_light_component( light[i] ) )
+            {
+                fully_attenuated = false;
+            }
+        }
+
+        return fully_attenuated;
+    }
+
+    static bool neighbor_needs_visit( const Block& neighbor )
+    {
+        return !neighbor.is_visited() &&
+               neighbor.get_material_attributes().translucent_;
+    }
+};
+
+struct SunLightStrategy
+{
+    typedef int LightLevel;
+    typedef std::pair<const BlockIterator, const int> FloodFillBlock;
+    typedef std::queue<FloodFillBlock> FloodFillQueue;
+
+    static LightLevel get_light( const Block& block )
+    {
+        return block.get_sunlight_level();
+    }
+
+    static void set_light( Block& block, const LightLevel light )
+    {
+        block.set_sunlight_level( light );
+    }
+
+    static bool mix_light( LightLevel& current, const LightLevel incoming )
+    {
+        return mix_light_component( current, incoming );
+    }
+
+    static bool attenuate_light( LightLevel& light )
+    {
+        return attenuate_light_component( light );
+    }
+
+    static bool neighbor_needs_visit( const Block& neighbor )
+    {
+        return !neighbor.is_sunlight_source() &&
+               !neighbor.is_visited() &&
+               neighbor.get_material_attributes().translucent_;
+    }
+};
+
+struct TraverseNeighborStrategy
+{
+    static BlockIterator get_block_neighbor( const BlockIterator block_it, const Vector3i& relation )
+    {
+        return block_it.chunk_->get_block_neighbor( block_it.index_, relation );
+    }
+};
+
+struct LocalNeighborStrategy
+{
+    static BlockIterator get_block_neighbor( const BlockIterator block_it, const Vector3i& relation )
+    {
+        const Vector3i neighbor_index = block_it.index_ + relation;
+
+        for ( int i = 0; i < 3; ++i )
+        {
+            if ( neighbor_index[i] == -1 )
+            {
+                return BlockIterator();
+            }
+            else if ( neighbor_index[i] == Chunk::SIZE[i] )
+            {
+                return BlockIterator();
+            }
+        }
+
+        return BlockIterator( block_it.chunk_, &block_it.chunk_->get_block( neighbor_index ), neighbor_index );
+    }
+};
+
+typedef std::vector<Block*> BlockV;
+
+template <typename LightStrategy, typename NeighborStrategy>
+void flood_fill_light( typename LightStrategy::FloodFillQueue& queue, BlockV& blocks_visited )
+{
     while ( !queue.empty() )
     {
-        FloodFillBlock flood_block = queue.front();
-        queue.pop_front();
+        const typename LightStrategy::FloodFillBlock flood_block = queue.front();
+        Block& block = *flood_block.first.block_;
+        queue.pop();
 
-        if ( !flood_block.first.block_->is_visited() )
+        if ( !block.is_visited() )
         {
-            blocks_visited.push_back( flood_block.first.block_ );
-            flood_block.first.block_->set_visited( true );
+            blocks_visited.push_back( &block );
+            block.set_visited( true );
 
-            Vector4i block_light_level;
+            typename LightStrategy::LightLevel block_light_level = LightStrategy::get_light( block );
+            if ( LightStrategy::mix_light( block_light_level, flood_block.second ) )
+                continue;
 
-            for ( int i = 0; i < Vector4i::Size; ++i )
+            LightStrategy::set_light( block, block_light_level );
+
+            FOR_EACH_CARDINAL_RELATION( relation )
             {
-                block_light_level[i] = std::max( flood_block.first.block_->get_light_level()[i], flood_block.second[i] );
-            }
+                const Vector3i relation_vector = cardinal_relation_vector( relation );
+                const BlockIterator neighbor = NeighborStrategy::get_block_neighbor( flood_block.first, relation_vector );
+                typename LightStrategy::LightLevel attenuated_light_level;
+                bool attenuation_calculated = false;
 
-            flood_block.first.block_->set_light_level( block_light_level );
-
-            Vector4i attenuated_light_level = flood_block.second - Vector4i( 1, 1, 1, 1 );
-
-            for ( int i = 0; i < Vector4i::Size; ++i )
-            {
-                attenuated_light_level[i] = std::max( attenuated_light_level[i], 0 );
-            }
-
-            if ( attenuated_light_level != Block::MIN_LIGHT_LEVEL )
-            {
-                FOR_EACH_CARDINAL_RELATION( relation )
+                if ( neighbor.block_ && LightStrategy::neighbor_needs_visit( *neighbor.block_ ) )
                 {
-                    const Vector3i relation_vector = cardinal_relation_vector( relation );
-                    BlockIterator neighbor = flood_block.first.chunk_->get_block_neighbor( flood_block.first.index_, relation_vector );
-
-                    if ( neighbor.block_ &&
-                         neighbor.block_->get_material_attributes().translucent_ &&
-                         !neighbor.block_->is_visited() &&
-                         ( !is_sunlight || !neighbor.block_->is_sunlight_source() ) )
+                    if ( !attenuation_calculated )
                     {
-                        bool already_lit = true;
+                        attenuated_light_level = flood_block.second;
+                        if ( LightStrategy::attenuate_light( attenuated_light_level ) )
+                            break;
 
-                        for ( int i = 0; i < Vector4i::Size; ++i )
-                        {
-                            if ( neighbor.block_->get_light_level()[i] < attenuated_light_level[i] )
-                            {
-                                already_lit = false;
-                                break;
-                            }
-                        }
-
-                        if ( !already_lit )
-                        {
-                            queue.push_back( std::make_pair( neighbor, attenuated_light_level ) );
-                        }
+                        attenuation_calculated = true;
                     }
+
+                    queue.push( std::make_pair( neighbor, attenuated_light_level ) );
                 }
             }
         }
     }
+
+    for ( BlockV::iterator it = blocks_visited.begin(); it != blocks_visited.end(); ++it )
+    {
+        ( *it )->set_visited( false );
+    }
+
+    blocks_visited.clear();
 }
 
 } // anonymous namespace
@@ -154,6 +278,7 @@ void Chunk::reset_lighting()
             {
                 Block& block = get_block( Vector3i( x, y, z ) );
                 block.set_light_level( Block::MIN_LIGHT_LEVEL );
+                block.set_sunlight_level( Block::MIN_LIGHT_COMPONENT_LEVEL );
 
                 if ( above_ground )
                 {
@@ -182,7 +307,7 @@ void Chunk::update_geometry()
     FOR_EACH_CARDINAL_RELATION( relation )
     {
         neighbor_columns[relation] = 
-            column->get_neighbor( cardinal_relation_vector( relation ) )->get_column_bottom();
+            column->get_neighbor( cardinal_relation_vector( relation ) );
     }
 
     FOREACH_BLOCK( x, y, z )
@@ -212,7 +337,7 @@ void Chunk::update_geometry()
                     // Don't add faces on the sides of the chunk in which there is not presently a column
                     // of chunks.  Also, don't add faces on the bottom of the column, facing downward.
                     add_face = ( relation == CARDINAL_RELATION_ABOVE ||
-                                 ( relation != CARDINAL_RELATION_BELOW && neighbor_columns[relation] ) );
+                               ( relation != CARDINAL_RELATION_BELOW && neighbor_columns[relation] ) );
                 }
 
                 if ( add_face )
@@ -310,7 +435,8 @@ Vector4f Chunk::calculate_vertex_lighting(
         neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
     }
 
-    Vector4i total_lighting = Block::MIN_LIGHT_LEVEL;
+    Vector3i total_lighting = Block::MIN_LIGHT_LEVEL;
+    int total_sunlighting = Block::MIN_LIGHT_COMPONENT_LEVEL;
     int num_contributors = 0;
 
     for ( size_t i = 0; i < NUM_NEIGHBORS; ++i )
@@ -322,17 +448,19 @@ Vector4f Chunk::calculate_vertex_lighting(
             if ( block->get_material_attributes().translucent_ )
             {
                 total_lighting += block->get_light_level();
+                total_sunlighting += block->get_sunlight_level();
                 ++num_contributors;
             }
         }
         else if ( i != 3 || neighbor_ab_may_contribute )
         {
-            total_lighting += Vector4i( 0, 0, 0, Block::MAX_LIGHT_LEVEL[3] );
+            total_sunlighting += Block::MAX_LIGHT_COMPONENT_LEVEL;
             ++num_contributors;
         }
     }
 
-    const Vector4f average_lighting = vector_cast<Scalar>( total_lighting ) / Scalar( num_contributors );
+    Vector4f average_lighting( total_lighting[0], total_lighting[1], total_lighting[2], total_sunlighting ); 
+    average_lighting /= Scalar( num_contributors );
     const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
     Vector4f attenuated_lighting;
     
@@ -340,7 +468,7 @@ Vector4f Chunk::calculate_vertex_lighting(
     {
         if ( average_lighting[i] > gmtl::GMTL_EPSILON )
         {
-            Scalar power = Block::MAX_LIGHT_LEVEL[i] - average_lighting[i] + ambient_occlusion_power * 2;
+            Scalar power = Block::MAX_LIGHT_COMPONENT_LEVEL - average_lighting[i] + ambient_occlusion_power * 2;
             attenuated_lighting[i] = get_lighting_attenuation( power );
         }
         else attenuated_lighting[i] = 0.0f;
@@ -382,41 +510,41 @@ void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks )
     chunks.erase( chunk->get_position() );
 }
 
-void chunk_apply_lighting( Chunk& chunk )
+// If the 'local' parameter is set to 'true', lights will only be flood filled within
+// the selected Chunk.  If it is 'false', lights will flood across to other Chunks.
+void chunk_apply_lighting( Chunk& chunk, const bool local )
 {
+    SunLightStrategy::FloodFillQueue sun_flood_queue;
+    ColorLightStrategy::FloodFillQueue color_flood_queue;
     BlockV blocks_visited;
-    FloodFillQueue queue;
 
     FOREACH_BLOCK( x, y, z )
     {
         const Vector3i index( x, y, z );
         Block& block = chunk.get_block( index );
-
-        Vector4i light_level;
+        BlockIterator block_it( &chunk, &block, index );
 
         if ( block.is_sunlight_source() )
         {
-            light_level = Vector4i( 0, 0, 0, Block::MAX_LIGHT_LEVEL[3] );
+            sun_flood_queue.push( std::make_pair( block_it, Block::MAX_LIGHT_COMPONENT_LEVEL ) );
+
+            if ( local )
+            {
+                flood_fill_light<SunLightStrategy, LocalNeighborStrategy>( sun_flood_queue, blocks_visited );
+            }
+            else flood_fill_light<SunLightStrategy, TraverseNeighborStrategy>( sun_flood_queue, blocks_visited );
         }
         else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
         {
-            light_level = Vector4i( 14, 4, 0, 0 );
-        }
+            // TODO: use a material attribute
 
-        if ( light_level != Block::MIN_LIGHT_LEVEL )
-        {
-            breadth_first_flood_fill_light(
-                queue,
-                BlockIterator( &chunk, &block, index ),
-                block.is_sunlight_source(),
-                light_level,
-                blocks_visited
-            );
+            color_flood_queue.push( std::make_pair( block_it, Vector3i( 14, 4, 0 ) ) );
 
-            for ( BlockV::iterator it = blocks_visited.begin(); it != blocks_visited.end(); ++it )
+            if ( local )
             {
-                ( *it )->set_visited( false );
+                flood_fill_light<ColorLightStrategy, LocalNeighborStrategy>( color_flood_queue, blocks_visited );
             }
+            else flood_fill_light<ColorLightStrategy, TraverseNeighborStrategy>( color_flood_queue, blocks_visited );
         }
     }
 }

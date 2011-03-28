@@ -208,7 +208,7 @@ World::World( const uint64_t world_seed ) :
 
     for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
     {
-        chunk_apply_lighting( *chunk_it->second.get() );
+        chunk_apply_lighting( *chunk_it->second.get(), false );
     }
 
     SCOPE_TIMER_END
@@ -305,7 +305,7 @@ ChunkSet World::update_chunks()
 
         while ( chunk )
         {
-            chunk_apply_lighting( *chunk );
+            chunk_apply_lighting( *chunk, true );
             chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
         }
     }

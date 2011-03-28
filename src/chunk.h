@@ -30,7 +30,7 @@ struct Chunk : public boost::noncopyable
 {
     static const int
         SIZE_X = 16,
-        SIZE_Y = 96,
+        SIZE_Y = 64,
         SIZE_Z = 16;
 
     static const Vector3i SIZE;
@@ -185,6 +185,6 @@ typedef std::map<Vector3i, ChunkSP, VectorLess<Vector3i> > ChunkMap;
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks );
 void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks );
-void chunk_apply_lighting( Chunk& chunk );
+void chunk_apply_lighting( Chunk& chunk, const bool local );
 
 #endif // CHUNK_H
