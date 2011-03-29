@@ -1,6 +1,8 @@
 #ifndef WORLD_H
 #define WORLD_H
 
+#include <boost/threadpool.hpp>
+
 #include <cstdlib>
 #include <set>
 
@@ -134,6 +136,8 @@ protected:
     Sky sky_;
 
     ChunkMap chunks_;
+
+    boost::threadpool::pool worker_pool_;
 };
 
 #endif // WORLD_H

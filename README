@@ -11,14 +11,15 @@ similarities to Minecraft (and many improvements as well).
 
 The following libraries are required to build Digbuild:
 
+    * Agar (http://libagar.org)
     * Boost
+    * GL
+    * GLEW
+    * GLU
     * GMTL (http://sourceforge.net/projects/ggt)
     * SDL
     * SDL Image
-    * GL
-    * GLU
-    * GLEW
-    * Agar (http://libagar.org)
+    * Threadpool (http://threadpool.sourceforge.net)
 
 ###########################################################################
 # BUILDING
@@ -30,6 +31,7 @@ options:
 
     --boost_include_dir=<PATH>
     --gmtl_include_dir=<PATH>
+    --threadpool_include_dir=<PATH>
 
 The following arguments may also be used to configure the build:
 

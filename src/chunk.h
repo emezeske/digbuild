@@ -114,6 +114,8 @@ struct Chunk : public boost::noncopyable
     }
 
     void reset_lighting();
+    void apply_lighting_to_self();
+    void apply_lighting_to_neighbors();
     void update_geometry();
 
     const BlockFaceV& get_external_faces() const { return external_faces_; }
@@ -185,6 +187,5 @@ typedef std::map<Vector3i, ChunkSP, VectorLess<Vector3i> > ChunkMap;
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks );
 void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks );
-void chunk_apply_lighting( Chunk& chunk, const bool local );
 
 #endif // CHUNK_H

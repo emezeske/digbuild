@@ -160,7 +160,7 @@ struct SunLightStrategy
     }
 };
 
-struct TraverseNeighborStrategy
+struct ExternalNeighborStrategy
 {
     static BlockIterator get_block_neighbor( const BlockIterator block_it, const Vector3i& relation )
     {
@@ -168,7 +168,7 @@ struct TraverseNeighborStrategy
     }
 };
 
-struct LocalNeighborStrategy
+struct InternalNeighborStrategy
 {
     static BlockIterator get_block_neighbor( const BlockIterator block_it, const Vector3i& relation )
     {
@@ -192,6 +192,10 @@ struct LocalNeighborStrategy
 
 typedef std::vector<Block*> BlockV;
 
+// The 'queue' and 'blocks_visited' parameters here could be local variables
+// (with the queue seed passed in instead).  The reason they are parameters is
+// so that if flood_fill_light() is called many times, they will not have to be
+// allocated repeatedly.  This gives a significant (and measured) performance gain.
 template <typename LightStrategy, typename NeighborStrategy>
 void flood_fill_light( typename LightStrategy::FloodFillQueue& queue, BlockV& blocks_visited )
 {
@@ -294,6 +298,71 @@ void Chunk::reset_lighting()
                 }
                 else block.set_sunlight_source( false );
             }
+        }
+    }
+}
+
+void Chunk::apply_lighting_to_self()
+{
+    SunLightStrategy::FloodFillQueue sun_flood_queue;
+    ColorLightStrategy::FloodFillQueue color_flood_queue;
+    BlockV blocks_visited;
+
+    FOREACH_BLOCK( x, y, z )
+    {
+        const Vector3i index( x, y, z );
+        Block& block = get_block( index );
+        BlockIterator block_it( this, &block, index );
+
+        if ( block.is_sunlight_source() )
+        {
+            sun_flood_queue.push( std::make_pair( block_it, Block::MAX_LIGHT_COMPONENT_LEVEL ) );
+            flood_fill_light<SunLightStrategy, InternalNeighborStrategy>( sun_flood_queue, blocks_visited );
+        }
+        else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
+        {
+            // TODO: use a material attribute
+            color_flood_queue.push( std::make_pair( block_it, Vector3i( 14, 4, 0 ) ) );
+            flood_fill_light<ColorLightStrategy, InternalNeighborStrategy>( color_flood_queue, blocks_visited );
+        }
+    }
+}
+
+void Chunk::apply_lighting_to_neighbors()
+{
+    SunLightStrategy::FloodFillQueue sun_flood_queue;
+    ColorLightStrategy::FloodFillQueue color_flood_queue;
+    BlockV blocks_visited;
+
+    FOREACH_BLOCK( x, y, z )
+    {
+        // Throw out any Block that is not on the edge of this Chunk.
+        //
+        // FIXME: This is super ugly and slow.  This _NEEDS_ to be rewritten with a
+        //        loop that only generates the edge coordinates.
+        //
+        if ( x > 0 && x < SIZE_X - 1 &&
+             y > 0 && y < SIZE_Y - 1 &&
+             z > 0 && z < SIZE_Z - 1 )
+        {
+            continue;
+        }
+
+        const Vector3i index( x, y, z );
+        Block& block = get_block( index );
+        BlockIterator block_it( this, &block, index );
+
+        if ( block.get_sunlight_level() != Block::MIN_LIGHT_COMPONENT_LEVEL )
+        {
+            sun_flood_queue.push( std::make_pair( block_it, block.get_sunlight_level() ) );
+            flood_fill_light<SunLightStrategy, ExternalNeighborStrategy>( sun_flood_queue, blocks_visited );
+        }
+
+        if ( block.get_light_level() != Block::MIN_LIGHT_LEVEL )
+        {
+            // TODO: use a material attribute
+            color_flood_queue.push( std::make_pair( block_it, block.get_light_level() ) );
+            flood_fill_light<ColorLightStrategy, ExternalNeighborStrategy>( color_flood_queue, blocks_visited );
         }
     }
 }
@@ -508,43 +577,4 @@ void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks )
     }
 
     chunks.erase( chunk->get_position() );
-}
-
-// If the 'local' parameter is set to 'true', lights will only be flood filled within
-// the selected Chunk.  If it is 'false', lights will flood across to other Chunks.
-void chunk_apply_lighting( Chunk& chunk, const bool local )
-{
-    SunLightStrategy::FloodFillQueue sun_flood_queue;
-    ColorLightStrategy::FloodFillQueue color_flood_queue;
-    BlockV blocks_visited;
-
-    FOREACH_BLOCK( x, y, z )
-    {
-        const Vector3i index( x, y, z );
-        Block& block = chunk.get_block( index );
-        BlockIterator block_it( &chunk, &block, index );
-
-        if ( block.is_sunlight_source() )
-        {
-            sun_flood_queue.push( std::make_pair( block_it, Block::MAX_LIGHT_COMPONENT_LEVEL ) );
-
-            if ( local )
-            {
-                flood_fill_light<SunLightStrategy, LocalNeighborStrategy>( sun_flood_queue, blocks_visited );
-            }
-            else flood_fill_light<SunLightStrategy, TraverseNeighborStrategy>( sun_flood_queue, blocks_visited );
-        }
-        else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
-        {
-            // TODO: use a material attribute
-
-            color_flood_queue.push( std::make_pair( block_it, Vector3i( 14, 4, 0 ) ) );
-
-            if ( local )
-            {
-                flood_fill_light<ColorLightStrategy, LocalNeighborStrategy>( color_flood_queue, blocks_visited );
-            }
-            else flood_fill_light<ColorLightStrategy, TraverseNeighborStrategy>( color_flood_queue, blocks_visited );
-        }
-    }
 }

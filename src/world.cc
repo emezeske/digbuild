@@ -51,12 +51,38 @@ const Sky::Profile SKY_PROFILES[] =
     )
 };
 
+void generate_region_concurrently( WorldGenerator& generator, const Vector2i& position, ChunkMap& chunks )
+{
+    static boost::mutex lock;
+
+    ChunkV new_chunks = generator.generate_region( position );
+
+    boost::lock_guard<boost::mutex> guard( lock );
+
+    for ( ChunkV::iterator chunk_it = new_chunks.begin(); chunk_it != new_chunks.end(); ++chunk_it )
+    {
+        chunk_stitch_into_map( *chunk_it, chunks );
+    }
+}
+
+void reset_and_apply_lighting_to_self( Chunk* chunk )
+{
+    chunk->reset_lighting();
+    chunk->apply_lighting_to_self();
+}
+
 typedef std::pair<Vector3i, ChunkSP> PositionChunkPair;
 typedef std::vector<PositionChunkPair> ChunkMapValueV;
 
 bool highest_chunk( const PositionChunkPair& a, const PositionChunkPair& b )
 {
     return a.first[1] > b.first[1];
+}
+
+unsigned hardware_concurrency()
+{
+    const unsigned concurrency = boost::thread::hardware_concurrency();
+    return concurrency == 0 ? 1 : concurrency;
 }
 
 } // anonymous namespace
@@ -170,26 +196,24 @@ void Sky::do_one_step( const float step_time )
 
 World::World( const uint64_t world_seed ) :
     generator_( world_seed ),
-    sky_( world_seed )
+    sky_( world_seed ),
+    worker_pool_( hardware_concurrency() )
 {
     SCOPE_TIMER_BEGIN( "World generation" )
 
-    for ( int x = 0; x < 1; ++x )
+    for ( int x = 0; x < 3; ++x )
     {
-        for ( int z = 0; z < 1; ++z )
+        for ( int z = 0; z < 3; ++z )
         {
             const Vector2i position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
-            ChunkV new_chunks = generator_.generate_region( position );
-            
-            for ( ChunkV::iterator chunk_it = new_chunks.begin(); chunk_it != new_chunks.end(); ++chunk_it )
-            {
-                chunk_stitch_into_map( *chunk_it, chunks_ );
-            }
+            worker_pool_.schedule(
+                boost::bind( &generate_region_concurrently, boost::ref( generator_ ), position, boost::ref( chunks_ ) ) );
         }
     }
 
-    SCOPE_TIMER_END
+    worker_pool_.wait();
 
+    SCOPE_TIMER_END
     SCOPE_TIMER_BEGIN( "Lighting" )
 
     ChunkMapValueV height_sorted_chunks;
@@ -203,22 +227,34 @@ World::World( const uint64_t world_seed ) :
 
     for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
     {
-        chunk_it->second->reset_lighting();
+        worker_pool_.schedule( boost::bind( &Chunk::reset_lighting, boost::ref( chunk_it->second ) ) );
     }
+
+    worker_pool_.wait();
 
     for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
     {
-        chunk_apply_lighting( *chunk_it->second.get(), false );
+        worker_pool_.schedule( boost::bind( &Chunk::apply_lighting_to_self, chunk_it->second.get() ) );
+    }
+
+    worker_pool_.wait();
+
+    for ( ChunkMapValueV::iterator chunk_it = height_sorted_chunks.begin(); chunk_it != height_sorted_chunks.end(); ++chunk_it )
+    {
+        // TODO: Chunks that do not have any common neighbors could be updated
+        //       in parallel.
+        chunk_it->second->apply_lighting_to_neighbors();
     }
 
     SCOPE_TIMER_END
-
     SCOPE_TIMER_BEGIN( "Updating geometry" )
 
     for ( ChunkMap::iterator chunk_it = chunks_.begin(); chunk_it != chunks_.end(); ++chunk_it )
     {
-        chunk_it->second->update_geometry();
+        worker_pool_.schedule( boost::bind( &Chunk::update_geometry, chunk_it->second.get() ) );
     }
+
+    worker_pool_.wait();
 
     SCOPE_TIMER_END
 }
@@ -230,16 +266,26 @@ void World::do_one_step( const float step_time )
 
 ChunkSet World::update_chunks()
 {
+    if ( columns_needing_update_.empty() )
+    {
+        return ChunkSet();
+    }
+
     // If a Chunk is modified, it is not sufficient to simply rebuild the lighting/geometry
     // for that Chunk.  Rather, all adjacent Chunks, and any Chunks below it or its neighbors
     // must be updated, to ensure that lighting is propagated correctly (including sunlight).
+    //
+    // TODO: Explain neighbor lighting.
+    //
+    // TODO: Currently, the entire column that a Chunk is part of (and all adjacent columns)
+    //       are fully rebuilt.  Most of the time this is big overkill.
 
-    // TODO: This function is (I think) technically correct now, but it needs to be optimized
-    //       massively.  It should probably be using worker threads so that a lot of this stuff
-    //       can be done in parallel.
-
-    ChunkSet reset_columns;
-    ChunkSet light_columns;
+    // TODO: This function should operate in a background thread so that it does not block
+    //       the main game loop.  That raises some interesting questions RE: locking the
+    //       Chunks.
+    
+    ChunkSet full_lighting_columns;
+    ChunkSet neighbor_lighting_columns;
 
     for ( ChunkSet::const_iterator column_it = columns_needing_update_.begin();
           column_it != columns_needing_update_.end();
@@ -267,11 +313,11 @@ ChunkSet World::update_chunks()
                 if ( chunk )
                 {
                     Chunk* column_top = chunk->get_column_top();
-                    light_columns.insert( column_top );
+                    neighbor_lighting_columns.insert( column_top );
 
                     if ( abs( x ) != 2 && abs( z ) != 2 )
                     {
-                        reset_columns.insert( column_top );
+                        full_lighting_columns.insert( column_top );
                     }
                 }
             }
@@ -281,47 +327,54 @@ ChunkSet World::update_chunks()
     columns_needing_update_.clear();
     ChunkSet chunks_updated;
 
-    // TODO: Remove some of this duplication.
+    // TODO: Remove some of this for/while duplication.
+    SCOPE_TIMER_BEGIN( "Self-lighting columns" )
 
-    for ( ChunkSet::const_iterator column_it = reset_columns.begin();
-          column_it != reset_columns.end();
+    for ( ChunkSet::const_iterator column_it = full_lighting_columns.begin();
+          column_it != full_lighting_columns.end();
           ++column_it )
     {
         Chunk* chunk = *column_it;
 
         while ( chunk )
         {
-            chunk->reset_lighting();
+            worker_pool_.schedule( boost::bind( &reset_and_apply_lighting_to_self, chunk ) );
             chunks_updated.insert( chunk );
             chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
         }
     }
 
-    for ( ChunkSet::const_iterator column_it = light_columns.begin();
-          column_it != light_columns.end();
+    worker_pool_.wait();
+    SCOPE_TIMER_END
+    SCOPE_TIMER_BEGIN( "Neighbor-lighting columns" )
+
+    for ( ChunkSet::const_iterator column_it = neighbor_lighting_columns.begin();
+          column_it != neighbor_lighting_columns.end();
           ++column_it )
     {
         Chunk* chunk = *column_it;
 
         while ( chunk )
         {
-            chunk_apply_lighting( *chunk, true );
+            // TODO: Chunks that do not have any common neighbors could be updated
+            //       in parallel.
+            chunk->apply_lighting_to_neighbors();
             chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
         }
     }
 
-    for ( ChunkSet::const_iterator column_it = chunks_updated.begin();
-          column_it != chunks_updated.end();
-          ++column_it )
+    SCOPE_TIMER_END
+    SCOPE_TIMER_BEGIN( "Updating geometry" )
+
+    for ( ChunkSet::const_iterator chunk_it = chunks_updated.begin();
+          chunk_it != chunks_updated.end();
+          ++chunk_it )
     {
-        Chunk* chunk = *column_it;
-
-        while ( chunk )
-        {
-            chunk->update_geometry();
-            chunk = chunk->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
-        }
+        worker_pool_.schedule( boost::bind( &Chunk::update_geometry, *chunk_it ) );
     }
+
+    worker_pool_.wait();
+    SCOPE_TIMER_END
 
     return chunks_updated;
 }

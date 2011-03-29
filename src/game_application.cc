@@ -292,19 +292,18 @@ void GameApplication::do_one_step( const float step_time )
 
     ChunkSet chunks_needing_update = world_.update_chunks();
 
-    // FIXME: for profiling:
-    // while ( 1 )
-    // {
-    //     BlockIterator block_it = world_.get_block( Vector3i( 32, 32, 32 ) );
-    //     world_.mark_chunk_for_update( block_it.chunk_ ); 
-    //     world_.update_chunks();
-    // }
-
-    for ( ChunkSet::const_iterator chunk_it = chunks_needing_update.begin();
-          chunk_it != chunks_needing_update.end();
-          ++chunk_it )
+    if ( !chunks_needing_update.empty() )
     {
-        renderer_.note_chunk_changes( **chunk_it );
+        SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
+
+        for ( ChunkSet::const_iterator chunk_it = chunks_needing_update.begin();
+              chunk_it != chunks_needing_update.end();
+              ++chunk_it )
+        {
+            renderer_.note_chunk_changes( **chunk_it );
+        }
+
+        SCOPE_TIMER_END
     }
 }
 

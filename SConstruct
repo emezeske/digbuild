@@ -5,8 +5,9 @@ import subprocess
 HEADERS = Glob( 'src/*.h' )
 SOURCES = Glob( 'src/*.cc' )
 BINARY = 'digbuild'
-LIBRARY_DEPENDENCIES = [ 'agar', 'sdl', 'SDL_image', 'gl', 'glew', 'glu' ]
-HEADER_DEPENDENCIES = [ 'boost/shared_ptr.hpp', 'gmtl/gmtl.h' ]
+PACKAGE_DEPENDENCIES = [ 'agar', 'gl', 'glew', 'glu', 'sdl', 'SDL_image' ]
+LIBRARY_DEPENDENCIES = [ 'boost_thread' ]
+HEADER_DEPENDENCIES = [ 'boost/shared_ptr.hpp', 'gmtl/gmtl.h', 'boost/threadpool.hpp' ]
 INCLUDE_DIRECTORY_NAMES = [ 'boost_include_dir', 'gmtl_include_dir' ]
 
 def CheckPackageConfig( context, library ):
@@ -98,12 +99,19 @@ for header in HEADER_DEPENDENCIES:
         print 'Required header file %s could not be found.  Aborting.' % header
         Exit( 1 )
 
-for library in LIBRARY_DEPENDENCIES:
+for library in PACKAGE_DEPENDENCIES:
     success, flags = conf.CheckPackageConfig( library )
     if success:
         env.MergeFlags( flags )
     else:
-        print '*** Required library %s could not be found.  Aborting.' % library
+        print 'Required library %s could not be found.  Aborting.' % library
+        Exit( 1 )
+
+for library in LIBRARY_DEPENDENCIES:
+    if conf.CheckLib( library ):
+        env.Append( LINKFLAGS = [ '-l' + library ] )
+    else:
+        print 'Required library %s could not be found.  Aborting.' % library
         Exit( 1 )
 
 env = conf.Finish()
