@@ -1,6 +1,9 @@
+#include <SDL/SDL.h>
+
+#include <boost/foreach.hpp>
+
 #include <limits>
 #include <iomanip>
-#include <SDL/SDL.h>
 
 #include "cardinal_relation.h"
 #include "player.h"
@@ -110,11 +113,9 @@ void Player::do_primary_fire( const float step_time, World& world )
         bool hit_found;
         Vector3i hit_block_position;
 
-        for ( PotentialObstructionSet::const_iterator obstruction_it = potential_obstructions.begin();
-              obstruction_it != potential_obstructions.end();
-              ++obstruction_it )
+        BOOST_FOREACH( const PotentialObstruction& obstruction, potential_obstructions )
         {
-            const Vector3f block_position = obstruction_it->block_position_;
+            const Vector3f block_position = obstruction.block_position_;
             const AABoxf block_bounds( block_position, block_position + Block::SIZE );
 
             unsigned num_hits;
@@ -206,12 +207,10 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
     // Determine whether each potential obstruction actually intersects with the Player's AABB at
     // some point in its movement.  If there are multiple potential collisions, only return the
     // one that would happen at the earliest point in time.
-    for ( PotentialObstructionSet::const_iterator obstruction_it = potential_obstructions.begin();
-          obstruction_it != potential_obstructions.end();
-          ++obstruction_it )
+    BOOST_FOREACH( const PotentialObstruction& obstruction, potential_obstructions )
     {
-        const Vector3f block_position = obstruction_it->block_position_;
-        const Block& block = *obstruction_it->block_;
+        const Vector3f block_position = obstruction.block_position_;
+        const Block& block = *obstruction.block_;
         const AABoxf
             player_bounds = get_aabb(),
             block_bounds( block_position, block_position + Block::SIZE );
@@ -235,7 +234,7 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
             Vector3f collision_normal;
             CardinalRelation collision_relation = CARDINAL_RELATION_BELOW;
 
-            FOR_EACH_CARDINAL_RELATION( relation )
+            FOREACH_CARDINAL_RELATION( relation )
             {
                 // Make sure that the face that the Player is colliding with is reachable;
                 // e.g. its not obstructed by another block.

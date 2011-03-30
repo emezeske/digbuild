@@ -21,7 +21,7 @@ WorldGenerator::WorldGenerator( const uint64_t world_seed ) :
 {
 }
 
-ChunkV WorldGenerator::generate_region( const Vector2i& position )
+ChunkSPV WorldGenerator::generate_region( const Vector2i& position )
 {
     // TODO: The region features here are static for now, but eventually they should be randomized
     //       depending on the position of the region itself.
@@ -55,7 +55,7 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
     );
 
     RegionFeatures region_features( world_seed_, position, fundamental_features, octave_features );
-    ChunkV chunks;
+    ChunkSPV chunks;
 
     for ( int x = 0; x < CHUNKS_PER_REGION_EDGE[0]; ++x )
     {
@@ -63,7 +63,7 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
         {
             const Vector2i column_position( position + Vector2i( x * Chunk::SIZE_X, z * Chunk::SIZE_Z ) );
             ChunkHeightmap heights;
-            ChunkV column_chunks;
+            ChunkSPV column_chunks;
             generate_chunk_column( column_chunks, region_features, position, column_position, heights );
             populate_trees( column_chunks, column_position, heights );
             chunks.insert( chunks.end(), column_chunks.begin(), column_chunks.end() );
@@ -74,7 +74,7 @@ ChunkV WorldGenerator::generate_region( const Vector2i& position )
 }
 
 void WorldGenerator::generate_chunk_column(
-    ChunkV& chunks,
+    ChunkSPV& chunks,
     const RegionFeatures& features,
     const Vector2i& region_position,
     const Vector2i& column_position,
@@ -156,7 +156,7 @@ void WorldGenerator::generate_chunk_column(
 }
 
 void WorldGenerator::populate_trees(
-    ChunkV& chunks,
+    ChunkSPV& chunks,
     const Vector2i& column_position,
     const ChunkHeightmap heights
 )
@@ -229,7 +229,7 @@ void WorldGenerator::populate_trees(
     }
 }
 
-Block& WorldGenerator::get_block( ChunkV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
+Block& WorldGenerator::get_block( ChunkSPV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
 {
     const unsigned chunk_index = height / Chunk::SIZE_Y;
 

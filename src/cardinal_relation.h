@@ -16,7 +16,7 @@ enum CardinalRelation
     NUM_CARDINAL_RELATIONS
 };
 
-#define FOR_EACH_CARDINAL_RELATION( iterator_name )\
+#define FOREACH_CARDINAL_RELATION( iterator_name )\
     for ( CardinalRelation iterator_name = CARDINAL_RELATION_ABOVE;\
           iterator_name != NUM_CARDINAL_RELATIONS;\
           iterator_name = CardinalRelation( int( iterator_name ) + 1 ) )

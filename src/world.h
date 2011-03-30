@@ -118,7 +118,7 @@ struct World
     void mark_chunk_for_update( Chunk* chunk )
     {
         assert( chunk );
-        columns_needing_update_.insert( chunk->get_column_bottom() );
+        chunks_needing_update_.insert( chunk );
     }
 
 protected:
@@ -129,7 +129,12 @@ protected:
         return it == chunks_.end() ? 0 : it->second.get();
     }
 
-    ChunkSet columns_needing_update_;
+    void reset_lighting( const ChunkSet& chunks );
+    void apply_lighting_to_self( const ChunkSet& chunks );
+    void apply_lighting_to_neighbors( ChunkSet chunks );
+    void update_geometry( const ChunkSet& chunks );
+
+    ChunkSet chunks_needing_update_;
 
     WorldGenerator generator_;
 

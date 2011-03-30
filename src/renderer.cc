@@ -3,6 +3,7 @@
 #include <GL/glew.h>
 
 #include <boost/numeric/conversion/cast.hpp>
+#include <boost/foreach.hpp>
 
 #include "renderer.h"
 
@@ -185,17 +186,15 @@ void SortableChunkVertexBuffer::render_sorted(
 {
     std::vector<GLuint> indices;
 
-    for ( DistanceIndexSet::const_reverse_iterator index_it = distance_indices.rbegin();
-          index_it != distance_indices.rend();
-          ++index_it )
+    BOOST_REVERSE_FOREACH( const DistanceIndexPair& distance_index, distance_indices )
     {
-        indices.push_back( index_it->second + 0 );
-        indices.push_back( index_it->second + 3 );
-        indices.push_back( index_it->second + 2 );
+        indices.push_back( distance_index.second + 0 );
+        indices.push_back( distance_index.second + 3 );
+        indices.push_back( distance_index.second + 2 );
 
-        indices.push_back( index_it->second + 0 );
-        indices.push_back( index_it->second + 2 );
-        indices.push_back( index_it->second + 1 );
+        indices.push_back( distance_index.second + 0 );
+        indices.push_back( distance_index.second + 2 );
+        indices.push_back( distance_index.second + 1 );
     }
 
     bind();
@@ -300,25 +299,25 @@ void ChunkRenderer::rebuild( const Chunk& chunk )
     BlockMaterialV translucent_materials;
     BlockVertexV translucent_vertices;
 
-    for ( BlockFaceV::const_iterator face_it = faces.begin(); face_it != faces.end(); ++face_it )
+    BOOST_FOREACH( const BlockFace& face, faces )
     {
-        const BlockMaterial material = face_it->material_;
+        const BlockMaterial material = face.material_;
 
         if ( get_block_material_attributes( material ).translucent_ )
         {
             translucent_materials.push_back( material );
-            get_vertices_for_face( *face_it, translucent_vertices );
+            get_vertices_for_face( face, translucent_vertices );
         }
-        else get_vertices_for_face( *face_it, opaque_vertices[material] );
+        else get_vertices_for_face( face, opaque_vertices[material] );
     }
 
     opaque_vbos_.clear();
     opaque_materials_.clear();
 
-    for ( MaterialVertexMap::const_iterator it = opaque_vertices.begin(); it != opaque_vertices.end(); ++it )
+    BOOST_FOREACH( const MaterialVertexMap::value_type& it, opaque_vertices )
     {
-        const BlockMaterial material = it->first;
-        const BlockVertexV& vertices = it->second;
+        const BlockMaterial material = it.first;
+        const BlockVertexV& vertices = it.second;
 
         ChunkVertexBufferSP vbo( new ChunkVertexBuffer( vertices ) );
         opaque_vbos_[material] = vbo;
@@ -595,6 +594,8 @@ void Renderer::render( const Camera& camera, const World& world, const Player& p
 
         // glEnable( GL_DEPTH_TEST );
         // glColor4f( 0.0f, 0.0f, 1.0f, 1.0f );
+        // FIXME: Collision debugging
+        // glColor3f( 1.0f, 0.0f, 0.0f );
         // glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
         // AABoxVertexBuffer player_vbo( player.get_aabb() );
         // player_vbo.render();
@@ -621,6 +622,7 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
     typedef std::set<DistanceChunkPair> ChunkRendererSet;
     ChunkRendererSet translucent_chunks;
+    ChunkRendererSet debug_chunks;
 
     // TODO: While using a std::map of std::sets is convenient here, it is very slow.
     typedef std::map<BlockMaterial, ChunkRendererSet> MaterialRendererMap;
@@ -629,11 +631,9 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     num_chunks_drawn_ = 0;
     num_triangles_drawn_ = 0;
 
-    for ( ChunkRendererMap::iterator chunk_renderer_it = chunk_renderers_.begin();
-          chunk_renderer_it != chunk_renderers_.end();
-          ++chunk_renderer_it )
+    BOOST_FOREACH( const ChunkRendererMap::value_type& chunk_renderer_it, chunk_renderers_ )
     {
-        ChunkRenderer& chunk_renderer = *chunk_renderer_it->second.get();
+        ChunkRenderer& chunk_renderer = *chunk_renderer_it.second.get();
 
         // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
         if ( gmtl::isInVolume( view_frustum, chunk_renderer.get_aabb() ) )
@@ -641,20 +641,19 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
             const Vector3f camera_to_centroid = camera.get_position() - chunk_renderer.get_centroid();
             const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
             const DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
-
             const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
 
-            for ( BlockMaterialSet::const_iterator material_it = materials.begin();
-                  material_it != materials.end();
-                  ++material_it )
+            BOOST_FOREACH( BlockMaterial material, materials )
             {
-                material_chunks[*material_it].insert( distance_chunk );
+                material_chunks[material].insert( distance_chunk );
             }
 
             if ( chunk_renderer.has_translucent_materials() )
             {
                 translucent_chunks.insert( distance_chunk );
             }
+
+            debug_chunks.insert( distance_chunk );
 
             ++num_chunks_drawn_;
             num_triangles_drawn_ += chunk_renderer.get_num_triangles();
@@ -674,25 +673,18 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
     // TODO: Use an ARB_occlusion_query to avoid rendering fully occluded chunks?
 
-    for ( MaterialRendererMap::const_iterator material_renderer_it = material_chunks.begin();
-          material_renderer_it != material_chunks.end();
-          ++material_renderer_it )
+    BOOST_FOREACH( const MaterialRendererMap::value_type& material_renderer_it, material_chunks )
     {
-        const BlockMaterial material = material_renderer_it->first;
-        const ChunkRendererSet chunk_renderers = material_renderer_it->second;
+        const BlockMaterial material = material_renderer_it.first;
+        const ChunkRendererSet chunk_renderers = material_renderer_it.second;
 
         material_manager_.configure_block_material( camera, sky, material );
 
-        for ( ChunkRendererSet::const_iterator chunk_renderer_it = chunk_renderers.begin();
-              chunk_renderer_it != chunk_renderers.end();
-              ++chunk_renderer_it )
+        BOOST_FOREACH( const DistanceChunkPair& chunk_renderer_it, chunk_renderers )
         {
-            chunk_renderer_it->second->render_opaque( material, material_manager_ );
+            chunk_renderer_it.second->render_opaque( material, material_manager_ );
         }
     }
-
-    // TODO: Add a debugging mode that draws the chunk AABBs in wireframe mode.
-    // chunk_renderer_it->second->render_aabb();
 
     glDisable( GL_CULL_FACE );
 
@@ -700,10 +692,24 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     // to be rendered strictly in back to front order, we can't perform material grouping on them
     // like with the opaque materials.
 
-    for ( ChunkRendererSet::const_reverse_iterator it = translucent_chunks.rbegin(); it != translucent_chunks.rend(); ++it )
+    BOOST_FOREACH( const DistanceChunkPair& it, translucent_chunks )
     {
-        it->second->render_translucent( camera, sky, material_manager_ );
+        it.second->render_translucent( camera, sky, material_manager_ );
     }
+
+    // FIXME: Chunk debugging
+    // material_manager_.deconfigure_block_material();
+    // glEnable( GL_CULL_FACE );
+    // glEnable( GL_POLYGON_OFFSET_FILL );
+    // glPolygonOffset( 1.0f, 3.0f );
+    // glColor4f( 0.0f, 1.0f, 0.0f, 0.1f );
+    // BOOST_REVERSE_FOREACH( const ChunkRendererSet::value_type& it, debug_chunks )
+    // {
+    //     it.second->render_aabb();
+    // }
+    // glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+    // glDisable( GL_POLYGON_OFFSET_FILL );
+    // glDisable( GL_CULL_FACE );
 
     glDisable( GL_DEPTH_TEST );
     glDisable( GL_BLEND );

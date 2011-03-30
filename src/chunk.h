@@ -10,6 +10,11 @@
 #include "cardinal_relation.h"
 #include "block.h"
 
+#define FOREACH_SURROUNDING( x_name, y_name, z_name )\
+    for ( int x_name = -1; x_name <= 1; ++x_name )\
+        for ( int y_name = -1; y_name <= 1; ++y_name )\
+            for ( int z_name = -1; z_name <= 1; ++z_name )
+
 struct Chunk;
 
 struct BlockIterator
@@ -30,7 +35,7 @@ struct Chunk : public boost::noncopyable
 {
     static const int
         SIZE_X = 16,
-        SIZE_Y = 64,
+        SIZE_Y = 16,
         SIZE_Z = 16;
 
     static const Vector3i SIZE;
@@ -182,7 +187,8 @@ private:
 };
 
 typedef boost::shared_ptr<Chunk> ChunkSP;
-typedef std::vector<ChunkSP> ChunkV;
+typedef std::vector<ChunkSP> ChunkSPV;
+typedef std::vector<Chunk*> ChunkV;
 typedef std::map<Vector3i, ChunkSP, VectorLess<Vector3i> > ChunkMap;
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks );

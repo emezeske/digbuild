@@ -1,5 +1,7 @@
 #include <queue>
 
+#include <boost/foreach.hpp>
+
 #include <string.h>
 
 #include "chunk.h"
@@ -8,11 +10,6 @@
     for ( int x_name = 0; x_name < Chunk::SIZE_X; ++x_name )\
         for ( int y_name = 0; y_name < Chunk::SIZE_Y; ++y_name )\
             for ( int z_name = 0; z_name < Chunk::SIZE_Z; ++z_name )
-
-#define FOREACH_RELATION( x_name, y_name, z_name )\
-    for ( int x_name = -1; x_name < 2; ++x_name )\
-        for ( int y_name = -1; y_name < 2; ++y_name )\
-            for ( int z_name = -1; z_name < 2; ++z_name )
 
 //////////////////////////////////////////////////////////////////////////////////
 // Local definitions:
@@ -216,7 +213,7 @@ void flood_fill_light( typename LightStrategy::FloodFillQueue& queue, BlockV& bl
 
             LightStrategy::set_light( block, block_light_level );
 
-            FOR_EACH_CARDINAL_RELATION( relation )
+            FOREACH_CARDINAL_RELATION( relation )
             {
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
                 const BlockIterator neighbor = NeighborStrategy::get_block_neighbor( flood_block.first, relation_vector );
@@ -240,9 +237,9 @@ void flood_fill_light( typename LightStrategy::FloodFillQueue& queue, BlockV& bl
         }
     }
 
-    for ( BlockV::iterator it = blocks_visited.begin(); it != blocks_visited.end(); ++it )
+    BOOST_FOREACH( Block* block, blocks_visited )
     {
-        ( *it )->set_visited( false );
+        block->set_visited( false );
     }
 
     blocks_visited.clear();
@@ -355,6 +352,7 @@ void Chunk::apply_lighting_to_neighbors()
         if ( block.get_sunlight_level() != Block::MIN_LIGHT_COMPONENT_LEVEL )
         {
             sun_flood_queue.push( std::make_pair( block_it, block.get_sunlight_level() ) );
+            block.set_sunlight_level( Block::MIN_LIGHT_COMPONENT_LEVEL );
             flood_fill_light<SunLightStrategy, ExternalNeighborStrategy>( sun_flood_queue, blocks_visited );
         }
 
@@ -362,6 +360,7 @@ void Chunk::apply_lighting_to_neighbors()
         {
             // TODO: use a material attribute
             color_flood_queue.push( std::make_pair( block_it, block.get_light_level() ) );
+            block.set_light_level( Block::MIN_LIGHT_LEVEL );
             flood_fill_light<ColorLightStrategy, ExternalNeighborStrategy>( color_flood_queue, blocks_visited );
         }
     }
@@ -373,7 +372,7 @@ void Chunk::update_geometry()
 
     Chunk* column = get_column_bottom();
     Chunk* neighbor_columns[NUM_CARDINAL_RELATIONS];
-    FOR_EACH_CARDINAL_RELATION( relation )
+    FOREACH_CARDINAL_RELATION( relation )
     {
         neighbor_columns[relation] = 
             column->get_neighbor( cardinal_relation_vector( relation ) );
@@ -388,7 +387,7 @@ void Chunk::update_geometry()
         {
             const Vector3f block_position = vector_cast<Scalar>( Vector3i( position_ + block_index ) );
 
-            FOR_EACH_CARDINAL_RELATION( relation )
+            FOREACH_CARDINAL_RELATION( relation )
             {
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
                 const Block* block_neighbor = get_block_neighbor( block_index, relation_vector ).block_;
@@ -552,7 +551,7 @@ Vector4f Chunk::calculate_vertex_lighting(
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks )
 {
-    FOREACH_RELATION( x, y, z )
+    FOREACH_SURROUNDING( x, y, z )
     {
         const Vector3i relation( x, y, z );
 
@@ -570,7 +569,7 @@ void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks )
 
 void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks )
 {
-    FOREACH_RELATION( x, y, z )
+    FOREACH_SURROUNDING( x, y, z )
     {
         const Vector3i relation( x, y, z );
         chunk->set_neighbor( relation, 0 );

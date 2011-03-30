@@ -14,14 +14,14 @@ struct WorldGenerator
 
     WorldGenerator( const uint64_t world_seed );
 
-    ChunkV generate_region( const Vector2i& position );
+    ChunkSPV generate_region( const Vector2i& position );
 
 protected:
 
     typedef unsigned ChunkHeightmap[Chunk::SIZE_X][Chunk::SIZE_Z];
 
     void generate_chunk_column(
-        ChunkV& chunks,
+        ChunkSPV& chunks,
         const RegionFeatures& features,
         const Vector2i& region_position,
         const Vector2i& column_position,
@@ -29,12 +29,12 @@ protected:
     );
 
     void populate_trees(
-        ChunkV& chunks,
+        ChunkSPV& chunks,
         const Vector2i& column_position,
         const ChunkHeightmap heights
     );
 
-    Block& get_block( ChunkV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height );
+    Block& get_block( ChunkSPV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height );
     
     const uint64_t world_seed_;
 };

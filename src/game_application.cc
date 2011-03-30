@@ -1,3 +1,5 @@
+#include <boost/foreach.hpp>
+
 #include "sdl_utilities.h"
 #include "game_application.h"
 
@@ -20,11 +22,9 @@ GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limi
 {
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
 
-    for ( ChunkMap::const_iterator chunk_it = world_.get_chunks().begin();
-          chunk_it != world_.get_chunks().end();
-          ++chunk_it )
+    BOOST_FOREACH( const ChunkMap::value_type& chunk_it, world_.get_chunks() )
     {
-        renderer_.note_chunk_changes( *chunk_it->second );
+        renderer_.note_chunk_changes( *chunk_it.second );
     }
 
     SCOPE_TIMER_END
@@ -296,11 +296,9 @@ void GameApplication::do_one_step( const float step_time )
     {
         SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
 
-        for ( ChunkSet::const_iterator chunk_it = chunks_needing_update.begin();
-              chunk_it != chunks_needing_update.end();
-              ++chunk_it )
+        BOOST_FOREACH( Chunk* chunk, chunks_needing_update )
         {
-            renderer_.note_chunk_changes( **chunk_it );
+            renderer_.note_chunk_changes( *chunk );
         }
 
         SCOPE_TIMER_END
