@@ -40,8 +40,6 @@ private:
         SIZE,
         HALFSIZE;
 
-    static const float EYE_HEIGHT = 1.65f;
-
     struct BlockCollision
     {
         Scalar normalized_time_;
@@ -97,6 +95,7 @@ private:
     void noclip_strafe( const Scalar movement_units );
 
     static const float
+        EYE_HEIGHT = 1.65f,
         NOCLIP_SPEED = 30.0f,
         NOCLIP_FAST_MOVE_FACTOR = 5.0f,
         GROUND_ACCELERATION = 100.0f,

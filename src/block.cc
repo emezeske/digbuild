@@ -4,6 +4,10 @@
 // Static constant definitions for Block:
 //////////////////////////////////////////////////////////////////////////////////
 
+const int
+    Block::MIN_LIGHT_COMPONENT_LEVEL,
+    Block::MAX_LIGHT_COMPONENT_LEVEL;
+
 const Vector3i
     Block::MIN_LIGHT_LEVEL( MIN_LIGHT_COMPONENT_LEVEL, MIN_LIGHT_COMPONENT_LEVEL, MIN_LIGHT_COMPONENT_LEVEL ),
     Block::MAX_LIGHT_LEVEL( MAX_LIGHT_COMPONENT_LEVEL, MAX_LIGHT_COMPONENT_LEVEL, MAX_LIGHT_COMPONENT_LEVEL );

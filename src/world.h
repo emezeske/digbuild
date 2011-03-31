@@ -129,7 +129,8 @@ protected:
         return it == chunks_.end() ? 0 : it->second.get();
     }
 
-    void reset_lighting( const ChunkSet& chunks );
+    void reset_lighting_unordered( const ChunkSet& chunks );
+    void reset_lighting_top_down( const ChunkSet& chunks );
     void apply_lighting_to_self( const ChunkSet& chunks );
     void apply_lighting_to_neighbors( ChunkSet chunks );
     void update_geometry( const ChunkSet& chunks );

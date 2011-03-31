@@ -23,7 +23,7 @@ SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uin
     draw_distance_( 250.0f ),
     title_( title )
 {
-    if( SDL_Init( SDL_INIT_VIDEO ) == -1 )
+    if ( SDL_Init( SDL_INIT_VIDEO ) == -1 )
     {
         throw std::runtime_error( std::string( "Error initializing SDL: " ) + SDL_GetError() );
     }
@@ -49,8 +49,6 @@ SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uin
     {
         throw std::runtime_error( std::string( "Error setting video mode: " ) + SDL_GetError() );
     }
-
-    glEnable( GL_MULTISAMPLE );
 
     SDL_WM_SetCaption( title_.c_str(), NULL );
     SDL_FillRect( screen_, NULL, SDL_MapRGBA( screen_->format, 0, 0, 0, 0 ) );
@@ -79,6 +77,7 @@ void SDL_GL_Window::init_GL()
 
     glShadeModel( GL_SMOOTH );
     glClearDepth( 1.0f );
+    glEnable( GL_MULTISAMPLE );
     glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );
     glHint( GL_GENERATE_MIPMAP_HINT, GL_NICEST );
     glHint( GL_TEXTURE_COMPRESSION_HINT, GL_NICEST );

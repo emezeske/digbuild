@@ -251,6 +251,11 @@ void flood_fill_light( typename LightStrategy::FloodFillQueue& queue, BlockV& bl
 // Static constant definitions for Chunk:
 //////////////////////////////////////////////////////////////////////////////////
 
+const int
+    Chunk::SIZE_X,
+    Chunk::SIZE_Y,
+    Chunk::SIZE_Z;
+
 const Vector3i Chunk::SIZE( SIZE_X, SIZE_Y, SIZE_Z );
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -494,17 +499,26 @@ Vector4f Chunk::calculate_vertex_lighting(
     neighbors[1] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a );
     neighbors[2] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_b );
 
-    bool neighbor_ab_may_contribute = false;
+    // The 'ab' neighbor cannot contribute light to the vertex if both neighbors 'a' and 'b'
+    // are opaque, because they would fully block any light from 'ab'.
+    bool neighbor_ab_contributes = false;
 
     if ( !neighbors[1].block_ || neighbors[1].block_->get_material_attributes().translucent_ ||
          !neighbors[2].block_ || neighbors[2].block_->get_material_attributes().translucent_ )
     {
-        neighbor_ab_may_contribute = true;
+        neighbor_ab_contributes = true;
         neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
     }
 
+    // The lighting value for this vertex will be an average of the lighting provided by
+    // all the translucent blocks that may contribute to it.  This gives a smooth lighting
+    // effect, instead of the blocky lighting that per-face unaveraged lighting gives.
     Vector3i total_lighting = Block::MIN_LIGHT_LEVEL;
     int total_sunlighting = Block::MIN_LIGHT_COMPONENT_LEVEL;
+
+    // The number of translucent blocks that may contribute light to the vertex
+    // is used to determine an ambient occlusion factor.  Less contributors means
+    // more ambient occlusion.
     int num_contributors = 0;
 
     for ( size_t i = 0; i < NUM_NEIGHBORS; ++i )
@@ -520,23 +534,25 @@ Vector4f Chunk::calculate_vertex_lighting(
                 ++num_contributors;
             }
         }
-        else if ( i != 3 || neighbor_ab_may_contribute )
+        else if ( i != 3 || neighbor_ab_contributes )
         {
             total_sunlighting += Block::MAX_LIGHT_COMPONENT_LEVEL;
             ++num_contributors;
         }
     }
 
-    Vector4f average_lighting( total_lighting[0], total_lighting[1], total_lighting[2], total_sunlighting ); 
-    average_lighting /= Scalar( num_contributors );
-    const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_may_contribute - num_contributors;
+    const Vector4f average_lighting =
+        Vector4f( total_lighting[0], total_lighting[1], total_lighting[2], total_sunlighting ) /
+        Scalar( num_contributors );
+    const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_contributes - num_contributors;
     Vector4f attenuated_lighting;
     
     for ( int i = 0; i < Vector4i::Size; ++i )
     {
+        // Don't bother computing the attenuation if the lighting is nearly zero.
         if ( average_lighting[i] > gmtl::GMTL_EPSILON )
         {
-            Scalar power = Block::MAX_LIGHT_COMPONENT_LEVEL - average_lighting[i] + ambient_occlusion_power * 2;
+            const Scalar power = Block::MAX_LIGHT_COMPONENT_LEVEL - average_lighting[i] + ambient_occlusion_power * 2;
             attenuated_lighting[i] = get_lighting_attenuation( power );
         }
         else attenuated_lighting[i] = 0.0f;

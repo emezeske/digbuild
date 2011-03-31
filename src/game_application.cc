@@ -1,3 +1,9 @@
+// FIXME: Debugging (stress test)
+//#include <boost/random/uniform_int.hpp>
+//#include <boost/random/uniform_real.hpp>
+//#include <boost/random/uniform_on_sphere.hpp>
+//#include <boost/random/variate_generator.hpp>
+//#include <boost/random/linear_congruential.hpp>
 #include <boost/foreach.hpp>
 
 #include "sdl_utilities.h"
@@ -100,10 +106,25 @@ void GameApplication::process_events()
 
 void GameApplication::handle_event( SDL_Event &event )
 {
-    if ( event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_e )
+    switch ( event.type )
     {
-        toggle_gui_focus();
-        return;
+        case SDL_KEYDOWN:
+            if ( event.key.keysym.sym == SDLK_e )
+            {
+                toggle_gui_focus();
+                return;
+            }
+            break;
+
+        case SDL_VIDEORESIZE:
+            std::cout << "w: " << event.resize.w << ", h: " << event.resize.h << std::endl;
+            window_.reshape_window( event.resize.w, event.resize.h );
+            gui_.handle_event( event );
+            return;
+
+        case SDL_QUIT:
+            run_ = false;
+            break;
     }
 
     if ( gui_focused_ )
@@ -132,15 +153,6 @@ void GameApplication::handle_event( SDL_Event &event )
 
         case SDL_MOUSEBUTTONUP:
             handle_mouse_up_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
-            break;
-    
-        case SDL_VIDEORESIZE:
-            window_.reshape_window( event.resize.w, event.resize.h );
-            gui_.handle_event( event );
-            break;
-    
-        case SDL_QUIT:
-            run_ = false;
             break;
     }
 }
@@ -289,6 +301,28 @@ void GameApplication::do_one_step( const float step_time )
     player_.do_one_step( step_time, world_ );
     world_.do_one_step( step_time );
     gui_.do_one_step( step_time );
+
+    // FIXME: Debugging (stress test)
+    // world_.get_chunks();
+
+    // static boost::rand48 generator( 0 );
+
+    // boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+    //     x_random( generator, boost::uniform_int<>( 32, 64 ) ),
+    //     y_random( generator, boost::uniform_int<>( 0, 16 ) ),
+    //     z_random( generator, boost::uniform_int<>( 32, 64 ) );
+
+    // BlockIterator it;
+
+    // do
+    // {
+    //     const Vector3i p( x_random(), y_random(), z_random() );
+    //     it = world_.get_block( p );
+    // }
+    // while ( !it.block_ || it.block_->get_material() == BLOCK_MATERIAL_AIR );
+
+    // it.block_->set_material( BLOCK_MATERIAL_AIR );
+    // world_.mark_chunk_for_update( it.chunk_ );
 
     ChunkSet chunks_needing_update = world_.update_chunks();
 

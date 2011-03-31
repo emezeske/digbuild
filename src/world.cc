@@ -57,17 +57,13 @@ bool highest_chunk( const Chunk* a, const Chunk* b )
     return a->get_position()[1] > b->get_position()[1];
 }
 
-void generate_region_concurrently( WorldGenerator& generator, const Vector2i& position, ChunkMap& chunks )
+void sort_and_reset_lighting( ChunkV& chunks )
 {
-    static boost::mutex lock;
+    std::sort( chunks.begin(), chunks.end(), highest_chunk );
 
-    ChunkSPV new_chunks = generator.generate_region( position );
-
-    boost::lock_guard<boost::mutex> guard( lock );
-
-    BOOST_FOREACH( ChunkSP chunk, new_chunks )
+    BOOST_FOREACH( Chunk* chunk, chunks )
     {
-        chunk_stitch_into_map( chunk, chunks );
+        chunk->reset_lighting();
     }
 }
 
@@ -159,6 +155,8 @@ void add_chunks_affected_by_sunlight( ChunkSet& chunks )
 
         while ( next )
         {
+            chunks.insert( next );
+
             if ( reset_changes_base_sunlight( *next ) )
             {
                 next = next->get_neighbor( cardinal_relation_vector( CARDINAL_RELATION_BELOW ) );
@@ -167,8 +165,6 @@ void add_chunks_affected_by_sunlight( ChunkSet& chunks )
                 {
                     next = 0;
                 }
-
-                chunks.insert( next );
             }
             else next = 0;
         }
@@ -301,9 +297,13 @@ World::World( const uint64_t world_seed ) :
     {
         for ( int z = 0; z < 3; ++z )
         {
-            const Vector2i position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
-            worker_pool_.schedule(
-                boost::bind( &generate_region_concurrently, boost::ref( generator_ ), position, boost::ref( chunks_ ) ) );
+            const Vector2i region_position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
+            ChunkSPV region = generator_.generate_region( region_position, worker_pool_ );
+
+            BOOST_FOREACH( ChunkSP chunk, region )
+            {
+                chunk_stitch_into_map( chunk, chunks_ );
+            }
         }
     }
 
@@ -318,9 +318,13 @@ World::World( const uint64_t world_seed ) :
         chunks.insert( chunk_it.second.get() );
     }
 
-    reset_lighting( chunks );
+    // The lighting for each Chunk needs to be reset in top-down order to ensure
+    // that sunlight is correctly propagated from the top Chunks to the ones below.
+    reset_lighting_top_down( chunks );
+
     apply_lighting_to_self( chunks );
     apply_lighting_to_neighbors( chunks );
+
     update_geometry( chunks );
 }
 
@@ -336,21 +340,26 @@ ChunkSet World::update_chunks()
         return ChunkSet();
     }
 
-    // FIXME: The below comment needs updating.
-    //
     // If a Chunk is modified, it is not sufficient to simply rebuild the lighting/geometry
-    // for that Chunk.  Rather, all adjacent Chunks, and any Chunks below it or its neighbors
-    // must be updated, to ensure that lighting is propagated correctly (including sunlight).
+    // for that Chunk.  Lighting can travel up to 16 blocks, so a change to one Chunk might
+    // spread light to other surrounding Chunks.  The Chunks are (at least) 16 blocks in size,
+    // so it is sufficient to rebuild the lighting/geometry for just one layer of surrounding Chunks.
     //
-    // TODO: Explain neighbor lighting.
+    // To rebuild the lighting for a Chunk, its current lighting has to be reset.  Then, all of
+    // the lights that Chunk contains are applied within the Chunk.  Finally, that Chunk, and any
+    // other Chunks that it shares a face with must have their "neighbor" lighting applied.  This
+    // propagates lighting from e.g. Chunks that were not rebuilt.
     //
-    //   A A A  
-    // A R R R A
-    // A R X R A
-    // A R R R A
-    //   A A A  
+    // Consider a Chunk 'M' that has been modified.  In this diagram, the Chunks labelled 'M'
+    // and 'R' must be rebuilt.  Neighbor lighting from the Chunks labelled 'M', 'R', and 'N'
+    // must be applied.  Of course, this diagram is only 2D, but it's easy to extrapolate to 3D.
     //
-    //
+    //      N N N  
+    //    N R R R N
+    //    N R M R N
+    //    N R R R N
+    //      N N N  
+
     // TODO: This function should operate in a background thread so that it does not block
     //       the main game loop.  That raises some interesting questions RE: locking the
     //       Chunks.
@@ -396,10 +405,11 @@ ChunkSet World::update_chunks()
         }
     }
 
-    // TODO: This reset might be doable in parallel without any sorting, due to the fact that
-    //       the Chunks in which the sunlighting may have changed were already reset in top-down
-    //       order by add_chunks_affected_by_sunlight().
-    reset_lighting( reset_chunks );
+    // This reset might can be done without any sorting, due to the fact that
+    // the Chunks in which the sunlighting may have changed were already reset
+    // in top-down order by add_chunks_affected_by_sunlight().
+    reset_lighting_unordered( reset_chunks );
+
     apply_lighting_to_self( possibly_modified_chunks );
     apply_lighting_to_neighbors( neighbor_chunks );
     update_geometry( possibly_modified_chunks );
@@ -408,24 +418,42 @@ ChunkSet World::update_chunks()
     return possibly_modified_chunks;
 }
 
-void World::reset_lighting( const ChunkSet& chunks )
+void World::reset_lighting_unordered( const ChunkSet& chunks )
 {
-    SCOPE_TIMER_BEGIN( "Resetting lighting" )
-
-    ChunkV height_sorted_chunks;
+    SCOPE_TIMER_BEGIN( "Resetting lighting (unordered)" )
 
     BOOST_FOREACH( Chunk* chunk, chunks )
     {
-        height_sorted_chunks.push_back( chunk );
+        worker_pool_.schedule( boost::bind( &Chunk::reset_lighting, chunk ) );
     }
 
-    std::sort( height_sorted_chunks.begin(), height_sorted_chunks.end(), highest_chunk );
+    worker_pool_.wait();
 
-    // TODO: This can be done in parallel IF it's still done in top-down order.
-    BOOST_FOREACH( Chunk* chunk, height_sorted_chunks )
+    SCOPE_TIMER_END
+}
+
+void World::reset_lighting_top_down( const ChunkSet& chunks )
+{
+    SCOPE_TIMER_BEGIN( "Resetting lighting (top-down)" )
+
+    // The reset in a single column needs to be performed from the top down,
+    // but blocks in different columns can be reset in any order.
+
+    typedef std::map<Vector2i, ChunkV, VectorLess<Vector2i> > ColumnMap;
+    ColumnMap column_chunks;
+
+    BOOST_FOREACH( Chunk* chunk, chunks )
     {
-        chunk->reset_lighting();
+        const Vector2i column_position( chunk->get_position()[0], chunk->get_position()[2] );
+        column_chunks[column_position].push_back( chunk );
     }
+
+    BOOST_FOREACH( const ColumnMap::value_type& it, column_chunks )
+    {
+        worker_pool_.schedule( boost::bind( &sort_and_reset_lighting, it.second ) );
+    }
+
+    worker_pool_.wait();
 
     SCOPE_TIMER_END
 }

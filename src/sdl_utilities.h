@@ -6,8 +6,12 @@
 
 #include "log.h"
 
-#define SCOPE_TIMER_BEGIN( label ) { SDL_ScopeTimer __scope_timer( label );
-#define SCOPE_TIMER_END }
+// FIXME: Off for testing.
+#define SCOPE_TIMER_BEGIN( label )
+#define SCOPE_TIMER_END
+
+// #define SCOPE_TIMER_BEGIN( label ) { SDL_ScopeTimer __scope_timer( label );
+// #define SCOPE_TIMER_END }
 
 struct SDL_ScopeTimer
 {

@@ -6,74 +6,26 @@
 #include "world_generator.h"
 
 //////////////////////////////////////////////////////////////////////////////////
-// Static constant definitions for WorldGenerator:
+// Local definitions:
 //////////////////////////////////////////////////////////////////////////////////
 
-const Vector2i
-    WorldGenerator::CHUNKS_PER_REGION_EDGE( REGION_SIZE / Chunk::SIZE_X, REGION_SIZE / Chunk::SIZE_Z );
+namespace {
 
-//////////////////////////////////////////////////////////////////////////////////
-// Function definitions for WorldGenerator:
-//////////////////////////////////////////////////////////////////////////////////
-
-WorldGenerator::WorldGenerator( const uint64_t world_seed ) :
-    world_seed_( world_seed )
+Block& get_block( ChunkSPV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
 {
-}
+    const unsigned chunk_index = height / Chunk::SIZE_Y;
 
-ChunkSPV WorldGenerator::generate_region( const Vector2i& position )
-{
-    // TODO: The region features here are static for now, but eventually they should be randomized
-    //       depending on the position of the region itself.
-
-    const BicubicPatchCornerFeatures fundamental_corner_features(
-        Vector2f( 0.0f, 128.0f ),
-        Vector2f( -64.0f, 64.0f ),
-        Vector2f( -64.0f, 64.0f ),
-        Vector2f( -64.0f, 64.0f )
-    );
-
-    const BicubicPatchFeatures fundamental_features(
-        fundamental_corner_features,
-        fundamental_corner_features,
-        fundamental_corner_features,
-        fundamental_corner_features
-    );
-
-    const BicubicPatchCornerFeatures octave_corner_features(
-        Vector2f( -32.0f, 32.0f ),
-        Vector2f( -64.0f, 64.0f ),
-        Vector2f( -64.0f, 64.0f ),
-        Vector2f( -64.0f, 64.0f )
-    );
-
-    const BicubicPatchFeatures octave_features(
-        octave_corner_features,
-        octave_corner_features,
-        octave_corner_features,
-        octave_corner_features
-    );
-
-    RegionFeatures region_features( world_seed_, position, fundamental_features, octave_features );
-    ChunkSPV chunks;
-
-    for ( int x = 0; x < CHUNKS_PER_REGION_EDGE[0]; ++x )
+    if ( chunk_index >= chunks.size() )
     {
-        for ( int z = 0; z < CHUNKS_PER_REGION_EDGE[1]; ++z )
-        {
-            const Vector2i column_position( position + Vector2i( x * Chunk::SIZE_X, z * Chunk::SIZE_Z ) );
-            ChunkHeightmap heights;
-            ChunkSPV column_chunks;
-            generate_chunk_column( column_chunks, region_features, position, column_position, heights );
-            populate_trees( column_chunks, column_position, heights );
-            chunks.insert( chunks.end(), column_chunks.begin(), column_chunks.end() );
-        }
+        ChunkSP new_chunk( new Chunk( Vector3i( column_position[0], height, column_position[1] ) ) );
+        chunks.push_back( new_chunk );
     }
 
-    return chunks;
+    return chunks[chunk_index]->get_block( Vector3i( x, height % Chunk::SIZE_Y, z ) );
 }
 
-void WorldGenerator::generate_chunk_column(
+
+void generate_chunk_column(
     ChunkSPV& chunks,
     const RegionFeatures& features,
     const Vector2i& region_position,
@@ -88,7 +40,7 @@ void WorldGenerator::generate_chunk_column(
             const Vector2i relative_position = column_position - region_position + Vector2i( x, z );
 
             const Scalar fundamental_height =
-                features.get_fundamental_patch().interpolate( vector_cast<Scalar>( relative_position ) / Scalar( REGION_SIZE ) );
+                features.get_fundamental_patch().interpolate( vector_cast<Scalar>( relative_position ) / Scalar( WorldGenerator::REGION_SIZE ) );
 
             const BicubicPatch octave_patch = features.get_octave_patch( relative_position / int( RegionFeatures::BICUBIC_OCTAVE_EDGE ) );
 
@@ -155,8 +107,9 @@ void WorldGenerator::generate_chunk_column(
     }
 }
 
-void WorldGenerator::populate_trees(
+void populate_trees(
     ChunkSPV& chunks,
+    const uint64_t world_seed,
     const Vector2i& column_position,
     const ChunkHeightmap heights
 )
@@ -168,7 +121,7 @@ void WorldGenerator::populate_trees(
         MAX_TREE_HEIGHT = 24,
         TREES_PER_CHUNK = 1;
 
-    boost::rand48 tree_generator( get_seed_for_coordinates( world_seed_, column_position ) );
+    boost::rand48 tree_generator( get_seed_for_coordinates( world_seed, column_position ) );
 
     boost::uniform_int<> tree_x_distribution( MAX_TREE_RADIUS, Chunk::SIZE_X - MAX_TREE_RADIUS - 1 );
     boost::variate_generator<boost::rand48&, boost::uniform_int<> >
@@ -229,17 +182,103 @@ void WorldGenerator::populate_trees(
     }
 }
 
-Block& WorldGenerator::get_block( ChunkSPV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
+void generate_chunk_concurrently( 
+    ChunkSPV& chunks,
+    const uint64_t world_seed,
+    const RegionFeatures& features,
+    const Vector2i& region_position,
+    const Vector2i& column_position
+)
 {
-    const unsigned chunk_index = height / Chunk::SIZE_Y;
+    ChunkSPV column_chunks;
+    ChunkHeightmap heights;
+    generate_chunk_column( column_chunks, features, region_position, column_position, heights );
+    populate_trees( column_chunks, world_seed, column_position, heights );
 
-    if ( chunk_index >= chunks.size() )
+    static boost::mutex lock;
+    boost::lock_guard<boost::mutex> guard( lock );
+    chunks.insert( chunks.end(), column_chunks.begin(), column_chunks.end() );
+}
+
+} // anonymous namespace
+
+//////////////////////////////////////////////////////////////////////////////////
+// Static constant definitions for WorldGenerator:
+//////////////////////////////////////////////////////////////////////////////////
+
+const int WorldGenerator::REGION_SIZE;
+
+const Vector2i
+    WorldGenerator::CHUNKS_PER_REGION_EDGE( REGION_SIZE / Chunk::SIZE_X, REGION_SIZE / Chunk::SIZE_Z );
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for WorldGenerator:
+//////////////////////////////////////////////////////////////////////////////////
+
+WorldGenerator::WorldGenerator( const uint64_t world_seed ) :
+    world_seed_( world_seed )
+{
+}
+
+ChunkSPV WorldGenerator::generate_region( const Vector2i& region_position, boost::threadpool::pool worker_pool )
+{
+    // TODO: The region features here are static for now, but eventually they should be randomized
+    //       depending on the position of the region itself.
+
+    const BicubicPatchCornerFeatures fundamental_corner_features(
+        Vector2f( 0.0f, 128.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f )
+    );
+
+    const BicubicPatchFeatures fundamental_features(
+        fundamental_corner_features,
+        fundamental_corner_features,
+        fundamental_corner_features,
+        fundamental_corner_features
+    );
+
+    const BicubicPatchCornerFeatures octave_corner_features(
+        Vector2f( -32.0f, 32.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f ),
+        Vector2f( -64.0f, 64.0f )
+    );
+
+    const BicubicPatchFeatures octave_features(
+        octave_corner_features,
+        octave_corner_features,
+        octave_corner_features,
+        octave_corner_features
+    );
+
+    RegionFeatures region_features( world_seed_, region_position, fundamental_features, octave_features );
+    ChunkSPV chunks;
+
+    for ( int x = 0; x < CHUNKS_PER_REGION_EDGE[0]; ++x )
     {
-        ChunkSP new_chunk( new Chunk( Vector3i( column_position[0], height, column_position[1] ) ) );
-        chunks.push_back( new_chunk );
+        for ( int z = 0; z < CHUNKS_PER_REGION_EDGE[1]; ++z )
+        {
+            const Vector2i column_position =
+                region_position + Vector2i( x * Chunk::SIZE_X, z * Chunk::SIZE_Z );
+
+            worker_pool.schedule(
+                boost::bind(
+                    &generate_chunk_concurrently,
+                    boost::ref( chunks ),
+                    world_seed_,
+                    boost::ref( region_features ),
+                    boost::ref( region_position ),
+                    column_position
+                )
+            );
+        }
     }
 
-    return chunks[chunk_index]->get_block( Vector3i( x, height % Chunk::SIZE_Y, z ) );
+    worker_pool.wait();
+
+    return chunks;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -255,11 +294,11 @@ const Vector3i
 
 RegionFeatures::RegionFeatures(
     const uint64_t world_seed,
-    const Vector2i& position,
+    const Vector2i& region_position,
     const BicubicPatchFeatures& fundamental_features,
     const BicubicPatchFeatures& octave_features
 ) :
-    fundamental_patch_( world_seed, position, Vector2i( WorldGenerator::REGION_SIZE, WorldGenerator::REGION_SIZE ), fundamental_features )
+    fundamental_patch_( world_seed, region_position, Vector2i( WorldGenerator::REGION_SIZE, WorldGenerator::REGION_SIZE ), fundamental_features )
 {
     // TODO: Somehow move the ultimate seeds being used here into a different space
     //       than those used for the fundamental patch.  Otherwise, the corners shared
@@ -270,10 +309,10 @@ RegionFeatures::RegionFeatures(
 
     const Vector2i octave_size( BICUBIC_OCTAVE_EDGE, BICUBIC_OCTAVE_EDGE );
     const uint64_t octave_seed = world_seed ^ 0xfea873529eaf;
-    octave_patches_[0][0] = BicubicPatch( octave_seed, position + Vector2i( 0, 0 ), octave_size, octave_features );
-    octave_patches_[0][1] = BicubicPatch( octave_seed, position + Vector2i( 0, BICUBIC_OCTAVE_EDGE ), octave_size, octave_features );
-    octave_patches_[1][0] = BicubicPatch( octave_seed, position + Vector2i( BICUBIC_OCTAVE_EDGE, 0 ), octave_size, octave_features );
-    octave_patches_[1][1] = BicubicPatch( octave_seed, position + Vector2i( BICUBIC_OCTAVE_EDGE, BICUBIC_OCTAVE_EDGE ), octave_size, octave_features );
+    octave_patches_[0][0] = BicubicPatch( octave_seed, region_position + Vector2i( 0, 0 ), octave_size, octave_features );
+    octave_patches_[0][1] = BicubicPatch( octave_seed, region_position + Vector2i( 0, BICUBIC_OCTAVE_EDGE ), octave_size, octave_features );
+    octave_patches_[1][0] = BicubicPatch( octave_seed, region_position + Vector2i( BICUBIC_OCTAVE_EDGE, 0 ), octave_size, octave_features );
+    octave_patches_[1][1] = BicubicPatch( octave_seed, region_position + Vector2i( BICUBIC_OCTAVE_EDGE, BICUBIC_OCTAVE_EDGE ), octave_size, octave_features );
 
     // The geometry generated by slicing up a single TrilinearBox by value ranges tends to be sheet-like,
     // which is not ideal for cave networks.  However, by taking the intersection of a value range in two
@@ -281,7 +320,7 @@ RegionFeatures::RegionFeatures(
 
     boxes_[0] = TrilinearBox(
         world_seed,
-        Vector3i( position[0], 0, position[1] ),
+        Vector3i( region_position[0], 0, region_position[1] ),
         TRILINEAR_BOX_SIZE,
         32
     );
@@ -290,7 +329,7 @@ RegionFeatures::RegionFeatures(
     //       to the first one.  Is this a good way to do so?
     boxes_[1] = TrilinearBox(
         world_seed ^ 0x313535f3235,
-        Vector3i( position[0], 0, position[1] ),
+        Vector3i( region_position[0], 0, region_position[1] ),
         TRILINEAR_BOX_SIZE,
         32
     );

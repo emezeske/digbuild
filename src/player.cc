@@ -16,6 +16,21 @@ const Vector3f
     Player::SIZE( 0.50f, 1.9f, 0.50f ),
     Player::HALFSIZE( SIZE / 2.0f );
 
+const float
+    Player::EYE_HEIGHT,
+    Player::NOCLIP_SPEED,
+    Player::NOCLIP_FAST_MOVE_FACTOR,
+    Player::GROUND_ACCELERATION,
+    Player::AIR_ACCELERATION,
+    Player::GRAVITY_ACCELERATION,
+    Player::WALKING_SPEED,
+    Player::JUMP_VELOCITY,
+    Player::PRIMARY_FIRE_DISTANCE;
+
+const long
+    Player::JUMP_INTERVAL_MS,
+    Player::PRIMARY_FIRE_INTERVAL_MS;
+
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for Player:
 //////////////////////////////////////////////////////////////////////////////////

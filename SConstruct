@@ -50,10 +50,10 @@ AddOption(
     help = 'GMTL header file directory'
 )
 
-OPTIMIZE_BINARY = ARGUMENTS.get( 'optimize', 1 )
-INCLUDE_ASSERTIONS = not ARGUMENTS.get( 'assert', 0 )
-RELEASE_BUILD = ARGUMENTS.get( 'release', 0 )
-PROFILE_BINARY = ARGUMENTS.get( 'profile', 0 )
+OPTIMIZE_BINARY = int( ARGUMENTS.get( 'optimize', 1 ) )
+INCLUDE_ASSERTIONS = not int( ARGUMENTS.get( 'assert', 0 ) )
+RELEASE_BUILD = int( ARGUMENTS.get( 'release', 0 ) )
+PROFILE_BINARY = int( ARGUMENTS.get( 'profile', 0 ) )
 
 env = Environment()
 env.SetOption( 'num_jobs', multiprocessing.cpu_count() * 2 + 1 )

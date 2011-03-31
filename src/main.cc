@@ -6,7 +6,10 @@ const int
     SCREEN_HEIGHT = 1100,
     SCREEN_BPP    = 32;
 
-const Uint32 SCREEN_FLAGS = SDL_OPENGL;
+// FIXME: SDL_RESIZABLE is apparently not compatible with SDL_NOFRAME.  When they are both enabled,
+//        resize events clobbers the OpenGL state and require OpenGL to be fully reinitialized.
+//        This might be fixed in SDL 1.3.
+const Uint32 SCREEN_FLAGS = SDL_OPENGL | SDL_RESIZABLE;
 
 int main( int argc, char **argv )
 {

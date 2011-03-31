@@ -1,11 +1,15 @@
 #ifndef WORLD_GENERATOR
 #define WORLD_GENERATOR
 
+#include <boost/threadpool.hpp>
+
 #include "bicubic_patch.h"
 #include "trilinear_box.h"
 #include "chunk.h"
 
 struct RegionFeatures;
+
+typedef unsigned ChunkHeightmap[Chunk::SIZE_X][Chunk::SIZE_Z];
 
 struct WorldGenerator
 {
@@ -14,28 +18,10 @@ struct WorldGenerator
 
     WorldGenerator( const uint64_t world_seed );
 
-    ChunkSPV generate_region( const Vector2i& position );
+    ChunkSPV generate_region( const Vector2i& region_position, boost::threadpool::pool worker_pool );
 
 protected:
 
-    typedef unsigned ChunkHeightmap[Chunk::SIZE_X][Chunk::SIZE_Z];
-
-    void generate_chunk_column(
-        ChunkSPV& chunks,
-        const RegionFeatures& features,
-        const Vector2i& region_position,
-        const Vector2i& column_position,
-        ChunkHeightmap heights
-    );
-
-    void populate_trees(
-        ChunkSPV& chunks,
-        const Vector2i& column_position,
-        const ChunkHeightmap heights
-    );
-
-    Block& get_block( ChunkSPV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height );
-    
     const uint64_t world_seed_;
 };
 
@@ -53,7 +39,7 @@ struct RegionFeatures
 
     RegionFeatures(
         const uint64_t world_seed,
-        const Vector2i& position,
+        const Vector2i& region_position,
         const BicubicPatchFeatures& fundamental_features,
         const BicubicPatchFeatures& octave_features
     );
