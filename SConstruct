@@ -56,7 +56,7 @@ RELEASE_BUILD = int( ARGUMENTS.get( 'release', 0 ) )
 PROFILE_BINARY = int( ARGUMENTS.get( 'profile', 0 ) )
 
 env = Environment()
-env.SetOption( 'num_jobs', multiprocessing.cpu_count() * 2 + 1 )
+env.SetOption( 'num_jobs', multiprocessing.cpu_count() - 1 )
 
 for variable in [ 'PATH', 'TERM', 'HOME', 'DISPLAY' ]:
     env.Append( ENV = { variable : os.environ[variable] } )
