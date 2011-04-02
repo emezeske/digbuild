@@ -49,7 +49,8 @@ Player::Player( const Vector3f& position, const Scalar pitch, const Scalar yaw )
     requesting_primary_fire_( false ),
     noclip_mode_( true ),
     feet_contacting_block_( false ),
-    last_jump_at_( 0 )
+    last_jump_at_( 0 ),
+    last_primary_fire_at_( 0 )
 {
 }
 
