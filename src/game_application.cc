@@ -1,9 +1,11 @@
+//////////////////////////////////////////////////////////////////
 // FIXME: Debugging (stress test)
-//#include <boost/random/uniform_int.hpp>
-//#include <boost/random/uniform_real.hpp>
-//#include <boost/random/uniform_on_sphere.hpp>
-//#include <boost/random/variate_generator.hpp>
-//#include <boost/random/linear_congruential.hpp>
+// #include <boost/random/uniform_int.hpp>
+// #include <boost/random/uniform_real.hpp>
+// #include <boost/random/uniform_on_sphere.hpp>
+// #include <boost/random/variate_generator.hpp>
+// #include <boost/random/linear_congruential.hpp>
+//////////////////////////////////////////////////////////////////
 #include <boost/foreach.hpp>
 
 #include "sdl_utilities.h"
@@ -24,8 +26,11 @@ GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limi
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
     world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
-    gui_( window_.get_screen() )
+    gui_( window_.get_screen() ),
+    chunk_updater_( 1 )
 {
+    World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
+
     SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
 
     BOOST_FOREACH( const ChunkMap::value_type& chunk_it, world_.get_chunks() )
@@ -90,7 +95,7 @@ void GameApplication::main_loop()
             do_one_step( float( step_time_seconds ) );
             render();
         }
-        else SDL_Delay( int( seconds_until_next_frame * 1000.0 ) );
+        else do_delay( seconds_until_next_frame );
     }
 }
 
@@ -296,21 +301,46 @@ void GameApplication::toggle_gui_focus()
     gui_focused_ = !gui_focused_;
 }
 
+void GameApplication::handle_chunk_updates()
+{
+    if ( !updated_chunks_.empty() )
+    {
+        World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
+
+        SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
+
+        BOOST_FOREACH( Chunk* chunk, updated_chunks_ )
+        {
+            renderer_.note_chunk_changes( *chunk );
+        }
+
+        updated_chunks_.clear();
+
+        SCOPE_TIMER_END
+    }
+}
+
 void GameApplication::do_one_step( const float step_time )
 {
+    // Hopefully, handle_chunk_updates() will end up being called during the frame
+    // delay, but it's called here as well, in case the rendering loop is FPS capped
+    // and there was no delay.
+    handle_chunk_updates();
+
+    World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
+
     player_.do_one_step( step_time, world_ );
     world_.do_one_step( step_time );
     gui_.do_one_step( step_time );
 
+    //////////////////////////////////////////////////////////////////
     // FIXME: Debugging (stress test)
-    // world_.get_chunks();
-
     // static boost::rand48 generator( 0 );
 
     // boost::variate_generator<boost::rand48&, boost::uniform_int<> >
-    //     x_random( generator, boost::uniform_int<>( 32, 64 ) ),
-    //     y_random( generator, boost::uniform_int<>( 0, 16 ) ),
-    //     z_random( generator, boost::uniform_int<>( 32, 64 ) );
+    //     x_random( generator, boost::uniform_int<>( 0, 384 ) ),
+    //     y_random( generator, boost::uniform_int<>( 0, 128 ) ),
+    //     z_random( generator, boost::uniform_int<>( 0, 384 ) );
 
     // BlockIterator it;
 
@@ -323,19 +353,32 @@ void GameApplication::do_one_step( const float step_time )
 
     // it.block_->set_material( BLOCK_MATERIAL_AIR );
     // world_.mark_chunk_for_update( it.chunk_ );
+    //////////////////////////////////////////////////////////////////
 
-    ChunkSet chunks_needing_update = world_.update_chunks();
-
-    if ( !chunks_needing_update.empty() )
+    if ( !world_.is_chunk_update_in_progress() )
     {
-        SCOPE_TIMER_BEGIN( "Updating chunk VBOs" )
+        chunk_updater_.wait();
+        updated_chunks_ = world_.get_updated_chunks();
+        chunk_updater_.schedule( boost::bind( &World::update_chunks, boost::ref( world_ ) ) );
+    }
+}
 
-        BOOST_FOREACH( Chunk* chunk, chunks_needing_update )
-        {
-            renderer_.note_chunk_changes( *chunk );
-        }
+void GameApplication::do_delay( const float delay_time )
+{
+    long delay_ms = long( delay_time * 1000.0 );
+    const long begin_ticks = SDL_GetTicks();
 
-        SCOPE_TIMER_END
+    // If any Chunks need to be sent down to the Renderer, do so here while we're
+    // supposed to be delaying.  It would be a shame to spend this time sleeping,
+    // when we could be doing useful work.
+    handle_chunk_updates();
+
+    // Count any time we spent updating Chunks toward the delay.
+    delay_ms -= SDL_GetTicks() - begin_ticks;
+
+    if ( delay_ms >= 0 )
+    {
+        SDL_Delay( delay_ms );
     }
 }
 

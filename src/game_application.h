@@ -3,6 +3,8 @@
 
 #include <vector>
 
+#include <boost/threadpool.hpp>
+
 #include "sdl_gl_window.h"
 #include "renderer.h"
 #include "player.h"
@@ -30,7 +32,10 @@ protected:
     void toggle_fullscreen();
     void toggle_gui_focus();
 
+    void handle_chunk_updates();
+
     void do_one_step( const float step_time );
+    void do_delay( const float delay_time );
     void render();
 
     bool run_;
@@ -53,6 +58,10 @@ protected:
     World world_;
 
     Gui gui_;
+
+    boost::threadpool::pool chunk_updater_;
+
+    ChunkSet updated_chunks_;
 };
 
 #endif // GAME_APPLICATION_H

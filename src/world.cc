@@ -287,10 +287,14 @@ void Sky::do_one_step( const float step_time )
 //////////////////////////////////////////////////////////////////////////////////
 
 World::World( const uint64_t world_seed ) :
+    chunk_update_in_progress_( false ),
     generator_( world_seed ),
     sky_( world_seed ),
-    worker_pool_( hardware_concurrency() )
+    worker_pool_( hardware_concurrency() ),
+    outstanding_jobs_( 0 )
 {
+    ChunkGuard chunk_guard( chunk_lock_ );
+
     SCOPE_TIMER_BEGIN( "World generation" )
 
     for ( int x = 0; x < 3; ++x )
@@ -307,7 +311,7 @@ World::World( const uint64_t world_seed ) :
         }
     }
 
-    worker_pool_.wait();
+    yield( chunk_guard );
 
     SCOPE_TIMER_END
 
@@ -320,12 +324,11 @@ World::World( const uint64_t world_seed ) :
 
     // The lighting for each Chunk needs to be reset in top-down order to ensure
     // that sunlight is correctly propagated from the top Chunks to the ones below.
-    reset_lighting_top_down( chunks );
+    reset_lighting_top_down( chunk_guard, chunks );
 
-    apply_lighting_to_self( chunks );
-    apply_lighting_to_neighbors( chunks );
-
-    update_geometry( chunks );
+    apply_lighting_to_self( chunk_guard, chunks );
+    apply_lighting_to_neighbors( chunk_guard, chunks );
+    update_geometry( chunk_guard, chunks );
 }
 
 void World::do_one_step( const float step_time )
@@ -333,12 +336,17 @@ void World::do_one_step( const float step_time )
     sky_.do_one_step( step_time );
 }
 
-ChunkSet World::update_chunks()
+void World::update_chunks()
 {
+    ChunkGuard chunk_guard( chunk_lock_ );
+    assert( updated_chunks_.empty() );
+
     if ( chunks_needing_update_.empty() )
     {
-        return ChunkSet();
+        return;
     }
+
+    chunk_update_in_progress_ = true;
 
     // If a Chunk is modified, it is not sufficient to simply rebuild the lighting/geometry
     // for that Chunk.  Lighting can travel up to 16 blocks, so a change to one Chunk might
@@ -360,17 +368,18 @@ ChunkSet World::update_chunks()
     //    N R R R N
     //      N N N  
 
-    // TODO: This function should operate in a background thread so that it does not block
-    //       the main game loop.  That raises some interesting questions RE: locking the
-    //       Chunks.
+    // Make a copy of the chunks_needing_update_ set so that chunks_needing_update_ can
+    // be safely modified while this function yields.
+    ChunkSet chunks_needing_update = chunks_needing_update_;
+    chunks_needing_update_.clear();
 
     ChunkSet reset_chunks;
     ChunkSet possibly_modified_chunks;
     ChunkSet neighbor_chunks;
 
-    add_chunks_affected_by_sunlight( chunks_needing_update_ );
+    add_chunks_affected_by_sunlight( chunks_needing_update );
 
-    BOOST_FOREACH( Chunk* chunk, chunks_needing_update_ )
+    BOOST_FOREACH( Chunk* chunk, chunks_needing_update )
     {
         FOREACH_SURROUNDING( x, y, z )
         {
@@ -381,10 +390,9 @@ ChunkSet World::update_chunks()
             
             if ( possibly_modified_chunk )
             {
-                if ( chunks_needing_update_.find( possibly_modified_chunk ) == chunks_needing_update_.end() )
+                if ( chunks_needing_update.find( possibly_modified_chunk ) == chunks_needing_update.end() )
                 {
-                    // The Chunks in chunks_needing_update_ were already
-                    // reset by add_chunks_affected_by_sunlight().
+                    // The Chunks in chunks_needing_update were already reset by add_chunks_affected_by_sunlight().
                     reset_chunks.insert( possibly_modified_chunk );
                 }
 
@@ -408,31 +416,31 @@ ChunkSet World::update_chunks()
     // This reset might can be done without any sorting, due to the fact that
     // the Chunks in which the sunlighting may have changed were already reset
     // in top-down order by add_chunks_affected_by_sunlight().
-    reset_lighting_unordered( reset_chunks );
+    reset_lighting_unordered( chunk_guard, reset_chunks );
 
-    apply_lighting_to_self( possibly_modified_chunks );
-    apply_lighting_to_neighbors( neighbor_chunks );
-    update_geometry( possibly_modified_chunks );
+    apply_lighting_to_self( chunk_guard, possibly_modified_chunks );
+    apply_lighting_to_neighbors( chunk_guard, neighbor_chunks );
+    update_geometry( chunk_guard, possibly_modified_chunks );
 
-    chunks_needing_update_.clear();
-    return possibly_modified_chunks;
+    updated_chunks_ = possibly_modified_chunks;
+    chunk_update_in_progress_ = false;
 }
 
-void World::reset_lighting_unordered( const ChunkSet& chunks )
+void World::reset_lighting_unordered( ChunkGuard& chunk_guard, const ChunkSet& chunks )
 {
     SCOPE_TIMER_BEGIN( "Resetting lighting (unordered)" )
 
     BOOST_FOREACH( Chunk* chunk, chunks )
     {
-        worker_pool_.schedule( boost::bind( &Chunk::reset_lighting, chunk ) );
+        schedule( chunk_guard, boost::bind( &Chunk::reset_lighting, chunk ) );
     }
 
-    worker_pool_.wait();
+    yield( chunk_guard );
 
     SCOPE_TIMER_END
 }
 
-void World::reset_lighting_top_down( const ChunkSet& chunks )
+void World::reset_lighting_top_down( ChunkGuard& chunk_guard, const ChunkSet& chunks )
 {
     SCOPE_TIMER_BEGIN( "Resetting lighting (top-down)" )
 
@@ -450,24 +458,24 @@ void World::reset_lighting_top_down( const ChunkSet& chunks )
 
     BOOST_FOREACH( const ColumnMap::value_type& it, column_chunks )
     {
-        worker_pool_.schedule( boost::bind( &sort_and_reset_lighting, it.second ) );
+        schedule( chunk_guard, boost::bind( &sort_and_reset_lighting, it.second ) );
     }
 
-    worker_pool_.wait();
+    yield( chunk_guard );
 
     SCOPE_TIMER_END
 }
 
-void World::apply_lighting_to_self( const ChunkSet& chunks )
+void World::apply_lighting_to_self( ChunkGuard& chunk_guard, const ChunkSet& chunks )
 {
     SCOPE_TIMER_BEGIN( "Self-lighting" )
 
     BOOST_FOREACH( Chunk* chunk, chunks )
     {
-        worker_pool_.schedule( boost::bind( &Chunk::apply_lighting_to_self, chunk ) );
+        schedule( chunk_guard, boost::bind( &Chunk::apply_lighting_to_self, chunk ) );
     }
 
-    worker_pool_.wait();
+    yield( chunk_guard );
 
     SCOPE_TIMER_END
 }
@@ -477,7 +485,7 @@ void World::apply_lighting_to_self( const ChunkSet& chunks )
 // threads could be modifying the same Chunk at the same time).  This function takes this
 // into account, and only performs parallel computation on Chunks that are too far apart
 // for their lights to overlap the same Blocks.
-void World::apply_lighting_to_neighbors( ChunkSet chunks )
+void World::apply_lighting_to_neighbors( ChunkGuard& chunk_guard, ChunkSet chunks )
 {
     SCOPE_TIMER_BEGIN( "Neighbor-lighting" )
 
@@ -490,27 +498,52 @@ void World::apply_lighting_to_neighbors( ChunkSet chunks )
 
         BOOST_FOREACH( Chunk* chunk, separated_chunks )
         {
-            worker_pool_.schedule( boost::bind( &Chunk::apply_lighting_to_neighbors, chunk ) );
+            schedule( chunk_guard, boost::bind( &Chunk::apply_lighting_to_neighbors, chunk ) );
             chunks.erase( chunk );
         }
 
         separated_chunks.clear();
-        worker_pool_.wait();
+        yield( chunk_guard );
     }
 
     SCOPE_TIMER_END
 }
 
-void World::update_geometry( const ChunkSet& chunks )
+void World::update_geometry( ChunkGuard& chunk_guard, const ChunkSet& chunks )
 {
     SCOPE_TIMER_BEGIN( "Updating geometry" )
 
     BOOST_FOREACH( Chunk* chunk, chunks )
     {
-        worker_pool_.schedule( boost::bind( &Chunk::update_geometry, chunk ) );
+        schedule( chunk_guard, boost::bind( &Chunk::update_geometry, chunk ) );
     }
 
-    worker_pool_.wait();
+    yield( chunk_guard );
 
     SCOPE_TIMER_END
+}
+
+void World::schedule( ChunkGuard& chunk_guard, boost::threadpool::pool::task_type const& task )
+{
+    worker_pool_.schedule( task );
+
+    // Don't yield until there are enough tasks scheduled to keep all of the processors
+    // busy for a while (in the background).
+    if ( ++outstanding_jobs_ > worker_pool_.size() )
+    {
+        outstanding_jobs_ = 0;
+        yield( chunk_guard );
+    }
+}
+
+void World::yield( ChunkGuard& chunk_guard )
+{
+    // First, ensure that all background access to the Chunks has ceased.
+    worker_pool_.wait();
+
+    // Now, briefly relinquish the lock so that other processes can have
+    // a chance to access the Chunks.
+    chunk_guard.unlock();
+    boost::this_thread::yield();
+    chunk_guard.lock();
 }

@@ -1,10 +1,10 @@
 #ifndef WORLD_H
 #define WORLD_H
 
-#include <boost/threadpool.hpp>
-
 #include <cstdlib>
 #include <set>
+
+#include <boost/threadpool.hpp>
 
 #include "world_generator.h"
 #include "chunk.h"
@@ -72,16 +72,14 @@ typedef std::set<Chunk*> ChunkSet;
 
 struct World
 {
+    typedef boost::unique_lock<boost::mutex> ChunkGuard;
+
     World( const uint64_t world_seed );
 
     void do_one_step( float step_time );
 
     const Sky& get_sky() const { return sky_; }
     const ChunkMap& get_chunks() const { return chunks_; }
-
-    // This function updates the Chunk lighting and geometry, and returns the set
-    // of Chunks that have been modified.
-    ChunkSet update_chunks();
 
     BlockIterator get_block( const Vector3i& position ) const
     {
@@ -121,6 +119,27 @@ struct World
         chunks_needing_update_.insert( chunk );
     }
 
+    // This function updates the Chunk lighting and geometry for all of the Chunks that
+    // have been marked for update.  Since this might be a time-consuming process, it
+    // periodically yields its execution for e.g. the rendering loop to continue.  When
+    // the Chunks are all updated, you can call get_updated_chunks() to determine which
+    // ones were affected.
+    void update_chunks();
+
+    bool is_chunk_update_in_progress() const { return chunk_update_in_progress_; }
+
+    ChunkSet get_updated_chunks()
+    {
+        assert( !is_chunk_update_in_progress() );
+        ChunkSet result = updated_chunks_;
+        updated_chunks_.clear();
+        return result;
+    }
+
+    // The Chunk lock is held by this class whenever it may be accessing the Chunks.  Any
+    // code outside of this class should grab the lock before doing the same.
+    boost::mutex& get_chunk_lock() { return chunk_lock_; }
+
 protected:
 
     Chunk* get_chunk( const Vector3i& position )
@@ -129,13 +148,20 @@ protected:
         return it == chunks_.end() ? 0 : it->second.get();
     }
 
-    void reset_lighting_unordered( const ChunkSet& chunks );
-    void reset_lighting_top_down( const ChunkSet& chunks );
-    void apply_lighting_to_self( const ChunkSet& chunks );
-    void apply_lighting_to_neighbors( ChunkSet chunks );
-    void update_geometry( const ChunkSet& chunks );
+    void reset_lighting_unordered( ChunkGuard& chunk_guard, const ChunkSet& chunks );
+    void reset_lighting_top_down( ChunkGuard& chunk_guard, const ChunkSet& chunks );
+    void apply_lighting_to_self( ChunkGuard& chunk_guard, const ChunkSet& chunks );
+    void apply_lighting_to_neighbors( ChunkGuard& chunk_guard, ChunkSet chunks );
+    void update_geometry( ChunkGuard& chunk_guard, const ChunkSet& chunks );
 
-    ChunkSet chunks_needing_update_;
+    void schedule( ChunkGuard& chunk_guard, boost::threadpool::pool::task_type const& task );
+    void yield( ChunkGuard& chunk_guard );
+
+    ChunkSet
+        chunks_needing_update_,
+        updated_chunks_;
+
+    bool chunk_update_in_progress_;
 
     WorldGenerator generator_;
 
@@ -144,6 +170,10 @@ protected:
     ChunkMap chunks_;
 
     boost::threadpool::pool worker_pool_;
+
+    unsigned outstanding_jobs_;
+
+    boost::mutex chunk_lock_;
 };
 
 #endif // WORLD_H
