@@ -20,13 +20,72 @@ struct SimplePositionVertex
     {
     }
 
+    static void configure_vertex_pointer()
+    {
+        glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
+    }
+
     GLfloat x_, y_, z_;
 
 } __attribute__( ( packed ) );
 
 typedef std::vector<SimplePositionVertex> SimplePositionVertexV;
 
+template <typename T>
+void set_buffer_data( const GLenum target, const std::vector<T>& vertices, const GLenum usage )
+{
+    glBufferData( target, vertices.size() * sizeof( T ), &vertices[0], usage );
+}
+
 } // anonymous namespace
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for VertexBuffer::BindGuard:
+//////////////////////////////////////////////////////////////////////////////////
+
+VertexBuffer::BindGuard::BindGuard( VertexBuffer& vbo ) :
+    vbo_( vbo )
+{
+    vbo_.bind();
+}
+
+VertexBuffer::BindGuard::~BindGuard()
+{
+    vbo_.unbind();
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for VertexBuffer::ClientStateGuard:
+//////////////////////////////////////////////////////////////////////////////////
+
+VertexBuffer::ClientStateGuard::ClientStateGuard( const GLenum state ) :
+    state_( state )
+{
+    glEnableClientState( state_ );
+}
+
+VertexBuffer::ClientStateGuard::~ClientStateGuard()
+{
+    glDisableClientState( state_ );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for VertexBuffer::TextureStateGuard:
+//////////////////////////////////////////////////////////////////////////////////
+
+VertexBuffer::TextureStateGuard::TextureStateGuard( const GLenum texture_unit, const GLenum state ) :
+    texture_unit_( texture_unit ),
+    state_( state )
+{
+    glClientActiveTexture( texture_unit_ );
+    glEnableClientState( state_ );
+}
+
+VertexBuffer::TextureStateGuard::~TextureStateGuard()
+{
+    glClientActiveTexture( texture_unit_ );
+    glDisableClientState( state_ );
+}
 
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for VertexBuffer:
@@ -57,6 +116,11 @@ void VertexBuffer::unbind()
     glBindBuffer( GL_ELEMENT_ARRAY_BUFFER, 0 );
 }
 
+void VertexBuffer::draw_elements()
+{
+    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
+}
+
 //////////////////////////////////////////////////////////////////////////////////
 // Function definitions for ChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
@@ -65,7 +129,7 @@ ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices )
 {
     assert( vertices.size() > 0 );
 
-    std::vector<GLuint> indices;
+    std::vector<VertexBuffer::Index> indices;
     indices.reserve( vertices.size() + vertices.size() / 2 );
 
     for ( int i = 0; i < int( vertices.size() ); i += 4 )
@@ -79,41 +143,32 @@ ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices )
         indices.push_back( i + 1 );
     }
 
-    bind();
-    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( BlockVertex ), &vertices[0], GL_STATIC_DRAW );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    BindGuard bind_guard( *this );
+    set_buffer_data( GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW );
+    set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW );
     num_elements_ = indices.size();
-    unbind();
 }
 
 void ChunkVertexBuffer::render()
 {
-    bind();
+    BindGuard bind_guard( *this );
 
-    glEnableClientState( GL_VERTEX_ARRAY );
+    ClientStateGuard vertex_array_guard( GL_VERTEX_ARRAY );
     glVertexPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 0 ) );
 
-    glEnableClientState( GL_NORMAL_ARRAY );
+    ClientStateGuard normal_array_guard( GL_NORMAL_ARRAY );
     glNormalPointer( GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 12 ) );
 
-    glClientActiveTexture( GL_TEXTURE0 );
-    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    TextureStateGuard texture_coord_array_guard0( GL_TEXTURE0, GL_TEXTURE_COORD_ARRAY );
     glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
 
-    glClientActiveTexture( GL_TEXTURE1 );
-    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    TextureStateGuard texture_coord_array_guard1( GL_TEXTURE1, GL_TEXTURE_COORD_ARRAY );
     glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 36 ) );
 
-    glClientActiveTexture( GL_TEXTURE2 );
-    glEnableClientState( GL_TEXTURE_COORD_ARRAY );
+    TextureStateGuard texture_coord_array_guard2( GL_TEXTURE2, GL_TEXTURE_COORD_ARRAY );
     glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 44 ) );
 
-    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
-    glDisableClientState( GL_TEXTURE_COORD_ARRAY );
-    glDisableClientState( GL_NORMAL_ARRAY );
-    glDisableClientState( GL_VERTEX_ARRAY );
-
-    unbind();
+    draw_elements();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -152,7 +207,7 @@ void SortableChunkVertexBuffer::render( const Camera& camera, const Sky& sky, Re
 {
     DistanceIndexSet distance_indices;
     BlockMaterial current_material_ = materials_.front();
-    GLuint index = 0;
+    VertexBuffer::Index index = 0;
 
     // Since these faces are translucent, they must be rendered strictly in back to front order.
     // As an optimization, if adjacent depth-sorted faces use the same material, the indices of
@@ -178,8 +233,6 @@ void SortableChunkVertexBuffer::render( const Camera& camera, const Sky& sky, Re
     {
         render_sorted( distance_indices, camera, sky, current_material_, material_manager );
     }
-
-    unbind();
 }
 
 void SortableChunkVertexBuffer::render_sorted(
@@ -190,7 +243,7 @@ void SortableChunkVertexBuffer::render_sorted(
     RendererMaterialManager& material_manager
 )
 {
-    std::vector<GLuint> indices;
+    std::vector<VertexBuffer::Index> indices;
 
     BOOST_REVERSE_FOREACH( const DistanceIndexPair& distance_index, distance_indices )
     {
@@ -203,8 +256,10 @@ void SortableChunkVertexBuffer::render_sorted(
         indices.push_back( distance_index.second + 1 );
     }
 
-    bind();
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    BindGuard bind_guard( *this );
+    // FIXME: When the indices buffer is originally created, it is set to GL_STATIC_DRAW.
+    //        Does that matter?
+    set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_DYNAMIC_DRAW );
     num_elements_ = indices.size();
     material_manager.configure_block_material( camera, sky, material );
     ChunkVertexBuffer::render();
@@ -231,7 +286,7 @@ AABoxVertexBuffer::AABoxVertexBuffer( const AABoxf& aabb )
         SimplePositionVertex( Vector3f( min[0], max[1], max[2] ) )
     };
 
-    const GLuint indices[] =
+    const VertexBuffer::Index indices[] =
     {
         0, 2, 1, 0, 3, 2,
         5, 7, 4, 5, 6, 7,
@@ -241,21 +296,18 @@ AABoxVertexBuffer::AABoxVertexBuffer( const AABoxf& aabb )
         4, 1, 5, 4, 0, 1
     };
 
-    bind();
+    BindGuard bind_guard( *this );
     glBufferData( GL_ARRAY_BUFFER, sizeof( vertices ), vertices, GL_STATIC_DRAW );
     glBufferData( GL_ELEMENT_ARRAY_BUFFER, sizeof( indices ), indices, GL_STATIC_DRAW );
-    num_elements_ = sizeof( indices ) / sizeof( GLuint );
-    unbind();
+    num_elements_ = sizeof( indices ) / sizeof( VertexBuffer::Index );
 }
 
 void AABoxVertexBuffer::render()
 {
-    bind();
-    glEnableClientState( GL_VERTEX_ARRAY );
-    glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
-    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
-    glDisableClientState( GL_VERTEX_ARRAY );
-    unbind();
+    BindGuard bind_guard( *this );
+    ClientStateGuard vertex_array_guard( GL_VERTEX_ARRAY );
+    SimplePositionVertex::configure_vertex_pointer();
+    draw_elements();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -378,13 +430,13 @@ SkydomeVertexBuffer::SkydomeVertexBuffer()
         }
     }
 
-    std::vector<GLuint> indices;
+    std::vector<VertexBuffer::Index> indices;
 
     for ( int i = 0; i < TESSELATION_PHI - 1; ++i )
     {
         for ( int j = 0; j < TESSELATION_BETA - 1; ++j )
         {
-            GLuint begin_index = i * TESSELATION_BETA + j;
+            VertexBuffer::Index begin_index = i * TESSELATION_BETA + j;
 
             indices.push_back( begin_index + 1 );
             indices.push_back( begin_index + TESSELATION_BETA );
@@ -401,21 +453,18 @@ SkydomeVertexBuffer::SkydomeVertexBuffer()
         indices[i] %= vertices.size();
     }
 
-    bind();
-    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SimplePositionVertex ), &vertices[0], GL_STATIC_DRAW );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    BindGuard bind_guard( *this );
+    set_buffer_data( GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW );
+    set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW );
     num_elements_ = indices.size();
-    unbind();
 }
 
 void SkydomeVertexBuffer::render()
 {
-    bind();
-    glEnableClientState( GL_VERTEX_ARRAY );
-    glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
-    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
-    glDisableClientState( GL_VERTEX_ARRAY );
-    unbind();
+    BindGuard bind_guard( *this );
+    ClientStateGuard vertex_array_guard( GL_VERTEX_ARRAY );
+    SimplePositionVertex::configure_vertex_pointer();
+    draw_elements();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -431,7 +480,7 @@ const Scalar StarVertexBuffer::RADIUS;
 StarVertexBuffer::StarVertexBuffer( const Sky::StarV& stars )
 {
     SimplePositionVertexV vertices;
-    std::vector<GLuint> indices;
+    std::vector<VertexBuffer::Index> indices;
 
     for ( size_t i = 0; i < stars.size(); ++i )
     {
@@ -464,21 +513,18 @@ StarVertexBuffer::StarVertexBuffer( const Sky::StarV& stars )
         indices.push_back( index + 3 );
     }
 
-    bind();
-    glBufferData( GL_ARRAY_BUFFER, vertices.size() * sizeof( SimplePositionVertex ), &vertices[0], GL_STATIC_DRAW );
-    glBufferData( GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof( GLuint ), &indices[0], GL_STATIC_DRAW );
+    BindGuard bind_guard( *this );
+    set_buffer_data( GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW );
+    set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW );
     num_elements_ = indices.size();
-    unbind();
 }
 
 void StarVertexBuffer::render()
 {
-    bind();
-    glEnableClientState( GL_VERTEX_ARRAY );
-    glVertexPointer( 3, GL_FLOAT, sizeof( SimplePositionVertex ), reinterpret_cast<void*>( 0 ) );
-    glDrawElements( GL_TRIANGLES, num_elements_, GL_UNSIGNED_INT, 0 );
-    glDisableClientState( GL_VERTEX_ARRAY );
-    unbind();
+    BindGuard bind_guard( *this );
+    ClientStateGuard vertex_array_guard( GL_VERTEX_ARRAY );
+    SimplePositionVertex::configure_vertex_pointer();
+    draw_elements();
 }
 
 //////////////////////////////////////////////////////////////////////////////////

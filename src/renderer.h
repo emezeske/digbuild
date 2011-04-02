@@ -14,13 +14,48 @@
 
 struct VertexBuffer : public boost::noncopyable
 {
+    typedef GLuint Index;
+
     VertexBuffer( const GLsizei num_elements = 0 );
     virtual ~VertexBuffer();
 
     void bind();
     void unbind();
+    void draw_elements();
 
 protected:
+
+    struct BindGuard
+    {
+        BindGuard( VertexBuffer& vbo );
+        ~BindGuard();
+
+    protected:
+
+        VertexBuffer& vbo_;
+    };
+
+    struct ClientStateGuard
+    {
+        ClientStateGuard( const GLenum state );
+        ~ClientStateGuard();
+
+    protected:
+
+        GLenum state_;
+    };
+
+    struct TextureStateGuard
+    {
+        TextureStateGuard( const GLenum texture_unit, const GLenum state );
+        ~TextureStateGuard();
+
+    protected:
+
+        GLenum
+            texture_unit_,
+            state_;
+    };
 
     GLuint
         vbo_id_,
