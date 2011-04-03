@@ -6,7 +6,7 @@
 #include <boost/foreach.hpp>
 
 #include "world.h"
-#include "sdl_utilities.h"
+#include "timer.h"
 
 //////////////////////////////////////////////////////////////////////////////////
 // Local definitions:

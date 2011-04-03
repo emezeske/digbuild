@@ -42,7 +42,7 @@ The following arguments may also be used to configure the build:
 
 The 'define' argument accepts a comma separated list of C++ macros to define:
 
-    define=DEBUG_CHUNKS,DEBUG_COLLISIONS,DEBUG_CHUNK_UPDATES
+    define=DEBUG_CHUNKS,DEBUG_COLLISIONS,DEBUG_CHUNK_UPDATES,DEBUG_TIMERS
 
 The following build targets may be useful:
 

@@ -1,5 +1,3 @@
-#include <boost/foreach.hpp>
-
 #ifdef DEBUG_CHUNK_UPDATES
 # include <boost/random/uniform_int.hpp>
 # include <boost/random/uniform_real.hpp>
@@ -8,7 +6,10 @@
 # include <boost/random/linear_congruential.hpp>
 #endif
 
-#include "sdl_utilities.h"
+#include <boost/foreach.hpp>
+
+#include "log.h"
+#include "timer.h"
 #include "game_application.h"
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -50,48 +51,19 @@ void GameApplication::main_loop()
 {
     run_ = true;
 
-    // TODO: Pull the high-resolution clock stuff below out into a class, and add
-    //       similar calculations for Windows using QueryPerformanceTimer.
-
-    timespec
-        resolution,
-        last_time,
-        current_time;
-
-    int clock_result = clock_getres( CLOCK_MONOTONIC_RAW, &resolution );
-
-    if ( clock_result == -1 )
-    {
-        throw std::runtime_error( "Unable to determine clock resolution" );
-    }
-
-    clock_result = clock_gettime( CLOCK_MONOTONIC_RAW, &last_time );
-
-    if ( clock_result == -1 )
-    {
-        throw std::runtime_error( "Unable to read clock" );
-    }
+    HighResolutionTimer frame_timer;
 
     while ( run_ )
     {
-        clock_result = clock_gettime( CLOCK_MONOTONIC_RAW, &current_time );
-
-        if ( clock_result == -1 )
-        {
-            throw std::runtime_error( "Unable to read clock" );
-        }
-
-        const double step_time_seconds = 
-            double( current_time.tv_sec - last_time.tv_sec ) +
-            double( current_time.tv_nsec - last_time.tv_nsec ) / 1000000000.0;
-
-        const double seconds_until_next_frame = 1.0f / fps_limit_ - step_time_seconds;
+        const double
+            step_time_seconds = frame_timer.get_seconds_elapsed(),
+            seconds_until_next_frame = 1.0f / fps_limit_ - step_time_seconds;
 
         process_events();
 
         if ( seconds_until_next_frame <= 0.0 )
         {
-            last_time = current_time;
+            frame_timer.reset();
             do_one_step( float( step_time_seconds ) );
             render();
         }
