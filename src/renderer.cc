@@ -681,20 +681,21 @@ void Renderer::render( const Camera& camera, const World& world, const Player& p
         camera.translate();
         render_chunks( camera, world.get_sky() );
 
-        // FIXME: Collision debugging
-        // glColor3f( 1.0f, 0.0f, 0.0f );
-        // AABoxVertexBuffer obstructing_block_vbo( AABoxf( player.obstructing_block_position_, player.obstructing_block_position_ + Block::SIZE ) );
-        // obstructing_block_vbo.render();
+#ifdef DEBUG_COLLISIONS
+        glColor3f( 1.0f, 0.0f, 0.0f );
+        AABoxVertexBuffer obstructing_block_vbo( AABoxf( player.obstructing_block_position_, player.obstructing_block_position_ + Block::SIZE ) );
+        obstructing_block_vbo.render();
 
-        // glEnable( GL_DEPTH_TEST );
-        // glColor4f( 0.0f, 0.0f, 1.0f, 1.0f );
-        // FIXME: Collision debugging
-        // glColor3f( 1.0f, 0.0f, 0.0f );
-        // glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-        // AABoxVertexBuffer player_vbo( player.get_aabb() );
-        // player_vbo.render();
-        // glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-        // glDisable( GL_DEPTH_TEST );
+        glEnable( GL_DEPTH_TEST );
+        glColor3f( 0.0f, 0.0f, 1.0f );
+        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+        AABoxVertexBuffer player_vbo( player.get_aabb() );
+        player_vbo.render();
+        glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+        glColor3f( 1.0f, 1.0f, 1.0f );
+        glDisable( GL_DEPTH_TEST );
+#endif
+
     glPopMatrix();
 }
 
@@ -712,14 +713,16 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
         get_opengl_matrix( GL_PROJECTION_MATRIX )
     );
 
-    // TODO: While using a std::set is convenient here, it is very slow.
     typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
-    typedef std::set<DistanceChunkPair> ChunkRendererSet;
-    ChunkRendererSet translucent_chunks;
-    ChunkRendererSet debug_chunks;
+    typedef std::vector<DistanceChunkPair> DistanceChunkPairV;
+    DistanceChunkPairV translucent_chunks;
 
-    // TODO: While using a std::map of std::sets is convenient here, it is very slow.
-    typedef std::map<BlockMaterial, ChunkRendererSet> MaterialRendererMap;
+#ifdef DEBUG_CHUNKS
+    DistanceChunkPairV debug_chunks;
+#endif
+
+    // TODO: While using a std::map of std::sets is convenient here, it is not particularly fast.
+    typedef std::map<BlockMaterial, DistanceChunkPairV> MaterialRendererMap;
     MaterialRendererMap material_chunks;
 
     num_chunks_drawn_ = 0;
@@ -739,15 +742,17 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
             BOOST_FOREACH( BlockMaterial material, materials )
             {
-                material_chunks[material].insert( distance_chunk );
+                material_chunks[material].push_back( distance_chunk );
             }
 
             if ( chunk_renderer.has_translucent_materials() )
             {
-                translucent_chunks.insert( distance_chunk );
+                translucent_chunks.push_back( distance_chunk );
             }
 
-            debug_chunks.insert( distance_chunk );
+#ifdef DEBUG_CHUNKS
+            debug_chunks.push_back( distance_chunk );
+#endif
 
             ++num_chunks_drawn_;
             num_triangles_drawn_ += chunk_renderer.get_num_triangles();
@@ -770,8 +775,9 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     BOOST_FOREACH( const MaterialRendererMap::value_type& material_renderer_it, material_chunks )
     {
         const BlockMaterial material = material_renderer_it.first;
-        const ChunkRendererSet chunk_renderers = material_renderer_it.second;
+        DistanceChunkPairV chunk_renderers = material_renderer_it.second;
 
+        std::sort( chunk_renderers.begin(), chunk_renderers.end() );
         material_manager_.configure_block_material( camera, sky, material );
 
         BOOST_FOREACH( const DistanceChunkPair& chunk_renderer_it, chunk_renderers )
@@ -787,24 +793,31 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     // to be rendered strictly in back to front order, we can't perform material grouping on them
     // like with the opaque materials.
 
+    std::sort( translucent_chunks.begin(), translucent_chunks.end() );
+
     BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks )
     {
         it.second->render_translucent( camera, sky, material_manager_ );
     }
 
-    // FIXME: Chunk debugging
-    // material_manager_.deconfigure_block_material();
-    // glEnable( GL_CULL_FACE );
-    // glEnable( GL_POLYGON_OFFSET_FILL );
-    // glPolygonOffset( 1.0f, 3.0f );
-    // glColor4f( 0.0f, 1.0f, 0.0f, 0.1f );
-    // BOOST_REVERSE_FOREACH( const ChunkRendererSet::value_type& it, debug_chunks )
-    // {
-    //     it.second->render_aabb();
-    // }
-    // glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
-    // glDisable( GL_POLYGON_OFFSET_FILL );
-    // glDisable( GL_CULL_FACE );
+#ifdef DEBUG_CHUNKS
+    material_manager_.deconfigure_block_material();
+    glEnable( GL_CULL_FACE );
+    glEnable( GL_POLYGON_OFFSET_FILL );
+    glPolygonOffset( 1.0f, 3.0f );
+    glColor4f( 1.0f, 0.0f, 0.0f, 0.3f );
+
+    std::sort( debug_chunks.begin(), debug_chunks.end() );
+
+    BOOST_REVERSE_FOREACH( const DistanceChunkPairV::value_type& it, debug_chunks )
+    {
+        it.second->render_aabb();
+    }
+
+    glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
+    glDisable( GL_POLYGON_OFFSET_FILL );
+    glDisable( GL_CULL_FACE );
+#endif
 
     glDepthMask( GL_TRUE );
     glDisable( GL_DEPTH_TEST );

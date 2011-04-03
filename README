@@ -40,6 +40,10 @@ The following arguments may also be used to configure the build:
     release=(1|0)  # Strip the binary, etc.
     profile=(1|0)  # Build gprof profiling information into the binary.
 
+The 'define' argument accepts a comma separated list of C++ macros to define:
+
+    define=DEBUG_CHUNKS,DEBUG_COLLISIONS,DEBUG_CHUNK_UPDATES
+
 The following build targets may be useful:
 
     run      # Run the binary (after building it if necessary).

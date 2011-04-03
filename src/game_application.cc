@@ -1,12 +1,12 @@
-//////////////////////////////////////////////////////////////////
-// FIXME: Debugging (stress test)
-// #include <boost/random/uniform_int.hpp>
-// #include <boost/random/uniform_real.hpp>
-// #include <boost/random/uniform_on_sphere.hpp>
-// #include <boost/random/variate_generator.hpp>
-// #include <boost/random/linear_congruential.hpp>
-//////////////////////////////////////////////////////////////////
 #include <boost/foreach.hpp>
+
+#ifdef DEBUG_CHUNK_UPDATES
+# include <boost/random/uniform_int.hpp>
+# include <boost/random/uniform_real.hpp>
+# include <boost/random/uniform_on_sphere.hpp>
+# include <boost/random/variate_generator.hpp>
+# include <boost/random/linear_congruential.hpp>
+#endif
 
 #include "sdl_utilities.h"
 #include "game_application.h"
@@ -333,27 +333,35 @@ void GameApplication::do_one_step( const float step_time )
     world_.do_one_step( step_time );
     gui_.do_one_step( step_time );
 
-    //////////////////////////////////////////////////////////////////
-    // FIXME: Debugging (stress test)
-    // static boost::rand48 generator( 0 );
+#ifdef DEBUG_CHUNK_UPDATES
+    static boost::rand48 generator( 0 );
 
-    // boost::variate_generator<boost::rand48&, boost::uniform_int<> >
-    //     x_random( generator, boost::uniform_int<>( 0, 384 ) ),
-    //     y_random( generator, boost::uniform_int<>( 0, 128 ) ),
-    //     z_random( generator, boost::uniform_int<>( 0, 384 ) );
+    const ChunkMap& chunks = world_.get_chunks();
 
-    // BlockIterator it;
+    boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+        chunk_random( generator, boost::uniform_int<>( 0, chunks.size() - 1 ) );
 
-    // do
-    // {
-    //     const Vector3i p( x_random(), y_random(), z_random() );
-    //     it = world_.get_block( p );
-    // }
-    // while ( !it.block_ || it.block_->get_material() == BLOCK_MATERIAL_AIR );
+    ChunkMap::const_iterator chunk_it = chunks.begin();
+    std::advance( chunk_it, chunk_random() );
+    const Vector3i& chunk_position = chunk_it->second->get_position();
 
-    // it.block_->set_material( BLOCK_MATERIAL_AIR );
-    // world_.mark_chunk_for_update( it.chunk_ );
-    //////////////////////////////////////////////////////////////////
+    boost::variate_generator<boost::rand48&, boost::uniform_int<> >
+        x_random( generator, boost::uniform_int<>( 0, Chunk::SIZE_X - 1 ) ),
+        y_random( generator, boost::uniform_int<>( 0, Chunk::SIZE_Y - 1 ) ),
+        z_random( generator, boost::uniform_int<>( 0, Chunk::SIZE_Z - 1 ) );
+
+    const Vector3i block_position = chunk_position + Vector3i( x_random(), y_random(), z_random() );
+    BlockIterator block_it = world_.get_block( block_position );
+    assert( block_it.block_ );
+
+    if ( block_it.block_->get_material() == BLOCK_MATERIAL_AIR )
+    {
+        block_it.block_->set_material( BLOCK_MATERIAL_GRASS );
+    }
+    else block_it.block_->set_material( BLOCK_MATERIAL_AIR );
+
+    world_.mark_chunk_for_update( block_it.chunk_ );
+#endif
 
     if ( !world_.is_chunk_update_in_progress() )
     {

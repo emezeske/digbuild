@@ -31,7 +31,7 @@ struct Player
 
     void toggle_noclip() { noclip_mode_ = !noclip_mode_; }
 
-    Vector3f obstructing_block_position_; // FIXME For debugging.
+    Vector3f obstructing_block_position_; // For collision debugging.
 
 private:
 

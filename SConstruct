@@ -54,6 +54,7 @@ OPTIMIZE_BINARY = int( ARGUMENTS.get( 'optimize', 1 ) )
 INCLUDE_ASSERTIONS = not int( ARGUMENTS.get( 'assert', 0 ) )
 RELEASE_BUILD = int( ARGUMENTS.get( 'release', 0 ) )
 PROFILE_BINARY = int( ARGUMENTS.get( 'profile', 0 ) )
+EXTRA_DEFINES = ARGUMENTS.get( 'define', '' ).split( ',' )
 
 env = Environment()
 env.SetOption( 'num_jobs', multiprocessing.cpu_count() - 1 )
@@ -91,6 +92,11 @@ else:
 if PROFILE_BINARY:
     env.Append( CCFLAGS = [ '-pg' ] )
     env.Append( LINKFLAGS = [ '-pg' ] )
+
+for define in EXTRA_DEFINES:
+    macro = define.strip()
+    if len( macro ) > 0:
+        env.Append( CCFLAGS = [ '-D' + macro ] )
 
 conf = Configure( env, custom_tests = { 'CheckPackageConfig' : CheckPackageConfig } )
 
