@@ -92,6 +92,24 @@ gmtl::Vec<DataType, Size> major_axis( const gmtl::Vec<DataType, Size>& v )
     return result;
 }
 
+template <typename DataType, unsigned Size>
+DataType max_component_magnitude( const gmtl::Vec<DataType, Size>& v )
+{
+    DataType max = DataType( 0 );
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        const DataType magnitude = gmtl::Math::abs( v[i] );
+
+        if ( magnitude > max )
+        {
+            max = magnitude;
+        }
+    }
+
+    return max;
+}
+
 inline Vector3f spherical_to_cartesian( const Vector3f& spherical )
 {
     return Vector3f(

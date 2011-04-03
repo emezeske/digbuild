@@ -125,7 +125,7 @@ void VertexBuffer::draw_elements()
 // Function definitions for ChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
 
-ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices )
+ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices, const GLenum vertex_usage, const GLenum index_usage )
 {
     assert( vertices.size() > 0 );
 
@@ -144,15 +144,19 @@ ChunkVertexBuffer::ChunkVertexBuffer( const BlockVertexV& vertices )
     }
 
     BindGuard bind_guard( *this );
-    set_buffer_data( GL_ARRAY_BUFFER, vertices, GL_STATIC_DRAW );
-    set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW );
+    set_buffer_data( GL_ARRAY_BUFFER, vertices, vertex_usage );
+    set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, index_usage );
     num_elements_ = indices.size();
 }
 
 void ChunkVertexBuffer::render()
 {
     BindGuard bind_guard( *this );
+    render_no_bind();
+}
 
+void ChunkVertexBuffer::render_no_bind()
+{
     ClientStateGuard vertex_array_guard( GL_VERTEX_ARRAY );
     glVertexPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 0 ) );
 
@@ -182,11 +186,11 @@ const unsigned SortableChunkVertexBuffer::VERTICES_PER_FACE;
 //////////////////////////////////////////////////////////////////////////////////
 
 SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockMaterialV& materials, const BlockVertexV& vertices ) :
-    ChunkVertexBuffer( vertices ),
+    ChunkVertexBuffer( vertices, GL_STATIC_DRAW, GL_DYNAMIC_DRAW ),
     materials_( materials )
 {
-    assert( materials.size() > 0 );
-    assert( materials.size() == vertices.size() / VERTICES_PER_FACE );
+    assert( materials_.size() > 0 );
+    assert( materials_.size() == vertices.size() / VERTICES_PER_FACE );
 
     for ( size_t i = 0; i < vertices.size(); i += VERTICES_PER_FACE )
     {
@@ -199,15 +203,22 @@ SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockMaterialV& mate
         }
 
         centroid /= VERTICES_PER_FACE;
+
+        // Nudge the centroid slightly toward the center of the Block, so that
+        // neighboring Blocks with different translucent materials won't Z fight.
+        const BlockVertex& v = vertices[i];
+        centroid -= 0.1f * Vector3f( v.nx_, v.ny_, v.nz_ );
+
         centroids_.push_back( centroid );
     }
+
+    assert( materials_.size() == centroids_.size() );
 }
 
 void SortableChunkVertexBuffer::render( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager )
 {
-    DistanceIndexSet distance_indices;
-    BlockMaterial current_material_ = materials_.front();
-    VertexBuffer::Index index = 0;
+    DistanceIndexV distance_indices;
+    distance_indices.reserve( materials_.size() );
 
     // Since these faces are translucent, they must be rendered strictly in back to front order.
     // As an optimization, if adjacent depth-sorted faces use the same material, the indices of
@@ -215,54 +226,73 @@ void SortableChunkVertexBuffer::render( const Camera& camera, const Sky& sky, Re
 
     for ( unsigned i = 0; i < materials_.size(); ++i )
     {
-        const BlockMaterial material = materials_[i];
-
-        if ( material != current_material_ )
-        {
-            render_sorted( distance_indices, camera, sky, material, material_manager );
-            distance_indices.clear();
-            current_material_ = material;
-        }
-
         const Vector3f camera_to_centroid = camera.get_position() - centroids_[i];
+        // First, the faces are sorted by the radius of their axis-aligned, camera-centered,
+        // bounding box.  This gives a rough but fast ordering.
+        const int ccbb_radius = max_component_magnitude( vector_cast<int>( camera_to_centroid ) );
+        // Next, the faces are sorted by their actual distance to the camera.  This gives
+        // a slow but accurate ordering.
         const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
-        distance_indices.insert( std::make_pair( distance_squared, i * VERTICES_PER_FACE ) );
+        distance_indices.push_back( boost::make_tuple( ccbb_radius, distance_squared, i ) );
     }
 
-    if ( !distance_indices.empty() )
-    {
-        render_sorted( distance_indices, camera, sky, current_material_, material_manager );
-    }
+    std::sort( distance_indices.begin(), distance_indices.end() );
+    render_sorted( distance_indices, camera, sky, material_manager );
 }
 
 void SortableChunkVertexBuffer::render_sorted(
-    const DistanceIndexSet distance_indices,
+    const DistanceIndexV distance_indices,
+    const Camera& camera,
+    const Sky& sky,
+    RendererMaterialManager& material_manager
+)
+{
+    BindGuard bind_guard( *this );
+    BlockMaterial current_material = materials_[distance_indices.rbegin()->get<2>()];
+    IndexV indices;
+    indices.reserve( distance_indices.size() * 6 );
+
+    BOOST_REVERSE_FOREACH( const DistanceIndex& distance_index, distance_indices )
+    {
+        const unsigned face_index = distance_index.get<2>();
+        const BlockMaterial material = materials_[face_index];
+
+        if ( material != current_material )
+        {
+            render_indices( indices, camera, sky, current_material, material_manager );
+            indices.clear();
+            current_material = material;
+        }
+
+        const VertexBuffer::Index vertex_index = face_index * VERTICES_PER_FACE;
+
+        indices.push_back( vertex_index + 0 );
+        indices.push_back( vertex_index + 3 );
+        indices.push_back( vertex_index + 2 );
+
+        indices.push_back( vertex_index + 0 );
+        indices.push_back( vertex_index + 2 );
+        indices.push_back( vertex_index + 1 );
+    }
+
+    if ( !indices.empty() )
+    {
+        render_indices( indices, camera, sky, current_material, material_manager );
+    }
+}
+
+void SortableChunkVertexBuffer::render_indices(
+    const IndexV& indices,
     const Camera& camera,
     const Sky& sky,
     const BlockMaterial material,
     RendererMaterialManager& material_manager
 )
 {
-    std::vector<VertexBuffer::Index> indices;
-
-    BOOST_REVERSE_FOREACH( const DistanceIndexPair& distance_index, distance_indices )
-    {
-        indices.push_back( distance_index.second + 0 );
-        indices.push_back( distance_index.second + 3 );
-        indices.push_back( distance_index.second + 2 );
-
-        indices.push_back( distance_index.second + 0 );
-        indices.push_back( distance_index.second + 2 );
-        indices.push_back( distance_index.second + 1 );
-    }
-
-    BindGuard bind_guard( *this );
-    // FIXME: When the indices buffer is originally created, it is set to GL_STATIC_DRAW.
-    //        Does that matter?
     set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_DYNAMIC_DRAW );
     num_elements_ = indices.size();
     material_manager.configure_block_material( camera, sky, material );
-    ChunkVertexBuffer::render();
+    render_no_bind();
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -751,12 +781,13 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     }
 
     glDisable( GL_CULL_FACE );
+    glDepthMask( GL_FALSE );
 
     // Now draw the translucent parts of the Chunks from farthest to nearest.  Since they have
     // to be rendered strictly in back to front order, we can't perform material grouping on them
     // like with the opaque materials.
 
-    BOOST_FOREACH( const DistanceChunkPair& it, translucent_chunks )
+    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks )
     {
         it.second->render_translucent( camera, sky, material_manager_ );
     }
@@ -775,6 +806,7 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     // glDisable( GL_POLYGON_OFFSET_FILL );
     // glDisable( GL_CULL_FACE );
 
+    glDepthMask( GL_TRUE );
     glDisable( GL_DEPTH_TEST );
     glDisable( GL_BLEND );
 

@@ -5,7 +5,6 @@
 
 #include "math.h"
 #include "world.h"
-#include "camera.h"
 
 struct Player
 {

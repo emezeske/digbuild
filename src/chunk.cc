@@ -401,7 +401,6 @@ void Chunk::update_geometry()
 
                 if ( block_neighbor )
                 {
-                    // FIXME: Neighboring tranclucent materials currently result in z-fighting.
                     add_face = ( block_neighbor->get_material_attributes().translucent_ &&
                                  block.get_material() != block_neighbor->get_material() );
                 }

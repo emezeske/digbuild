@@ -5,6 +5,8 @@
 
 #include <set>
 
+#include <boost/tuple/tuple.hpp>
+#include <boost/tuple/tuple_comparison.hpp>
 #include <boost/utility.hpp>
 
 #include "camera.h"
@@ -97,9 +99,14 @@ typedef std::vector<BlockVertex> BlockVertexV;
 
 struct ChunkVertexBuffer : public VertexBuffer
 {
-    ChunkVertexBuffer( const BlockVertexV& vertices );
+    ChunkVertexBuffer(
+        const BlockVertexV& vertices,
+        const GLenum vertex_usage = GL_STATIC_DRAW,
+        const GLenum index_usage = GL_STATIC_DRAW
+    );
 
     void render();
+    void render_no_bind();
 };
 
 typedef boost::shared_ptr<ChunkVertexBuffer> ChunkVertexBufferSP;
@@ -117,12 +124,19 @@ private:
 
     static const unsigned VERTICES_PER_FACE = 4;
 
-    // TODO: While using a std::set is convenient here, it is very slow.
-    typedef std::pair<Scalar, GLuint> DistanceIndexPair;
-    typedef std::set<DistanceIndexPair> DistanceIndexSet;
+    typedef boost::tuple<int, Scalar, unsigned> DistanceIndex;
+    typedef std::vector<DistanceIndex> DistanceIndexV;
+    typedef std::vector<VertexBuffer::Index> IndexV;
 
     void render_sorted(
-        const DistanceIndexSet distance_indices,
+        const DistanceIndexV distance_indices,
+        const Camera& camera,
+        const Sky& sky,
+        RendererMaterialManager& material_manager
+    );
+
+    void render_indices(
+        const IndexV& indices,
         const Camera& camera,
         const Sky& sky,
         const BlockMaterial material,
