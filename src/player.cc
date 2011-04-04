@@ -5,6 +5,7 @@
 #include <limits>
 #include <iomanip>
 
+#include "log.h"
 #include "cardinal_relation.h"
 #include "player.h"
 
@@ -82,7 +83,11 @@ void Player::do_one_step_noclip( const float step_time )
 
 void Player::do_one_step_clip( const float step_time, const World& world )
 {
-    accelerate( step_time );
+#ifdef DEBUG_COLLISIONS
+    debug_collisions_.clear();
+#endif
+
+    Vector3f acceleration = get_acceleration();
     feet_contacting_block_ = false;
     Scalar time_simulated = 0.0f;
 
@@ -91,19 +96,33 @@ void Player::do_one_step_clip( const float step_time, const World& world )
     for ( int steps = 0; steps < 3 && time_simulated < step_time; ++steps )
     {
         const Scalar step_time_slice = ( step_time - time_simulated );
-        const Vector3f movement = velocity_ * step_time_slice;
+        const Vector3f
+            dv = acceleration * step_time_slice,
+            movement = ( velocity_ + dv ) * step_time_slice;
 
         BlockCollision collision;
 
         if ( find_collision( world, movement, collision ) )
         {
-            resolve_collision( movement, collision );
+            resolve_collision( movement, dv, collision, acceleration );
             time_simulated += collision.normalized_time_ * step_time_slice;
         }
         else
         {
+            velocity_ += dv;
             position_ += movement;
             break;
+        }
+    }
+
+    if ( feet_contacting_block_ )
+    {
+        const long now = SDL_GetTicks();
+
+        if ( requesting_jump_ && last_jump_at_ + JUMP_INTERVAL_MS < now )
+        {
+            last_jump_at_ = now;
+            velocity_[1] += JUMP_VELOCITY;
         }
     }
 }
@@ -160,13 +179,7 @@ void Player::do_primary_fire( const float step_time, World& world )
     }
 }
 
-void Player::accelerate( const float step_time )
-{
-    accelerate_lateral( step_time );
-    accelerate_vertical( step_time );
-}
-
-void Player::accelerate_lateral( const float step_time )
+Vector3f Player::get_acceleration()
 {
     const Vector2f current_velocity( velocity_[0], velocity_[2] );
     const Vector2f forward_direction( gmtl::Math::sin( yaw_ ), gmtl::Math::cos( yaw_ ) );
@@ -189,24 +202,7 @@ void Player::accelerate_lateral( const float step_time )
         std::min( velocity_difference / WALKING_SPEED, 1.0f );
 
     const Vector2f acceleration = acceleration_direction * acceleration_power;
-
-    const Vector2f dvelocity = acceleration * step_time;
-    velocity_ += Vector3f( dvelocity[0], 0.0f, dvelocity[1] );
-}
-
-void Player::accelerate_vertical( const float step_time )
-{
-    if ( feet_contacting_block_ )
-    {
-        const long now = SDL_GetTicks();
-
-        if ( requesting_jump_ && last_jump_at_ + JUMP_INTERVAL_MS < now )
-        {
-            last_jump_at_ = now;
-            velocity_[1] += JUMP_VELOCITY;
-        }
-    }
-    else velocity_[1] += GRAVITY_ACCELERATION * step_time;
+    return Vector3f( acceleration[0], GRAVITY_ACCELERATION, acceleration[1] );
 }
 
 bool Player::find_collision( const World& world, const Vector3f& movement, BlockCollision& collision )
@@ -246,7 +242,7 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
             // Determine which face of the Block the Player is colliding with by measuring the
             // distance between the corresponding pairs of AABB planes (e.g. bottom & top) on the
             // Player and the Block, and choosing the face with the smallest distance.
-            Scalar min_distance_squared = std::numeric_limits<Scalar>::max();
+            Scalar min_dplane_offset = std::numeric_limits<Scalar>::max();
             Vector3f collision_normal;
             CardinalRelation collision_relation = CARDINAL_RELATION_BELOW;
 
@@ -275,29 +271,48 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
                         block_plane_offset = dot( block_plane_point, player_normal ),
                         dplane_offset = gmtl::Math::abs( player_plane_offset - block_plane_offset );
 
-                    if ( dplane_offset < min_distance_squared )
+                    if ( dplane_offset < min_dplane_offset )
                     {
-                        min_distance_squared = dplane_offset;
+                        min_dplane_offset = dplane_offset;
                         collision_normal = player_normal;
                         collision_relation = relation;
                     }
                 }
             }
 
-            // If normalized_first_contact is zero, it indicates that the Player was already intersecting
-            // with the Block before it moved.  In this case, the collision is ignored if the Player's
-            // velocity is directed away from the block.
-            if ( normalized_first_contact > 0.0f || gmtl::dot( movement, collision_normal ) > 0.0f )
-            {
-                if ( collision_relation == CARDINAL_RELATION_BELOW )
-                {
-                    feet_contacting_block_ = true;
-                }
+            const AABoxf contact_player_bounds(
+                player_bounds.getMin() + normalized_first_contact * movement,
+                player_bounds.getMax() + normalized_first_contact * movement
+            );
 
-                collision_found = true;
-                collision.normalized_time_ = normalized_first_contact;
-                collision.block_position_ = block_position;
-                collision.player_face_ = collision_relation;
+            const Scalar planar_overlap =  min_planar_overlap( block_bounds, contact_player_bounds, collision_normal );
+
+            // Generally it's not desirable for a collision to occur if the Player and Block just
+            // barely have an edge or corner overlapping.  Allowing such collisions results in odd
+            // behavior when the Player is e.g. against a wall and trying to jump.  Throw them out.
+            if ( planar_overlap > 0.01f )
+            {
+                // Throw out the collision unless the minimum difference between plane offsets is fairly small.
+                // This is a heuristic that helps avoid some degenerate cases arising from Blocks with very
+                // few visible faces (where the "closest" face might be far away).
+                if ( min_dplane_offset < 0.1f )
+                {
+                    // If normalized_first_contact is zero, it indicates that the Player was already intersecting
+                    // with the Block before it moved.  In this case, the collision is ignored if the Player's
+                    // velocity is directed away from the block.
+                    if ( normalized_first_contact > 0.0f || gmtl::dot( movement, collision_normal ) > 0.0f )
+                    {
+                        if ( collision_relation == CARDINAL_RELATION_BELOW )
+                        {
+                            feet_contacting_block_ = true;
+                        }
+
+                        collision_found = true;
+                        collision.normalized_time_ = normalized_first_contact;
+                        collision.block_position_ = block_position;
+                        collision.player_face_ = collision_relation;
+                    }
+                }
             }
         }
     }
@@ -305,24 +320,36 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
     return collision_found;
 }
 
-void Player::resolve_collision( const Vector3f& movement, BlockCollision& collision )
+void Player::resolve_collision( const Vector3f& movement, const Vector3f& dv, const BlockCollision& collision, Vector3f& acceleration )
 {
-    position_ += movement * collision.normalized_time_;
+#ifdef DEBUG_COLLISIONS
+    DebugCollision debug_collision;
+    debug_collision.block_position_ = collision.block_position_;
+    debug_collision.block_face_ = cardinal_relation_reverse( collision.player_face_ );
+    debug_collisions_.push_back( debug_collision );
+    debug_collisions_.push_back( debug_collision );
+#endif
 
     if ( collision.player_face_ == CARDINAL_RELATION_BELOW )
     {
         feet_contacting_block_ = true;
     }
 
-    obstructing_block_position_ = collision.block_position_;
+    velocity_ += dv * collision.normalized_time_;
+    position_ += movement * collision.normalized_time_;
 
     const Vector3f normal =
-        vector_cast<Scalar>( cardinal_relation_vector( collision.player_face_ ) );
+        vector_cast<Scalar>( cardinal_relation_vector( collision.player_face_ ) ),
+        velocity_collision_component = gmtl::dot( velocity_, normal ) * normal,
+        acceleration_collision_component = gmtl::dot( acceleration, normal ) * normal;
 
-    // Reverse the component of the player's velocity that is directed toward the
+    // Reverse the component of the Player's velocity that is directed toward the
     // block, and apply a little rebound as well.
-    const Vector3f collision_component = gmtl::dot( velocity_, normal ) * normal;
-    velocity_ -= 1.05f * collision_component;
+    velocity_ -= 1.05f * velocity_collision_component;
+
+    // Do the same thing with the Player's acceleration.  This isn't physically accurate,
+    // but it makes the collision solver work better.
+    acceleration -= 1.05f * acceleration_collision_component;
 }
 
 void Player::adjust_direction( const Scalar dpitch, const Scalar dyaw )

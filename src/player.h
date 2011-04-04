@@ -1,6 +1,10 @@
 #ifndef PLAYER_H
 #define PLAYER_H
 
+#ifdef DEBUG_COLLISIONS
+# include <vector>
+#endif
+
 #include <set>
 
 #include "math.h"
@@ -31,7 +35,16 @@ struct Player
 
     void toggle_noclip() { noclip_mode_ = !noclip_mode_; }
 
-    Vector3f obstructing_block_position_; // For collision debugging.
+#ifdef DEBUG_COLLISIONS
+    struct DebugCollision
+    {
+        Vector3f block_position_;
+        CardinalRelation block_face_;
+    };
+
+    typedef std::vector<DebugCollision> DebugCollisionV;
+    DebugCollisionV debug_collisions_;
+#endif
 
 private:
 
@@ -75,11 +88,9 @@ private:
     void do_one_step_noclip( const float step_time );
     void do_one_step_clip( const float step_time, const World& world );
     void do_primary_fire( const float step_time, World& world );
-    void accelerate( const float step_time );
-    void accelerate_lateral( const float step_time );
-    void accelerate_vertical( const float step_time );
+    Vector3f get_acceleration();
     bool find_collision( const World& world, const Vector3f& movement, BlockCollision& collision );
-    void resolve_collision( const Vector3f& movement, BlockCollision& collision );
+    void resolve_collision( const Vector3f& movement, const Vector3f& dv, const BlockCollision& collision, Vector3f& acceleration );
 
     // TODO: Make get_potential_obstructions() take a LineSegF argument instead of origin+movement?
     void get_potential_obstructions(
@@ -97,11 +108,11 @@ private:
         EYE_HEIGHT = 1.65f,
         NOCLIP_SPEED = 30.0f,
         NOCLIP_FAST_MOVE_FACTOR = 5.0f,
-        GROUND_ACCELERATION = 100.0f,
+        GROUND_ACCELERATION = 35.0f,
         AIR_ACCELERATION = 10.0f,
         GRAVITY_ACCELERATION = -30.0f,
         WALKING_SPEED = 5.0f,
-        JUMP_VELOCITY = 9.0f,
+        JUMP_VELOCITY = 10.0f,
         PRIMARY_FIRE_DISTANCE = 3.0f;
 
     static const long

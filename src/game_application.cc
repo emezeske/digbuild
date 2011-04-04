@@ -378,7 +378,13 @@ void GameApplication::render()
     window_.reshape_window();
 
     Camera camera( player_.get_eye_position(), player_.get_pitch(), player_.get_yaw(), window_.get_draw_distance() );
+
+#ifdef DEBUG_COLLISIONS
     renderer_.render( camera, world_, player_ );
+#else
+    renderer_.render( camera, world_ );
+#endif
+
     gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
     gui_.render();
 

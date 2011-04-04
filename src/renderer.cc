@@ -673,7 +673,11 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
     else chunk_renderer_it->second->rebuild( chunk );
 }
 
+#ifdef DEBUG_COLLISIONS
 void Renderer::render( const Camera& camera, const World& world, const Player& player )
+#else
+void Renderer::render( const Camera& camera, const World& world )
+#endif
 {
     glPushMatrix();
         camera.rotate();
@@ -682,9 +686,37 @@ void Renderer::render( const Camera& camera, const World& world, const Player& p
         render_chunks( camera, world.get_sky() );
 
 #ifdef DEBUG_COLLISIONS
-        glColor3f( 1.0f, 0.0f, 0.0f );
-        AABoxVertexBuffer obstructing_block_vbo( AABoxf( player.obstructing_block_position_, player.obstructing_block_position_ + Block::SIZE ) );
-        obstructing_block_vbo.render();
+        BOOST_FOREACH( const Player::DebugCollision& collision, player.debug_collisions_ )
+        {
+            AABoxVertexBuffer
+                obstructing_block_vbo( AABoxf( collision.block_position_, collision.block_position_ + Block::SIZE ) );
+
+            glColor3f( 1.0f, 0.0f, 0.0f );
+            obstructing_block_vbo.render();
+
+            glColor3f( 0.0f, 1.0f, 0.0f );
+            glPushMatrix();
+                const Vector3f relation = vector_cast<Scalar>( cardinal_relation_vector( collision.block_face_ ) );
+                const Vector3f face_center = collision.block_position_ + Block::SIZE * 0.5f + relation * 0.5f;
+                const unsigned major = major_axis( relation );
+                const Vector4f a( -0.5f, -0.5f, 0.5f, 0.5f );
+                const Vector4f b( -0.5f, 0.5f, -0.5f, 0.5f );
+                Vector4f x, y, z;
+                switch ( major )
+                {
+                    case 0: y = a; z = b; break;
+                    case 1: x = a; z = b; break;
+                    case 2: x = a; y = b; break;
+                }
+                glTranslatef( face_center[0], face_center[1], face_center[2] );
+                glBegin( GL_TRIANGLE_STRIP );
+                    glVertex3f( x[0], y[0], z[0] );
+                    glVertex3f( x[1], y[1], z[1] );
+                    glVertex3f( x[2], y[2], z[2] );
+                    glVertex3f( x[3], y[3], z[3] );
+                glEnd();
+            glPopMatrix();
+        }
 
         glEnable( GL_DEPTH_TEST );
         glColor3f( 0.0f, 0.0f, 1.0f );

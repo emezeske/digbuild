@@ -242,7 +242,11 @@ struct Renderer
 
     void note_chunk_changes( const Chunk& chunk );
 
+#ifdef DEBUG_COLLISIONS
     void render( const Camera& camera, const World& world, const Player& player );
+#else
+    void render( const Camera& camera, const World& world );
+#endif
 
     unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
     unsigned get_num_triangles_drawn() const { return num_triangles_drawn_; }

@@ -74,22 +74,20 @@ gmtl::Vec<DataType, Size> pointwise_ceil( const gmtl::Vec<DataType, Size>& v )
 }
 
 template <typename DataType, unsigned Size>
-gmtl::Vec<DataType, Size> major_axis( const gmtl::Vec<DataType, Size>& v )
+unsigned major_axis( const gmtl::Vec<DataType, Size>& v )
 {
-    gmtl::Vec<DataType, Size> result;
     DataType max = 0.0f;
     unsigned major = 0;
 
     for ( unsigned i = 0; i < Size; ++i )
     {
-        if ( v[i] > max )
+        if ( gmtl::Math::abs( v[i] ) > max )
         {
             major = i;
         }
     }
 
-    result[major] = 1.0f;
-    return result;
+    return major;
 }
 
 template <typename DataType, unsigned Size>
@@ -108,6 +106,22 @@ DataType max_component_magnitude( const gmtl::Vec<DataType, Size>& v )
     }
 
     return max;
+}
+
+template <typename DataType, unsigned Size>
+DataType min_component( const gmtl::Vec<DataType, Size>& v )
+{
+    DataType min = v[0];
+
+    for ( unsigned i = 1; i < Size; ++i )
+    {
+        if ( v[i] < min )
+        {
+            min = v[i];
+        }
+    }
+
+    return min;
 }
 
 inline Vector3f spherical_to_cartesian( const Vector3f& spherical )
@@ -133,6 +147,31 @@ struct VectorLess : public std::binary_function <T, T, bool>
         return false;
     }
 };
+
+// Given two AABoxes that are in contact, and the normal of the contact face, this function
+// will return the minimum amount by which the Block's faces overlap (in two dimensions).
+template <typename DataType>
+DataType min_planar_overlap( const gmtl::AABox<DataType>& a, const gmtl::AABox<DataType>& b, const gmtl::Vec<DataType, 3>& normal )
+{
+    const unsigned ignore_axis = major_axis( normal );
+
+    gmtl::Vec<DataType, 3> da( a.getMax() - b.getMin() );
+    gmtl::Vec<DataType, 3> db( b.getMax() - a.getMin() );
+    gmtl::Vec<DataType, 3> dr;
+
+    for ( unsigned i = 0; i < 3; ++i )
+    {
+        if ( i != ignore_axis )
+        {
+            da[i] = da[i] > DataType( 0 ) ? da[i] : DataType( 0 );
+            db[i] = db[i] > DataType( 0 ) ? db[i] : DataType( 0 );
+            dr[i] = gmtl::Math::Min( da[i], db[i] );
+        }
+        else dr[i] = std::numeric_limits<DataType>::max();
+    }
+
+    return min_component( dr );
+}
 
 namespace gmtl
 {
