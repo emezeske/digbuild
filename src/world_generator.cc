@@ -11,19 +11,27 @@
 
 namespace {
 
+const unsigned SEA_LEVEL = 128;
+
 Block& get_block( ChunkSPV& chunks, const Vector2i& column_position, const unsigned x, const unsigned z, const unsigned height )
 {
     const unsigned chunk_index = height / Chunk::SIZE_Y;
 
-    if ( chunk_index >= chunks.size() )
+    while ( chunk_index >= chunks.size() )
     {
-        ChunkSP new_chunk( new Chunk( Vector3i( column_position[0], height, column_position[1] ) ) );
+        unsigned y = 0;
+
+        if ( !chunks.empty() )
+        {
+            y = chunks.back()->get_position()[1] + Chunk::SIZE_Y;
+        }
+
+        ChunkSP new_chunk( new Chunk( Vector3i( column_position[0], y, column_position[1] ) ) );
         chunks.push_back( new_chunk );
     }
 
     return chunks[chunk_index]->get_block( Vector3i( x, height % Chunk::SIZE_Y, z ) );
 }
-
 
 void generate_chunk_column(
     ChunkSPV& chunks,
@@ -102,7 +110,22 @@ void generate_chunk_column(
                 bottom = top;
             }
 
-            heights[x][z] = bottom;
+            const unsigned height = std::max( bottom, SEA_LEVEL );
+            heights[x][z] = height;
+
+            for ( unsigned y = height; y != 0; --y )
+            {
+                Block& block = get_block( chunks, column_position, x, z, y );
+
+                if ( block.get_material() == BLOCK_MATERIAL_AIR )
+                {
+                    if ( y <= SEA_LEVEL )
+                    {
+                        block.set_material( BLOCK_MATERIAL_WATER );
+                    }
+                }
+                else break;
+            }
         }
     }
 }

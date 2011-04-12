@@ -117,10 +117,11 @@ RendererMaterialManager::RendererMaterialManager() :
     materials_[BLOCK_MATERIAL_CLAY].reset      ( new RendererMaterial( "clay",       default_block_shader ) );
     materials_[BLOCK_MATERIAL_STONE].reset     ( new RendererMaterial( "stone",      default_block_shader ) );
     materials_[BLOCK_MATERIAL_BEDROCK].reset   ( new RendererMaterial( "bedrock",    default_block_shader ) );
+    materials_[BLOCK_MATERIAL_MAGMA].reset     ( new RendererMaterial( "magma",      default_block_shader ) );
     materials_[BLOCK_MATERIAL_TREE_TRUNK].reset( new RendererMaterial( "tree-trunk", default_block_shader ) );
     materials_[BLOCK_MATERIAL_TREE_LEAF].reset ( new RendererMaterial( "tree-leaf",  default_block_shader ) );
     materials_[BLOCK_MATERIAL_GLASS].reset     ( new RendererMaterial( "glass",      default_block_shader ) );
-    materials_[BLOCK_MATERIAL_MAGMA].reset     ( new RendererMaterial( "magma",      default_block_shader ) );
+    materials_[BLOCK_MATERIAL_WATER].reset     ( new RendererMaterial( "water",      default_block_shader ) );
 }
 
 void RendererMaterialManager::configure_block_material( const Camera& camera, const Sky& sky, const BlockMaterial material )

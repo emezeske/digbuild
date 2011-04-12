@@ -119,7 +119,7 @@ struct ColorLightStrategy
     static bool neighbor_needs_visit( const Block& neighbor )
     {
         return !neighbor.is_visited() &&
-               neighbor.get_material_attributes().translucent_;
+               neighbor.is_translucent();
     }
 };
 
@@ -153,7 +153,7 @@ struct SunLightStrategy
     {
         return !neighbor.is_sunlight_source() &&
                !neighbor.is_visited() &&
-               neighbor.get_material_attributes().translucent_;
+               neighbor.is_translucent();
     }
 };
 
@@ -288,7 +288,12 @@ void Chunk::reset_lighting()
 
                 if ( above_ground )
                 {
-                    if ( block.get_material_attributes().translucent_ )
+                    // FIXME: Something different needs to happen here, rather than just testing for
+                    //        WATER as a special case.
+                    //
+                    // TODO: What really needs to be done is to set the sunlight filter values
+                    //       for the blocks, using the material filter color.
+                    if ( block.is_translucent() && block.get_material() != BLOCK_MATERIAL_WATER )
                     {
                         block.set_sunlight_source( true );
                     }
@@ -321,10 +326,9 @@ void Chunk::apply_lighting_to_self()
             sun_flood_queue.push( std::make_pair( block_it, Block::MAX_LIGHT_COMPONENT_LEVEL ) );
             flood_fill_light<SunLightStrategy, InternalNeighborStrategy>( sun_flood_queue, blocks_visited );
         }
-        else if ( block.get_material() == BLOCK_MATERIAL_MAGMA )
+        else if ( block.is_light_source() )
         {
-            // TODO: use a material attribute
-            color_flood_queue.push( std::make_pair( block_it, Vector3i( 14, 4, 0 ) ) );
+            color_flood_queue.push( std::make_pair( block_it, block.get_color() ) );
             flood_fill_light<ColorLightStrategy, InternalNeighborStrategy>( color_flood_queue, blocks_visited );
         }
     }
@@ -401,7 +405,7 @@ void Chunk::update_geometry()
 
                 if ( block_neighbor )
                 {
-                    add_face = ( block_neighbor->get_material_attributes().translucent_ &&
+                    add_face = ( block_neighbor->is_translucent() &&
                                  block.get_material() != block_neighbor->get_material() );
                 }
                 else
@@ -502,8 +506,8 @@ Vector4f Chunk::calculate_vertex_lighting(
     // are opaque, because they would fully block any light from 'ab'.
     bool neighbor_ab_contributes = false;
 
-    if ( !neighbors[1].block_ || neighbors[1].block_->get_material_attributes().translucent_ ||
-         !neighbors[2].block_ || neighbors[2].block_->get_material_attributes().translucent_ )
+    if ( !neighbors[1].block_ || neighbors[1].block_->is_translucent() ||
+         !neighbors[2].block_ || neighbors[2].block_->is_translucent() )
     {
         neighbor_ab_contributes = true;
         neighbors[3] = get_block_neighbor( primary_index, primary_relation + neighbor_relation_a + neighbor_relation_b );
@@ -526,7 +530,7 @@ Vector4f Chunk::calculate_vertex_lighting(
 
         if ( block )
         {
-            if ( block->get_material_attributes().translucent_ )
+            if ( block->is_translucent() )
             {
                 total_lighting += block->get_light_level();
                 total_sunlighting += block->get_sunlight_level();

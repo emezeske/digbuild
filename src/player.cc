@@ -255,8 +255,8 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
                 const Block* block_neighbor =
                     world.get_block( vector_cast<int>( block_position ) + block_neighbor_offset ).block_;
 
-                // TODO: Use a material attribute instead.
-                if ( !block_neighbor || block_neighbor->get_material() == BLOCK_MATERIAL_AIR )
+                if ( !block_neighbor ||
+                      block_neighbor->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
                 {
                     const Vector3f
                         player_centroid = position_ + normalized_first_contact * movement + HALFSIZE,
@@ -420,8 +420,7 @@ void Player::get_potential_obstructions(
                     const Vector3i block_position( x, y, z );
                     const Block* block = world.get_block( block_position ).block_;
 
-                    // TODO: Use a material attribute instead.
-                    if ( block && block->get_material() != BLOCK_MATERIAL_AIR )
+                    if ( block && block->get_collision_mode() == BLOCK_COLLISION_MODE_SOLID )
                     {
                         potential_obstructions.insert(
                             PotentialObstruction( vector_cast<Scalar>( block_position ), block )
