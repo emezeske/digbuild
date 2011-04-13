@@ -170,11 +170,13 @@ private:
         const Vector3i& relation_vector
     );
 
-    Vector4f calculate_vertex_lighting(
+    void calculate_vertex_lighting(
         const Vector3i& primary_index,
         const Vector3i& primary_relation,
         const Vector3i& neighbor_relation_a,
-        const Vector3i& neighbor_relation_b
+        const Vector3i& neighbor_relation_b,
+        Vector3f& vertex_lighting,
+        Vector3f& vertex_sunlighting
     );
 
     Vector3i position_;

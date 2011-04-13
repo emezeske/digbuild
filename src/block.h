@@ -53,6 +53,7 @@ struct BlockMaterialAttributes
 
     // For translucent blocks, the color represents the filtering color.
     // For light source blocks, the color represents the light's color.
+    // TODO: Consider making this a Vector3f.
     const Vector3i color_;
 
     const BlockCollisionMode collision_mode_;
@@ -109,11 +110,14 @@ struct Block
 
     Block() :
         material_( BLOCK_MATERIAL_AIR ),
-        sunlight_source_( 0 ),
-        visited_( 0 ),
+        sunlight_source_( false ),
+        visited_( false ),
         light_level_r_( 0 ),
         light_level_g_( 0 ),
-        light_level_b_( 0 )
+        light_level_b_( 0 ),
+        sunlight_level_r_( 0 ),
+        sunlight_level_g_( 0 ),
+        sunlight_level_b_( 0 )
     {
     }
 
@@ -150,15 +154,17 @@ struct Block
         return Vector3i( light_level_r_, light_level_g_, light_level_b_ );
     }
 
-    void set_sunlight_level( const int light_level )
+    void set_sunlight_level( const Vector3i& sunlight_level )
     {
-        assert( light_level_valid( light_level ) );
-        light_level_s_ = light_level;
+        assert( light_level_valid( sunlight_level ) );
+        sunlight_level_r_ = sunlight_level[0];
+        sunlight_level_g_ = sunlight_level[1];
+        sunlight_level_b_ = sunlight_level[2];
     }
 
-    int get_sunlight_level() const
+    Vector3i get_sunlight_level() const
     {
-        return light_level_s_;
+        return Vector3i( sunlight_level_r_, sunlight_level_g_, sunlight_level_b_ );
     }
 
 private:
@@ -181,15 +187,15 @@ private:
         return true;
     }
 
-    uint8_t material_        : 8;
-    uint8_t sunlight_source_ : 1;
-    uint8_t visited_         : 1;
-    uint8_t light_level_r_   : 4;
-    uint8_t light_level_g_   : 4;
-    uint8_t light_level_b_   : 4;
-    uint8_t light_level_s_   : 4;
-
-    // TODO: Add sunlight_filter_r_, g, b.
+    uint8_t material_         : 8;
+    uint8_t sunlight_source_  : 1;
+    uint8_t visited_          : 1;
+    uint8_t light_level_r_    : 4;
+    uint8_t light_level_g_    : 4;
+    uint8_t light_level_b_    : 4;
+    uint8_t sunlight_level_r_ : 4;
+    uint8_t sunlight_level_g_ : 4;
+    uint8_t sunlight_level_b_ : 4;
 };
 
 struct BlockFace
@@ -202,14 +208,16 @@ struct BlockFace
         {
         }
 
-        Vertex( const Vector3f& position, const Vector4f& lighting ) :
+        Vertex( const Vector3f& position, const Vector3f& lighting, Vector3f& sunlighting ) :
             position_( position ),
-            lighting_( lighting )
+            lighting_( lighting ),
+            sunlighting_( sunlighting )
         {
         }
 
         Vector3f position_;
-        Vector4f lighting_;
+        Vector3f lighting_;
+        Vector3f sunlighting_;
     };
 
     BlockFace()

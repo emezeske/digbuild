@@ -170,7 +170,10 @@ void ChunkVertexBuffer::render_no_bind()
     glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 36 ) );
 
     TextureStateGuard texture_coord_array_guard2( GL_TEXTURE2, GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 44 ) );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 44 ) );
+
+    TextureStateGuard texture_coord_array_guard3( GL_TEXTURE3, GL_TEXTURE_COORD_ARRAY );
+    glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 56 ) );
 
     draw_elements();
 }
@@ -425,10 +428,10 @@ void ChunkRenderer::get_vertices_for_face( const BlockFace& face, BlockVertexV& 
     const Vector3f& n = face.normal_;
     const Vector3f& t = face.tangent_;
 
-    vertices.push_back( BlockVertex( v[0].position_, n, t, Vector2f( 0.0f, 0.0f ), v[0].lighting_ ) );
-    vertices.push_back( BlockVertex( v[1].position_, n, t, Vector2f( 1.0f, 0.0f ), v[1].lighting_ ) );
-    vertices.push_back( BlockVertex( v[2].position_, n, t, Vector2f( 1.0f, 1.0f ), v[2].lighting_ ) );
-    vertices.push_back( BlockVertex( v[3].position_, n, t, Vector2f( 0.0f, 1.0f ), v[3].lighting_ ) );
+    vertices.push_back( BlockVertex( v[0].position_, n, t, Vector2f( 0.0f, 0.0f ), v[0].lighting_, v[0].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[1].position_, n, t, Vector2f( 1.0f, 0.0f ), v[1].lighting_, v[1].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[2].position_, n, t, Vector2f( 1.0f, 1.0f ), v[2].lighting_, v[2].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[3].position_, n, t, Vector2f( 0.0f, 1.0f ), v[3].lighting_, v[3].sunlighting_ ) );
 }
 
 //////////////////////////////////////////////////////////////////////////////////

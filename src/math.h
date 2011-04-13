@@ -48,6 +48,35 @@ gmtl::Vec<DataType, Size> pointwise_product(
 }
 
 template <typename DataType, unsigned Size>
+gmtl::Vec<DataType, Size> pointwise_quotient(
+        const gmtl::Vec<DataType, Size>& n,
+        const gmtl::Vec<DataType, Size>& d
+)
+{
+    gmtl::Vec<DataType, Size> result;
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        result[i] = n[i] / d[i];
+    }
+
+    return result;
+}
+
+template <typename DataType, unsigned Size>
+gmtl::Vec<DataType, Size> pointwise_round( const gmtl::Vec<DataType, Size>& v )
+{
+    gmtl::Vec<DataType, Size> result;
+
+    for ( unsigned i = 0; i < Size; ++i )
+    {
+        result[i] = roundf( v[i] );
+    }
+
+    return result;
+}
+
+template <typename DataType, unsigned Size>
 gmtl::Vec<DataType, Size> pointwise_floor( const gmtl::Vec<DataType, Size>& v )
 {
     gmtl::Vec<DataType, Size> result;

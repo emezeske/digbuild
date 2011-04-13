@@ -29,15 +29,17 @@ void main()
     tangent_sun_direction = normalize( tbn_transpose * sun_direction );
     tangent_camera_direction = normalize( tbn_transpose * ( camera_position - gl_Vertex.xyz ) );
 
-    vec4 light_level = gl_MultiTexCoord2;
-    sun_lighting = sun_light_color * light_level.a;
+    vec3 light_level = gl_MultiTexCoord2.rgb;
+    vec3 sunlight_level = gl_MultiTexCoord3.rgb;
+
+    sun_lighting = sunlight_level * sun_light_color;
 
     float moon_incidence = 0.65f + 0.35f * dot( moon_direction, gl_Normal );
-    vec3 moon_lighting = moon_light_color * light_level.a;
+    vec3 moon_lighting = moon_light_color * sunlight_level;
     vec3 moon_diffuse = moon_lighting * moon_incidence;
 
     vec3 ambient_light = vec3( 0.06f, 0.06f, 0.06f ) + 0.50f * sun_lighting + 0.45f * moon_lighting;
-    base_lighting = ambient_light + light_level.rgb + moon_diffuse;
+    base_lighting = ambient_light + light_level + moon_diffuse;
 
     texture_coordinates = gl_MultiTexCoord1.st;
     

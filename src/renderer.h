@@ -77,13 +77,15 @@ struct BlockVertex
         const Vector3f& normal,
         const Vector3f& tangent,
         const Vector2f& texcoords,
-        const Vector4f& lighting
+        const Vector3f& lighting,
+        const Vector3f& sunlighting
     ) :
         x_( position[0] ), y_( position[1] ), z_( position[2] ),
         nx_( normal[0] ), ny_( normal[1] ), nz_( normal[2] ),
         tx_( tangent[0] ), ty_( tangent[1] ), tz_( tangent[2] ),
         s_( texcoords[0] ), t_( texcoords[1] ),
-        lr_( lighting[0] ), lg_( lighting[1] ), lb_( lighting[2] ), ls_( lighting[3] )
+        lr_( lighting[0] ), lg_( lighting[1] ), lb_( lighting[2] ),
+        slr_( sunlighting[0] ), slg_( sunlighting[1] ), slb_( sunlighting[2] )
     {
     }
 
@@ -91,7 +93,8 @@ struct BlockVertex
     GLfloat nx_, ny_, nz_;
     GLfloat tx_, ty_, tz_;
     GLfloat s_, t_;
-    GLfloat lr_, lg_, lb_, ls_;
+    GLfloat lr_, lg_, lb_;
+    GLfloat slr_, slg_, slb_;
 
 } __attribute__( ( packed ) );
 
