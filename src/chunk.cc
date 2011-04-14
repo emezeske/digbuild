@@ -58,15 +58,27 @@ bool mix_light( Vector3i& current, const Vector3i& incoming )
     return affected;
 }
 
-void filter_light( Vector3i& current, const Vector3i filter_color )
+void filter_light( Vector3i& current, const Block& block )
 {
-    const Vector3f filter = pointwise_quotient(
-        vector_cast<Scalar>( filter_color ),
-        vector_cast<Scalar>( Block::MAX_LIGHT_LEVEL )
-    );
+    if ( !block.is_color_saturated() )
+    {
+        const Vector3f& filter_color = block.get_color();
 
-    current = vector_cast<int>(
-        pointwise_round( pointwise_product( filter, vector_cast<Scalar>( current ) ) ) );
+        for ( unsigned i = 0; i < Vector3i::Size; ++i )
+        {
+            // TODO: The following lookup of filter_color[i] is the main bottleneck
+            //       in the whole lighting system.  Why?  Does it cause cache thrashing?
+            //
+            //       I wonder if all the convenience functions for getting at material
+            //       attributes are a bad thing?
+            current[i] = static_cast<int>( roundf( filter_color[i] * current[i] ) );
+        }
+
+        // TODO: The following is equivalent but much slower:
+        //
+        // current = vector_cast<int>(
+        //     pointwise_round( pointwise_product( filter_color, vector_cast<Scalar>( current ) ) ) );
+    }
 }
 
 // This function returns true if the light becomes fully attenuated.
@@ -78,13 +90,13 @@ bool attenuate_light( Vector3i& light )
     {
         light[i] -= 1;
 
-        if ( light[i] < Block::MIN_LIGHT_COMPONENT_LEVEL )
-        {
-            light[i] = Block::MIN_LIGHT_COMPONENT_LEVEL;
-        }
-        else if ( light[i] > Block::MIN_LIGHT_COMPONENT_LEVEL )
+        if ( light[i] > Block::MIN_LIGHT_COMPONENT_LEVEL )
         {
             fully_attenuated = false;
+        }
+        else if ( light[i] < Block::MIN_LIGHT_COMPONENT_LEVEL )
+        {
+            light[i] = Block::MIN_LIGHT_COMPONENT_LEVEL;
         }
     }
 
@@ -107,6 +119,11 @@ bool light_would_be_affected( const Vector3i& current, const Vector3i& incoming 
 
 struct ColorLightStrategy
 {
+    static bool force_source()
+    {
+        return false;
+    }
+
     static Vector3i get_light( const Block& block )
     {
         return block.get_light_level();
@@ -116,16 +133,15 @@ struct ColorLightStrategy
     {
         block.set_light_level( light );
     }
-
-    static bool neighbor_needs_visit( const Block& neighbor )
-    {
-        return !neighbor.is_visited() &&
-               neighbor.is_translucent();
-    }
 };
 
 struct SunLightStrategy
 {
+    static bool force_source()
+    {
+        return true;
+    }
+
     static Vector3i get_light( const Block& block )
     {
         return block.get_sunlight_level();
@@ -134,13 +150,6 @@ struct SunLightStrategy
     static void set_light( Block& block, const Vector3i& light )
     {
         block.set_sunlight_level( light );
-    }
-
-    static bool neighbor_needs_visit( const Block& neighbor )
-    {
-        return // FIXME !neighbor.is_sunlight_source() &&
-               !neighbor.is_visited() &&
-               neighbor.is_translucent();
     }
 };
 
@@ -178,6 +187,8 @@ typedef std::queue<FloodFillBlock> FloodFillQueue;
 template <typename LightStrategy, typename NeighborStrategy>
 void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
 {
+    bool source = true;
+
     while ( !queue.empty() )
     {
         const FloodFillBlock flood_block = queue.front();
@@ -191,15 +202,15 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
 
             Vector3i block_light_level = LightStrategy::get_light( block );
             if ( !mix_light( block_light_level, flood_block.second ) )
-                continue;
-
-            // As an optimization, don't bother filtering the light for AIR blocks, as they
-            // (a) are very common and (b) have a fully transparent filter color.
-            if ( block.get_material() != BLOCK_MATERIAL_AIR )
             {
-                filter_light( block_light_level, block.get_color() );
+                if ( source && LightStrategy::force_source() )
+                {
+                    source = false;
+                }
+                else continue;
             }
 
+            filter_light( block_light_level, block );
             LightStrategy::set_light( block, block_light_level );
 
             Vector3i attenuated_light_level = flood_block.second;
@@ -211,7 +222,9 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
                 const BlockIterator neighbor = NeighborStrategy::get_block_neighbor( flood_block.first, relation_vector );
 
-                if ( neighbor.block_ && LightStrategy::neighbor_needs_visit( *neighbor.block_ ) )
+                if ( neighbor.block_ &&
+                     !neighbor.block_->is_visited() &&
+                     neighbor.block_->is_translucent() )
                 {
                     if ( light_would_be_affected(
                              LightStrategy::get_light( *neighbor.block_ ), attenuated_light_level ) )
@@ -286,7 +299,7 @@ void Chunk::reset_lighting()
 
                 if ( sunlight_above && block.is_translucent() )
                 {
-                    filter_light( sunlight_level, block.get_color() );
+                    filter_light( sunlight_level, block );
                     block.set_sunlight_source( true );
                     block.set_sunlight_level( sunlight_level );
                 }
@@ -301,39 +314,53 @@ void Chunk::reset_lighting()
         }
     }
 
-    // TODO: This doesn't seem to buy any real speedup, and I think it might
-    //       make the sunlighting incorrect in some circumstances.
-    // FOREACH_BLOCK( x, y, z )
-    // {
-    //     const Vector3i index( x, y, z );
-    //     Block& block = get_block( Vector3i( x, y, z ) );
+    unset_nop_sunlight_sources();
+}
 
-    //     if ( block.is_sunlight_source() )
-    //     {
-    //         bool is_surrounded = true;
+void Chunk::unset_nop_sunlight_sources()
+{
+    // Unset sunlight sources that will not contribute any lighting, because they
+    // are surrounded by other equivalent sunlight sources.  This saves time later,
+    // in apply_lighting_to_xxx(), because these sources will not have to be considered.
+    for ( int x = 0; x < SIZE_X; ++x )
+    {
+        for ( int z = 0; z < SIZE_Z; ++z )
+        {
+            for ( int y = SIZE_Y - 1; y >= 0; --y )
+            {
+                const Vector3i index( x, y, z );
+                Block& block = get_block( index );
 
-    //         FOREACH_CARDINAL_RELATION( relation )
-    //         {
-    //             const Block* neighbor =
-    //                 maybe_get_block( index + cardinal_relation_vector( relation ) );
+                if ( block.is_sunlight_source() )
+                {
+                    bool is_surrounded = true;
+                    Vector3i attenuated_sunlight_level = block.get_sunlight_level();
+                    attenuate_light( attenuated_sunlight_level );
 
-    //             if ( !neighbor ||
-    //                  !neighbor->is_sunlight_source() ||
-    //                  !light_would_be_affected(
-    //                      neighbor->get_sunlight_level(), block.get_sunlight_level() ) )
-    //             {
-    //                 is_surrounded = false;
-    //                 break;
-    //             }
-    //         }
+                    FOREACH_CARDINAL_RELATION( relation )
+                    {
+                        const Block* neighbor =
+                            maybe_get_block( index + cardinal_relation_vector( relation ) );
 
-    //         if ( is_surrounded )
-    //         {
-    //             block.set_sunlight_source( false );
-    //             block.set_sunlight_level( Block::MAX_LIGHT_LEVEL );
-    //         }
-    //     }
-    // }
+                        if ( neighbor &&
+                             ( !neighbor->is_sunlight_source() ||
+                               light_would_be_affected(
+                                   neighbor->get_sunlight_level(), attenuated_sunlight_level ) ) )
+                        {
+                            is_surrounded = false;
+                            break;
+                        }
+                    }
+
+                    if ( is_surrounded )
+                    {
+                        block.set_sunlight_source( false );
+                    }
+                }
+                else break;
+            }
+        }
+    }
 }
 
 void Chunk::apply_lighting_to_self()
@@ -351,13 +378,15 @@ void Chunk::apply_lighting_to_self()
         if ( block.is_sunlight_source() )
         {
             sun_flood_queue.push( std::make_pair( block_it, block.get_sunlight_level() ) );
-            block.set_sunlight_level( Block::MIN_LIGHT_LEVEL );
             flood_fill_light<SunLightStrategy, InternalNeighborStrategy>( sun_flood_queue, blocks_visited );
         }
 
         if ( block.is_light_source() )
         {
-            color_flood_queue.push( std::make_pair( block_it, block.get_color() ) );
+            const Vector3i light_color =
+                vector_cast<int>(
+                    pointwise_round( Vector3f( block.get_color() * Scalar( Block::MAX_LIGHT_COMPONENT_LEVEL ) ) ) );
+            color_flood_queue.push( std::make_pair( block_it, light_color ) );
             flood_fill_light<ColorLightStrategy, InternalNeighborStrategy>( color_flood_queue, blocks_visited );
         }
     }
@@ -390,14 +419,12 @@ void Chunk::apply_lighting_to_neighbors()
         if ( block.get_sunlight_level() != Block::MIN_LIGHT_LEVEL )
         {
             sun_flood_queue.push( std::make_pair( block_it, block.get_sunlight_level() ) );
-            block.set_sunlight_level( Block::MIN_LIGHT_LEVEL );
             flood_fill_light<SunLightStrategy, ExternalNeighborStrategy>( sun_flood_queue, blocks_visited );
         }
 
         if ( block.get_light_level() != Block::MIN_LIGHT_LEVEL )
         {
             color_flood_queue.push( std::make_pair( block_it, block.get_light_level() ) );
-            block.set_light_level( Block::MIN_LIGHT_LEVEL );
             flood_fill_light<ColorLightStrategy, ExternalNeighborStrategy>( color_flood_queue, blocks_visited );
         }
     }

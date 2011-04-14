@@ -38,11 +38,12 @@ struct BlockMaterialAttributes
     BlockMaterialAttributes(
         const bool translucent,
         const bool is_light_source,
-        const Vector3i& color,
+        const Vector3f& color,
         const BlockCollisionMode collision_mode
     ) :
         translucent_( translucent ),
         is_light_source_( is_light_source ),
+        is_color_saturated_( color == Vector3f( 1.0f, 1.0f, 1.0f ) ),
         color_( color ),
         collision_mode_( collision_mode )
     {
@@ -50,12 +51,13 @@ struct BlockMaterialAttributes
 
     const bool
         translucent_,
-        is_light_source_;
+        is_light_source_,
+        is_color_saturated_;
 
     // For translucent blocks, the color represents the filtering color.
     // For light source blocks, the color represents the light's color.
     // TODO: Consider making this a Vector3f.
-    const Vector3i color_;
+    const Vector3f color_;
 
     const BlockCollisionMode collision_mode_;
 };
@@ -65,32 +67,32 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
     static const BlockMaterialAttributes attributes[BLOCK_MATERIAL_SIZE] =
     {
         /////////////////////////////////////////////////////////////////////////////////////
-        //                    | trans | emits | color                | collision 
+        //                    | trans  | emits | color                        | collision 
         /////////////////////////////////////////////////////////////////////////////////////
         // BLOCK_MATERIAL_AIR
-        BlockMaterialAttributes( true,  false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_NONE ),
+        BlockMaterialAttributes( true,  false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_NONE ),
         // BLOCK_MATERIAL_GRASS
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_DIRT
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_CLAY
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_STONE
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_BEDROCK
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_MAGMA
-        BlockMaterialAttributes( false, true,  Vector3i( 14,  4,  0 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_TREE_TRUNK
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_TREE_LEAF
-        BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_GLASS_CLEAR
-        BlockMaterialAttributes( true,  false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( true,  false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_GLASS_RED
-        BlockMaterialAttributes( true,  false, Vector3i( 15,  0,  0 ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( true,  false, Vector3f( 1.0f,  0.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_WATER
-        BlockMaterialAttributes( true,  false, Vector3i(  0,  0, 15 ), BLOCK_COLLISION_MODE_FLUID )
+        BlockMaterialAttributes( true,  false, Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_FLUID )
     };
 
     assert( material >= 0 && material < BLOCK_MATERIAL_SIZE );
@@ -135,7 +137,8 @@ struct Block
     const BlockMaterialAttributes& get_material_attributes() const { return get_block_material_attributes( get_material() ); }
     bool is_translucent() const { return get_material_attributes().translucent_; }
     bool is_light_source() const { return get_material_attributes().is_light_source_; }
-    const Vector3i& get_color() const { return get_material_attributes().color_; }
+    bool is_color_saturated() const { return get_material_attributes().is_color_saturated_; }
+    const Vector3f& get_color() const { return get_material_attributes().color_; }
     BlockCollisionMode get_collision_mode() const { return get_material_attributes().collision_mode_; }
 
     void set_sunlight_source( const bool sunlight_source ) { sunlight_source_ = sunlight_source; }

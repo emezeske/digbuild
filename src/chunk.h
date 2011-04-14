@@ -128,6 +128,7 @@ struct Chunk : public boost::noncopyable
     }
 
     void reset_lighting();
+    void unset_nop_sunlight_sources();
     void apply_lighting_to_self();
     void apply_lighting_to_neighbors();
     void update_geometry();
