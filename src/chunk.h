@@ -44,6 +44,15 @@ struct Chunk : public boost::noncopyable
 
     const Vector3i& get_position() const { return position_; }
 
+    Block* maybe_get_block( const Vector3i& index )
+    {
+        if( block_in_range( index ) )
+        {
+            return &blocks_[index[0]][index[1]][index[2]];
+        }
+        else return 0;
+    }
+
     Block& get_block( const Vector3i& index )
     {
         assert( block_in_range( index ) );

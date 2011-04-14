@@ -41,37 +41,32 @@ Scalar get_lighting_attenuation( const Scalar power )
     return lighting_attenuation_table[index];
 }
 
-bool attenuate_light_component( int& light )
-{
-    light -= 1;
-
-    if ( light < Block::MIN_LIGHT_COMPONENT_LEVEL )
-    {
-        light = Block::MIN_LIGHT_COMPONENT_LEVEL;
-    }
-    else if ( light > Block::MIN_LIGHT_COMPONENT_LEVEL )
-    {
-        return false;
-    }
-
-    return true;
-}
-
 // This function returns true if the incoming light affected the current light.
 bool mix_light( Vector3i& current, const Vector3i& incoming )
 {
-    bool already_lit = false;
+    bool affected = false;
 
     for ( int i = 0; i < Vector3i::Size; ++i )
     {
         if ( current[i] < incoming[i] )
         {
             current[i] = incoming[i];
-            already_lit = true;
+            affected = true;
         }
     }
 
-    return already_lit;
+    return affected;
+}
+
+void filter_light( Vector3i& current, const Vector3i filter_color )
+{
+    const Vector3f filter = pointwise_quotient(
+        vector_cast<Scalar>( filter_color ),
+        vector_cast<Scalar>( Block::MAX_LIGHT_LEVEL )
+    );
+
+    current = vector_cast<int>(
+        pointwise_round( pointwise_product( filter, vector_cast<Scalar>( current ) ) ) );
 }
 
 // This function returns true if the light becomes fully attenuated.
@@ -94,6 +89,20 @@ bool attenuate_light( Vector3i& light )
     }
 
     return fully_attenuated;
+}
+
+// This function returns true if the incoming light would affect the current light.
+bool light_would_be_affected( const Vector3i& current, const Vector3i& incoming )
+{
+    for ( int i = 0; i < Vector3i::Size; ++i )
+    {
+        if ( current[i] < incoming[i] )
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 struct ColorLightStrategy
@@ -129,7 +138,7 @@ struct SunLightStrategy
 
     static bool neighbor_needs_visit( const Block& neighbor )
     {
-        return !neighbor.is_sunlight_source() &&
+        return // FIXME !neighbor.is_sunlight_source() &&
                !neighbor.is_visited() &&
                neighbor.is_translucent();
     }
@@ -148,20 +157,13 @@ struct InternalNeighborStrategy
     static BlockIterator get_block_neighbor( const BlockIterator& block_it, const Vector3i& relation )
     {
         const Vector3i neighbor_index = block_it.index_ + relation;
+        Block* neighbor = block_it.chunk_->maybe_get_block( neighbor_index );
 
-        for ( int i = 0; i < 3; ++i )
+        if ( neighbor )
         {
-            if ( neighbor_index[i] == -1 )
-            {
-                return BlockIterator();
-            }
-            else if ( neighbor_index[i] == Chunk::SIZE[i] )
-            {
-                return BlockIterator();
-            }
+            return BlockIterator( block_it.chunk_, neighbor, neighbor_index );
         }
-
-        return BlockIterator( block_it.chunk_, &block_it.chunk_->get_block( neighbor_index ), neighbor_index );
+        else return BlockIterator();
     }
 };
 
@@ -191,27 +193,31 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
             if ( !mix_light( block_light_level, flood_block.second ) )
                 continue;
 
+            // As an optimization, don't bother filtering the light for AIR blocks, as they
+            // (a) are very common and (b) have a fully transparent filter color.
+            if ( block.get_material() != BLOCK_MATERIAL_AIR )
+            {
+                filter_light( block_light_level, block.get_color() );
+            }
+
             LightStrategy::set_light( block, block_light_level );
+
+            Vector3i attenuated_light_level = flood_block.second;
+            if ( attenuate_light( attenuated_light_level ) )
+                continue;
 
             FOREACH_CARDINAL_RELATION( relation )
             {
                 const Vector3i relation_vector = cardinal_relation_vector( relation );
                 const BlockIterator neighbor = NeighborStrategy::get_block_neighbor( flood_block.first, relation_vector );
-                Vector3i attenuated_light_level;
-                bool attenuation_calculated = false;
 
                 if ( neighbor.block_ && LightStrategy::neighbor_needs_visit( *neighbor.block_ ) )
                 {
-                    if ( !attenuation_calculated )
+                    if ( light_would_be_affected(
+                             LightStrategy::get_light( *neighbor.block_ ), attenuated_light_level ) )
                     {
-                        attenuated_light_level = flood_block.second;
-                        if ( attenuate_light( attenuated_light_level ) )
-                            break;
-
-                        attenuation_calculated = true;
+                        queue.push( std::make_pair( neighbor, attenuated_light_level ) );
                     }
-
-                    queue.push( std::make_pair( neighbor, attenuated_light_level ) );
                 }
             }
         }
@@ -280,13 +286,7 @@ void Chunk::reset_lighting()
 
                 if ( sunlight_above && block.is_translucent() )
                 {
-                    const Vector3f filter = pointwise_quotient(
-                        vector_cast<Scalar>( block.get_color() ),
-                        vector_cast<Scalar>( Block::MAX_LIGHT_LEVEL )
-                    );
-
-                    sunlight_level = vector_cast<int>(
-                        pointwise_round( pointwise_product( filter, vector_cast<Scalar>( sunlight_level ) ) ) );
+                    filter_light( sunlight_level, block.get_color() );
                     block.set_sunlight_source( true );
                     block.set_sunlight_level( sunlight_level );
                 }
@@ -300,6 +300,40 @@ void Chunk::reset_lighting()
             }
         }
     }
+
+    // TODO: This doesn't seem to buy any real speedup, and I think it might
+    //       make the sunlighting incorrect in some circumstances.
+    // FOREACH_BLOCK( x, y, z )
+    // {
+    //     const Vector3i index( x, y, z );
+    //     Block& block = get_block( Vector3i( x, y, z ) );
+
+    //     if ( block.is_sunlight_source() )
+    //     {
+    //         bool is_surrounded = true;
+
+    //         FOREACH_CARDINAL_RELATION( relation )
+    //         {
+    //             const Block* neighbor =
+    //                 maybe_get_block( index + cardinal_relation_vector( relation ) );
+
+    //             if ( !neighbor ||
+    //                  !neighbor->is_sunlight_source() ||
+    //                  !light_would_be_affected(
+    //                      neighbor->get_sunlight_level(), block.get_sunlight_level() ) )
+    //             {
+    //                 is_surrounded = false;
+    //                 break;
+    //             }
+    //         }
+
+    //         if ( is_surrounded )
+    //         {
+    //             block.set_sunlight_source( false );
+    //             block.set_sunlight_level( Block::MAX_LIGHT_LEVEL );
+    //         }
+    //     }
+    // }
 }
 
 void Chunk::apply_lighting_to_self()

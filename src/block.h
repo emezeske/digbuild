@@ -20,7 +20,8 @@ enum BlockMaterial
     BLOCK_MATERIAL_MAGMA,
     BLOCK_MATERIAL_TREE_TRUNK,
     BLOCK_MATERIAL_TREE_LEAF,
-    BLOCK_MATERIAL_GLASS,
+    BLOCK_MATERIAL_GLASS_CLEAR,
+    BLOCK_MATERIAL_GLASS_RED,
     BLOCK_MATERIAL_WATER,
     BLOCK_MATERIAL_SIZE
 };
@@ -84,8 +85,10 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
         BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_TREE_LEAF
         BlockMaterialAttributes( false, false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_GLASS
+        // BLOCK_MATERIAL_GLASS_CLEAR
         BlockMaterialAttributes( true,  false, Vector3i( 15, 15, 15 ), BLOCK_COLLISION_MODE_SOLID ),
+        // BLOCK_MATERIAL_GLASS_RED
+        BlockMaterialAttributes( true,  false, Vector3i( 15,  0,  0 ), BLOCK_COLLISION_MODE_SOLID ),
         // BLOCK_MATERIAL_WATER
         BlockMaterialAttributes( true,  false, Vector3i(  0,  0, 15 ), BLOCK_COLLISION_MODE_FLUID )
     };
