@@ -422,6 +422,8 @@ void World::update_chunks()
     apply_lighting_to_neighbors( chunk_guard, neighbor_chunks );
     update_geometry( chunk_guard, possibly_modified_chunks );
 
+    // TODO: Only add Chunks that were DEFINITELY modified to updated_chunks_.  This will
+    //       save time because they won't need to be sent to the graphics card.
     updated_chunks_ = possibly_modified_chunks;
     chunk_update_in_progress_ = false;
 }

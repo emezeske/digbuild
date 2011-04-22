@@ -38,6 +38,10 @@ Gui::Gui( SDL_Surface* screen )
     AG_ExpandHoriz( triangles_label_ );
     AG_WidgetUpdate( triangles_label_ );
 
+    current_material_label_ = AG_LabelNewS( window, 0, "Current Material: None" );
+    AG_ExpandHoriz( current_material_label_ );
+    AG_WidgetUpdate( current_material_label_ );
+
     AG_WindowSetGeometry( window, 8, 8, 300, 128 );
     AG_WindowShow( window );
 }
@@ -100,4 +104,9 @@ void Gui::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned ch
 {
     AG_LabelText( chunks_label_, "Chunks: %d/%d", chunks_drawn, chunks_total );
     AG_LabelText( triangles_label_, "Triangles: %d", triangles_drawn );
+}
+
+void Gui::set_current_material( const std::string& current_material )
+{
+    AG_LabelText( current_material_label_, "Current Material: %s", current_material.c_str() );
 }

@@ -105,14 +105,17 @@ gmtl::Vec<DataType, Size> pointwise_ceil( const gmtl::Vec<DataType, Size>& v )
 template <typename DataType, unsigned Size>
 unsigned major_axis( const gmtl::Vec<DataType, Size>& v )
 {
-    DataType max = 0.0f;
+    DataType max_magnitude = 0.0f;
     unsigned major = 0;
 
     for ( unsigned i = 0; i < Size; ++i )
     {
-        if ( gmtl::Math::abs( v[i] ) > max )
+        const DataType axis_magnitude = gmtl::Math::abs( v[i] );
+
+        if ( axis_magnitude > max_magnitude )
         {
             major = i;
+            max_magnitude = axis_magnitude;
         }
     }
 

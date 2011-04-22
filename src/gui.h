@@ -16,12 +16,14 @@ struct Gui
 
     void set_engine_fps( const unsigned fps );
     void set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn );
+    void set_current_material( const std::string& material );
 
 protected:
 
     AG_Label* fps_label_;
     AG_Label* chunks_label_;
     AG_Label* triangles_label_;
+    AG_Label* current_material_label_;
 };
 
 #endif // GUI_H

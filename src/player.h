@@ -32,6 +32,11 @@ struct Player
     void request_jump( const bool r ) { requesting_jump_ = r; }
     void request_crouch( const bool r ) { requesting_crouch_ = r; }
     void request_primary_fire( const bool r ) { requesting_primary_fire_ = r; }
+    void request_secondary_fire( const bool r ) { requesting_secondary_fire_ = r; }
+
+    void select_next_material();
+    void select_previous_material();
+    BlockMaterial get_material_selection() const { return material_selection_; }
 
     void toggle_noclip() { noclip_mode_ = !noclip_mode_; }
 
@@ -51,6 +56,13 @@ private:
     static const Vector3f
         SIZE,
         HALFSIZE;
+
+    struct TargetBlock
+    {
+        Vector3i
+            block_position_,
+            face_direction_;
+    };
 
     struct BlockCollision
     {
@@ -87,7 +99,11 @@ private:
 
     void do_one_step_noclip( const float step_time );
     void do_one_step_clip( const float step_time, const World& world );
+
     void do_primary_fire( const float step_time, World& world );
+    void do_secondary_fire( const float step_time, World& world );
+    bool get_target_block( const Scalar max_distance, World& world, TargetBlock& target ) const;
+
     Vector3f get_acceleration();
     bool find_collision( const World& world, const Vector3f& movement, BlockCollision& collision );
     void resolve_collision( const Vector3f& movement, const Vector3f& dv, const BlockCollision& collision, Vector3f& acceleration );
@@ -99,7 +115,7 @@ private:
         const Vector3f& movement,
         const Vector3f& sweep_size,
         PotentialObstructionSet& potential_obstructions
-    );
+    ) const;
 
     void noclip_move_forward( const Scalar movement_units );
     void noclip_strafe( const Scalar movement_units );
@@ -113,11 +129,13 @@ private:
         GRAVITY_ACCELERATION = -30.0f,
         WALKING_SPEED = 5.0f,
         JUMP_VELOCITY = 10.0f,
-        PRIMARY_FIRE_DISTANCE = 3.0f;
+        PRIMARY_FIRE_DISTANCE = 3.0f,
+        SECONDARY_FIRE_DISTANCE = 3.0f;
 
     static const long
         JUMP_INTERVAL_MS = 300,
-        PRIMARY_FIRE_INTERVAL_MS = 300;
+        PRIMARY_FIRE_INTERVAL_MS = 300,
+        SECONDARY_FIRE_INTERVAL_MS = 300;
 
     Vector3f
         position_,
@@ -136,12 +154,18 @@ private:
         requesting_jump_,
         requesting_crouch_,
         requesting_primary_fire_,
+        requesting_secondary_fire_,
         noclip_mode_,
         feet_contacting_block_;
 
+    BlockMaterial
+        material_selection_;
+
+    // TODO: Timer class
     long
         last_jump_at_,
-        last_primary_fire_at_;
+        last_primary_fire_at_,
+        last_secondary_fire_at_;
 };
 
 #endif // PLAYER_H

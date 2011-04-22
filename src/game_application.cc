@@ -240,6 +240,13 @@ void GameApplication::handle_mouse_down_event( const int button, const int x, co
             player_.request_primary_fire( true );
             break;
         case SDL_BUTTON_RIGHT:
+            player_.request_secondary_fire( true );
+            break;
+        case SDL_BUTTON_WHEELUP:
+            player_.select_next_material();
+            break;
+        case SDL_BUTTON_WHEELDOWN:
+            player_.select_previous_material();
             break;
     }
 }
@@ -252,6 +259,7 @@ void GameApplication::handle_mouse_up_event( const int button, const int x, cons
             player_.request_primary_fire( false );
             break;
         case SDL_BUTTON_RIGHT:
+            player_.request_secondary_fire( false );
             break;
     }
 }
@@ -386,6 +394,7 @@ void GameApplication::render()
 #endif
 
     gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
+    gui_.set_current_material( get_block_material_attributes( player_.get_material_selection() ).name_ );
     gui_.render();
 
     SDL_GL_SwapBuffers();

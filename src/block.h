@@ -33,14 +33,18 @@ enum BlockCollisionMode
     BLOCK_COLLISION_MODE_FLUID
 };
 
+// TODO: It might be worth some testing to see if splitting these fields out into separate
+//       lookup tables is more cache-friendly.
 struct BlockMaterialAttributes
 {
     BlockMaterialAttributes(
+        const std::string& name,
         const bool translucent,
         const bool is_light_source,
         const Vector3f& color,
         const BlockCollisionMode collision_mode
     ) :
+        name_( name ),
         translucent_( translucent ),
         is_light_source_( is_light_source ),
         is_color_saturated_( color == Vector3f( 1.0f, 1.0f, 1.0f ) ),
@@ -48,6 +52,8 @@ struct BlockMaterialAttributes
         collision_mode_( collision_mode )
     {
     }
+
+    const std::string name_;
 
     const bool
         translucent_,
@@ -65,33 +71,21 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
 {
     static const BlockMaterialAttributes attributes[BLOCK_MATERIAL_SIZE] =
     {
-        /////////////////////////////////////////////////////////////////////////////////////
-        //                    | trans  | emits | color                        | collision 
-        /////////////////////////////////////////////////////////////////////////////////////
-        // BLOCK_MATERIAL_AIR
-        BlockMaterialAttributes( true,  false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_NONE ),
-        // BLOCK_MATERIAL_GRASS
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_DIRT
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_CLAY
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_STONE
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_BEDROCK
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_MAGMA
-        BlockMaterialAttributes( false, true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_TREE_TRUNK
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_TREE_LEAF
-        BlockMaterialAttributes( false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_GLASS_CLEAR
-        BlockMaterialAttributes( true,  false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_GLASS_RED
-        BlockMaterialAttributes( true,  false, Vector3f( 1.0f,  0.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        // BLOCK_MATERIAL_WATER
-        BlockMaterialAttributes( true,  false, Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_FLUID )
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //                    | name          | trans  | emits | color                        | collision 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        BlockMaterialAttributes( "air",         true,  false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_NONE ),
+        BlockMaterialAttributes( "grass",       false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "dirt",        false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "clay",        false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "stone",       false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "bedrock",     false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "magma",       false, true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "tree-trunk",  false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "tree-leaf",   false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "glass-clear", true,  false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "glass-red",   true,  false, Vector3f( 1.0f,  0.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "water",       true,  false, Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_FLUID )
     };
 
     assert( material >= 0 && material < BLOCK_MATERIAL_SIZE );

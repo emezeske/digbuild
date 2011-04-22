@@ -26,7 +26,8 @@ const float
     Player::GRAVITY_ACCELERATION,
     Player::WALKING_SPEED,
     Player::JUMP_VELOCITY,
-    Player::PRIMARY_FIRE_DISTANCE;
+    Player::PRIMARY_FIRE_DISTANCE,
+    Player::SECONDARY_FIRE_DISTANCE;
 
 const long
     Player::JUMP_INTERVAL_MS,
@@ -48,10 +49,13 @@ Player::Player( const Vector3f& position, const Scalar pitch, const Scalar yaw )
     requesting_jump_( false ),
     requesting_crouch_( false ),
     requesting_primary_fire_( false ),
+    requesting_secondary_fire_( false ),
     noclip_mode_( true ),
     feet_contacting_block_( false ),
+    material_selection_( BLOCK_MATERIAL_GRASS ),
     last_jump_at_( 0 ),
-    last_primary_fire_at_( 0 )
+    last_primary_fire_at_( 0 ),
+    last_secondary_fire_at_( 0 )
 {
 }
 
@@ -64,6 +68,27 @@ void Player::do_one_step( const float step_time, World& world )
     else do_one_step_clip( step_time, world );
 
     do_primary_fire( step_time, world );
+    do_secondary_fire( step_time, world );
+}
+
+void Player::select_next_material()
+{
+    const int material = material_selection_ + 1;
+
+    if ( material == BLOCK_MATERIAL_SIZE )
+    {
+        material_selection_ = BlockMaterial( 0 );
+    }
+    else material_selection_ = BlockMaterial( material );
+}
+
+void Player::select_previous_material()
+{
+    if ( material_selection_ == BLOCK_MATERIAL_AIR )
+    {
+        material_selection_ = BlockMaterial( BLOCK_MATERIAL_SIZE - 1 );
+    }
+    else material_selection_ = BlockMaterial( material_selection_ - 1 );
 }
 
 void Player::do_one_step_noclip( const float step_time )
@@ -135,48 +160,94 @@ void Player::do_primary_fire( const float step_time, World& world )
     {
         last_primary_fire_at_ = now;
 
-        const Vector3f
-            fire_begin = get_eye_position(),
-            fire_end = fire_begin + get_eye_direction() * PRIMARY_FIRE_DISTANCE;
+        TargetBlock target;
 
-        const gmtl::LineSegf fire_line = gmtl::LineSegf( gmtl::Point3f( fire_begin ), gmtl::Point3f( fire_end ) );
-
-        PotentialObstructionSet potential_obstructions;
-        get_potential_obstructions( world, fire_line.mOrigin, fire_line.mDir, Vector3f(), potential_obstructions );
-
-        Scalar normalized_hit_time = std::numeric_limits<Scalar>::max();
-        bool hit_found;
-        Vector3i hit_block_position;
-
-        BOOST_FOREACH( const PotentialObstruction& obstruction, potential_obstructions )
+        if ( get_target_block( PRIMARY_FIRE_DISTANCE, world, target ) )
         {
-            const Vector3f block_position = obstruction.block_position_;
-            const AABoxf block_bounds( block_position, block_position + Block::SIZE );
-
-            unsigned num_hits;
-
-            Scalar
-                normalized_time_in,
-                normalized_time_out;
-
-            const bool intersected =
-                gmtl::intersect( fire_line, block_bounds, num_hits, normalized_time_in, normalized_time_out );
-
-            if ( intersected && normalized_time_in < normalized_hit_time )
-            {
-                normalized_hit_time = normalized_time_in;
-                hit_found = true;
-                hit_block_position = vector_cast<int>( block_position );
-            }
-        }
-
-        if ( hit_found )
-        {
-            BlockIterator block_it = world.get_block( hit_block_position );
+            BlockIterator block_it = world.get_block( target.block_position_ );
+            assert( block_it.block_ );
             block_it.block_->set_material( BLOCK_MATERIAL_AIR );
             world.mark_chunk_for_update( block_it.chunk_ ); 
         }
     }
+}
+
+void Player::do_secondary_fire( const float step_time, World& world )
+{
+    const long now = SDL_GetTicks();
+
+    if ( requesting_secondary_fire_ && last_secondary_fire_at_ + SECONDARY_FIRE_INTERVAL_MS < now )
+    {
+        last_secondary_fire_at_ = now;
+
+        TargetBlock target;
+
+        if ( get_target_block( SECONDARY_FIRE_DISTANCE, world, target ) )
+        {
+            BlockIterator block_it = world.get_block( target.block_position_ + target.face_direction_ );
+
+            // TODO: Need to create a Chunk if the Block does not yet exist.
+
+            // TODO: Need to check if the Block intersects with the Player.
+
+            if ( block_it.block_ && block_it.block_->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
+            {
+                block_it.block_->set_material( material_selection_ );
+                world.mark_chunk_for_update( block_it.chunk_ ); 
+            }
+        }
+    }
+}
+
+bool Player::get_target_block( const Scalar max_distance, World& world, TargetBlock& target ) const
+{
+    const Vector3f
+        segment_begin = get_eye_position(),
+        segment_end = segment_begin + get_eye_direction() * max_distance;
+
+    const gmtl::LineSegf segment = gmtl::LineSegf( gmtl::Point3f( segment_begin ), gmtl::Point3f( segment_end ) );
+
+    PotentialObstructionSet potential_obstructions;
+    get_potential_obstructions( world, segment.mOrigin, segment.mDir, Vector3f(), potential_obstructions );
+
+    Scalar normalized_hit_time = std::numeric_limits<Scalar>::max();
+    bool target_block_found;
+
+    BOOST_FOREACH( const PotentialObstruction& obstruction, potential_obstructions )
+    {
+        const Vector3f block_position = obstruction.block_position_;
+        const AABoxf block_bounds( block_position, block_position + Block::SIZE );
+
+        unsigned num_hits;
+
+        Scalar
+            normalized_time_in,
+            normalized_time_out;
+
+        const bool intersected =
+            gmtl::intersect( segment, block_bounds, num_hits, normalized_time_in, normalized_time_out );
+
+        if ( intersected && normalized_time_in < normalized_hit_time )
+        {
+            normalized_hit_time = normalized_time_in;
+            target_block_found = true;
+            target.block_position_ = vector_cast<int>( block_position );
+        }
+    }
+
+    if ( target_block_found )
+    {
+        const Vector3f
+            intersection_position = segment.mOrigin + normalized_hit_time * segment.mDir,
+            block_centroid = vector_cast<Scalar>( target.block_position_ ) + 0.5f * vector_cast<Scalar>( Block::SIZE ),
+            centroid_to_intersection = intersection_position - block_centroid;
+
+        const unsigned major = major_axis( centroid_to_intersection );
+        target.face_direction_ = Vector3i();
+        target.face_direction_[major] = ( centroid_to_intersection[major] > 0.0f ) ? 1 : -1;
+    }
+
+    return target_block_found;
 }
 
 Vector3f Player::get_acceleration()
@@ -394,7 +465,7 @@ void Player::get_potential_obstructions(
     const Vector3f& sweep,
     const Vector3f& sweep_size,
     PotentialObstructionSet& potential_obstructions
-)
+) const
 {
     // This function slides a moving bounding box along its sweep vector in steps of one unit,
     // and collects all of the Blocks that the bounding box might intersect with along the way.

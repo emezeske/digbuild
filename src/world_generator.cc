@@ -194,9 +194,7 @@ void populate_trees(
 
                                 if ( leaf_block.get_material() == BLOCK_MATERIAL_AIR )
                                 {
-                                    // FIXME
-                                    // leaf_block.set_material( BLOCK_MATERIAL_TREE_LEAF );
-                                    leaf_block.set_material( BLOCK_MATERIAL_GLASS_RED );
+                                    leaf_block.set_material( BLOCK_MATERIAL_TREE_LEAF );
                                 }
                             }
                         }
