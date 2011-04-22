@@ -119,7 +119,7 @@ bool light_would_be_affected( const Vector3i& current, const Vector3i& incoming 
 
 struct ColorLightStrategy
 {
-    static bool force_source()
+    static bool skip_source_block()
     {
         return false;
     }
@@ -137,7 +137,7 @@ struct ColorLightStrategy
 
 struct SunLightStrategy
 {
-    static bool force_source()
+    static bool skip_source_block()
     {
         return true;
     }
@@ -187,7 +187,7 @@ typedef std::queue<FloodFillBlock> FloodFillQueue;
 template <typename LightStrategy, typename NeighborStrategy>
 void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
 {
-    bool source = true;
+    bool source_block = true;
 
     while ( !queue.empty() )
     {
@@ -200,18 +200,20 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
             blocks_visited.push_back( &block );
             block.set_visited( true );
 
-            Vector3i block_light_level = LightStrategy::get_light( block );
-            if ( !mix_light( block_light_level, flood_block.second ) )
+            if ( !LightStrategy::skip_source_block() || !source_block )
             {
-                if ( source && LightStrategy::force_source() )
-                {
-                    source = false;
-                }
-                else continue;
-            }
+                Vector3i filtered_light_level = flood_block.second;
+                filter_light( filtered_light_level, block );
 
-            filter_light( block_light_level, block );
-            LightStrategy::set_light( block, block_light_level );
+                Vector3i block_light_level = LightStrategy::get_light( block );
+                if ( !mix_light( block_light_level, filtered_light_level ) )
+                {
+                    continue;
+                }
+
+                LightStrategy::set_light( block, block_light_level );
+            }
+            else source_block = false;
 
             Vector3i attenuated_light_level = flood_block.second;
             if ( attenuate_light( attenuated_light_level ) )
