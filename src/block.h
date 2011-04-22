@@ -56,7 +56,6 @@ struct BlockMaterialAttributes
 
     // For translucent blocks, the color represents the filtering color.
     // For light source blocks, the color represents the light's color.
-    // TODO: Consider making this a Vector3f.
     const Vector3f color_;
 
     const BlockCollisionMode collision_mode_;

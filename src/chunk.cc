@@ -208,7 +208,7 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
                 Vector3i block_light_level = LightStrategy::get_light( block );
                 if ( !mix_light( block_light_level, filtered_light_level ) )
                 {
-                    continue;
+                    continue; // The incoming light had no effect on this block.
                 }
 
                 LightStrategy::set_light( block, block_light_level );
@@ -217,7 +217,9 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
 
             Vector3i attenuated_light_level = flood_block.second;
             if ( attenuate_light( attenuated_light_level ) )
-                continue;
+            {
+                continue; // The light has been attenuated down to zero.
+            }
 
             FOREACH_CARDINAL_RELATION( relation )
             {
