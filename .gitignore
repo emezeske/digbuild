@@ -4,9 +4,6 @@ prof
 .sconf_temp
 .sconsign.dblite
 config.log
-CEGUI.log
-CELayoutEditor.log
-CELayoutEditor.ini
 digbuild
 tags
 media/materials/textures/source
