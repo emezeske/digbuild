@@ -1,3 +1,7 @@
+* Use GL_TEXTURE_2D_ARRAY to combine the materials into texture arrays.
+  This will DRASTICALLY reduce the number of glDrawElements() calls, particularly
+  for translucent Blocks.
+
 * Make fluids flow.
 
 * Make crouching prevent the player from walking off cliffs.
