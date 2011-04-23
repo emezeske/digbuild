@@ -366,7 +366,8 @@ void GameApplication::do_delay( const float delay_time )
 
     if ( delay_ms >= 0 )
     {
-        SDL_Delay( delay_ms );
+        // FIXME: Commenting this out makes things MUCH smoother (at least with VSYNC enabled).
+        // SDL_Delay( delay_ms );
     }
 }
 
@@ -382,15 +383,14 @@ void GameApplication::render()
         fps_frame_count_ = 0;
     }
 
-    glClear( GL_DEPTH_BUFFER_BIT );
     window_.reshape_window();
 
     Camera camera( player_.get_eye_position(), player_.get_pitch(), player_.get_yaw(), window_.get_draw_distance() );
 
 #ifdef DEBUG_COLLISIONS
-    renderer_.render( camera, world_, player_ );
+    renderer_.render( window_, camera, world_, player_ );
 #else
-    renderer_.render( camera, world_ );
+    renderer_.render( window_, camera, world_ );
 #endif
 
     gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );

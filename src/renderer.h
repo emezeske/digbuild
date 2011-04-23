@@ -10,6 +10,7 @@
 #include <boost/utility.hpp>
 
 #include "camera.h"
+#include "sdl_gl_window.h"
 #include "world.h"
 #include "player.h"
 #include "renderer_material.h"
@@ -246,9 +247,9 @@ struct Renderer
     void note_chunk_changes( const Chunk& chunk );
 
 #ifdef DEBUG_COLLISIONS
-    void render( const Camera& camera, const World& world, const Player& player );
+    void render( const SDL_GL_Window& window, const Camera& camera, const World& world, const Player& player );
 #else
-    void render( const Camera& camera, const World& world );
+    void render( const SDL_GL_Window& window, const Camera& camera, const World& world );
 #endif
 
     unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
@@ -256,8 +257,12 @@ struct Renderer
 
 protected:
 
-    void render_chunks( const Camera& camera, const Sky& sky );
     void render_sky( const Sky& sky );
+    void render_chunks( const Camera& camera, const Sky& sky );
+#ifdef DEBUG_COLLISIONS
+    void render_collisions( const Player& player );
+#endif
+    void render_crosshairs( const SDL_GL_Window& window );
     gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 
     RendererMaterialManager material_manager_;

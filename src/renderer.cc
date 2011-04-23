@@ -677,61 +677,25 @@ void Renderer::note_chunk_changes( const Chunk& chunk )
 }
 
 #ifdef DEBUG_COLLISIONS
-void Renderer::render( const Camera& camera, const World& world, const Player& player )
+void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const World& world, const Player& player )
 #else
-void Renderer::render( const Camera& camera, const World& world )
+void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const World& world )
 #endif
 {
+    glClear( GL_DEPTH_BUFFER_BIT );
+
     glPushMatrix();
         camera.rotate();
         render_sky( world.get_sky() );
         camera.translate();
         render_chunks( camera, world.get_sky() );
-
 #ifdef DEBUG_COLLISIONS
-        BOOST_FOREACH( const Player::DebugCollision& collision, player.debug_collisions_ )
-        {
-            AABoxVertexBuffer
-                obstructing_block_vbo( AABoxf( collision.block_position_, collision.block_position_ + Block::SIZE ) );
-
-            glColor3f( 1.0f, 0.0f, 0.0f );
-            obstructing_block_vbo.render();
-
-            glColor3f( 0.0f, 1.0f, 0.0f );
-            glPushMatrix();
-                const Vector3f relation = vector_cast<Scalar>( cardinal_relation_vector( collision.block_face_ ) );
-                const Vector3f face_center = collision.block_position_ + Block::SIZE * 0.5f + relation * 0.5f;
-                const unsigned major = major_axis( relation );
-                const Vector4f a( -0.5f, -0.5f, 0.5f, 0.5f );
-                const Vector4f b( -0.5f, 0.5f, -0.5f, 0.5f );
-                Vector4f x, y, z;
-                switch ( major )
-                {
-                    case 0: y = a; z = b; break;
-                    case 1: x = a; z = b; break;
-                    case 2: x = a; y = b; break;
-                }
-                glTranslatef( face_center[0], face_center[1], face_center[2] );
-                glBegin( GL_TRIANGLE_STRIP );
-                    glVertex3f( x[0], y[0], z[0] );
-                    glVertex3f( x[1], y[1], z[1] );
-                    glVertex3f( x[2], y[2], z[2] );
-                    glVertex3f( x[3], y[3], z[3] );
-                glEnd();
-            glPopMatrix();
-        }
-
-        glEnable( GL_DEPTH_TEST );
-        glColor3f( 0.0f, 0.0f, 1.0f );
-        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-        AABoxVertexBuffer player_vbo( player.get_aabb() );
-        player_vbo.render();
-        glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-        glColor3f( 1.0f, 1.0f, 1.0f );
-        glDisable( GL_DEPTH_TEST );
+        render_collisions( player );
 #endif
 
     glPopMatrix();
+
+    render_crosshairs( window );
 }
 
 void Renderer::render_sky( const Sky& sky )
@@ -866,6 +830,97 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     glDisable( GL_BLEND );
 
     material_manager_.deconfigure_block_material();
+}
+
+#ifdef DEBUG_COLLISIONS
+void Renderer::render_collisions( const Player& player )
+{
+    BOOST_FOREACH( const Player::DebugCollision& collision, player.debug_collisions_ )
+    {
+        AABoxVertexBuffer
+            obstructing_block_vbo( AABoxf( collision.block_position_, collision.block_position_ + Block::SIZE ) );
+
+        glColor3f( 1.0f, 0.0f, 0.0f );
+        obstructing_block_vbo.render();
+
+        glColor3f( 0.0f, 1.0f, 0.0f );
+        glPushMatrix();
+            const Vector3f relation = vector_cast<Scalar>( cardinal_relation_vector( collision.block_face_ ) );
+            const Vector3f face_center = collision.block_position_ + Block::SIZE * 0.5f + relation * 0.5f;
+            const unsigned major = major_axis( relation );
+            const Vector4f a( -0.5f, -0.5f, 0.5f, 0.5f );
+            const Vector4f b( -0.5f, 0.5f, -0.5f, 0.5f );
+            Vector4f x, y, z;
+            switch ( major )
+            {
+                case 0: y = a; z = b; break;
+                case 1: x = a; z = b; break;
+                case 2: x = a; y = b; break;
+            }
+            glTranslatef( face_center[0], face_center[1], face_center[2] );
+            glBegin( GL_TRIANGLE_STRIP );
+                glVertex3f( x[0], y[0], z[0] );
+                glVertex3f( x[1], y[1], z[1] );
+                glVertex3f( x[2], y[2], z[2] );
+                glVertex3f( x[3], y[3], z[3] );
+            glEnd();
+        glPopMatrix();
+    }
+
+    glEnable( GL_DEPTH_TEST );
+    glColor3f( 0.0f, 0.0f, 1.0f );
+    glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+    AABoxVertexBuffer player_vbo( player.get_aabb() );
+    player_vbo.render();
+    glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
+    glColor3f( 1.0f, 1.0f, 1.0f );
+    glDisable( GL_DEPTH_TEST );
+}
+#endif
+
+void Renderer::render_crosshairs( const SDL_GL_Window& window )
+{
+    const Vector2i
+        size = window.get_screen_size(),
+        center = size / 2;
+
+    glMatrixMode( GL_PROJECTION );
+    glLoadIdentity();
+    glOrtho( 0, size[0], 0, size[1], 0, 1 );
+
+    glEnable( GL_COLOR_LOGIC_OP );
+    glLogicOp( GL_XOR );
+
+    const int
+        HALF_WIDTH = 1,
+        HALF_LENGTH = 12;
+
+    // The vertical hair.
+    glBegin( GL_TRIANGLE_STRIP );
+        glVertex2i( center[0] - HALF_WIDTH, center[1] - HALF_LENGTH );
+        glVertex2i( center[0] - HALF_WIDTH, center[1] + HALF_LENGTH );
+        glVertex2i( center[0] + HALF_WIDTH, center[1] - HALF_LENGTH );
+        glVertex2i( center[0] + HALF_WIDTH, center[1] + HALF_LENGTH );
+    glEnd();
+
+    // The left part of the horizontal hair (the horizontal hair is split into
+    // two parts that don't overlap with the vertical hair).
+    glBegin( GL_TRIANGLE_STRIP );
+        glVertex2i( center[0] - HALF_LENGTH, center[1] - HALF_WIDTH );
+        glVertex2i( center[0] - HALF_LENGTH, center[1] + HALF_WIDTH );
+        glVertex2i( center[0] -  HALF_WIDTH, center[1] - HALF_WIDTH );
+        glVertex2i( center[0] -  HALF_WIDTH, center[1] + HALF_WIDTH );
+    glEnd();
+
+    // The right part of the horizontal hair.
+    glBegin( GL_TRIANGLE_STRIP );
+        glVertex2i( center[0] +  HALF_WIDTH, center[1] - HALF_WIDTH );
+        glVertex2i( center[0] +  HALF_WIDTH, center[1] + HALF_WIDTH );
+        glVertex2i( center[0] + HALF_LENGTH, center[1] - HALF_WIDTH );
+        glVertex2i( center[0] + HALF_LENGTH, center[1] + HALF_WIDTH );
+    glEnd();
+
+    glDisable( GL_COLOR_LOGIC_OP );
 }
 
 gmtl::Matrix44f Renderer::get_opengl_matrix( const GLenum matrix )

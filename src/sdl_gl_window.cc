@@ -16,8 +16,7 @@
 
 SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uint32 flags, const std::string &title ) :
     screen_( 0 ),
-    screen_width_( w ), 
-    screen_height_( h ), 
+    screen_size_( w, h ), 
     screen_bpp_( bpp ),
     sdl_video_flags_( flags ),
     draw_distance_( 250.0f ),
@@ -43,7 +42,7 @@ SDL_GL_Window::SDL_GL_Window( const int w, const int h, const int bpp, const Uin
     // TODO: Vsync should be configurable.
     SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, 1 ); 
 
-    screen_ = SDL_SetVideoMode( screen_width_, screen_height_, screen_bpp_, sdl_video_flags_ );
+    screen_ = SDL_SetVideoMode( screen_size_[0], screen_size_[1], screen_bpp_, sdl_video_flags_ );
 
     if ( !screen_ )
     {
@@ -86,19 +85,17 @@ void SDL_GL_Window::init_GL()
 
 void SDL_GL_Window::reshape_window( const int w, const int h )
 {
-    screen_width_ = w;
-    screen_height_ = h;
-
+    screen_size_ = Vector2i( w, h );
     reshape_window();
 }
 
 void SDL_GL_Window::reshape_window()
 {
-    glViewport( 0, 0,( GLsizei )( screen_width_ ), ( GLsizei )( screen_height_ ) );
+    glViewport( 0, 0, ( GLsizei )( screen_size_[0] ), ( GLsizei )( screen_size_[1] ) );
 
     glMatrixMode( GL_PROJECTION );
     glLoadIdentity();
-    gluPerspective( 65.0f, ( GLfloat )( screen_width_ ) / ( GLfloat )( screen_height_ ), 0.1f, draw_distance_ );
+    gluPerspective( 65.0f, ( GLfloat )( screen_size_[0] ) / ( GLfloat )( screen_size_[1] ), 0.1f, draw_distance_ );
 
     glMatrixMode( GL_MODELVIEW );
     glLoadIdentity();
