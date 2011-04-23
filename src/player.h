@@ -131,8 +131,8 @@ private:
         WALKING_SPEED = 5.0f,
         SWIMMING_SPEED = 3.0f,
         JUMP_VELOCITY = 10.0f,
-        PRIMARY_FIRE_DISTANCE = 3.0f,
-        SECONDARY_FIRE_DISTANCE = 3.0f;
+        PRIMARY_FIRE_DISTANCE = 4.0f,
+        SECONDARY_FIRE_DISTANCE = 4.0f;
 
     static const long
         JUMP_INTERVAL_MS = 300,

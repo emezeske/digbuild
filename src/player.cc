@@ -189,16 +189,22 @@ void Player::do_secondary_fire( const float step_time, World& world )
 
         if ( get_target_block( SECONDARY_FIRE_DISTANCE, world, target ) )
         {
-            BlockIterator block_it = world.get_block( target.block_position_ + target.face_direction_ );
+            const Vector3i new_block_position = target.block_position_ + target.face_direction_;
+            BlockIterator block_it = world.get_block( new_block_position );
 
-            // TODO: Need to create a Chunk if the Block does not yet exist.
+            const AABoxf
+                player_bounds = get_aabb(),
+                block_bounds( vector_cast<Scalar>( new_block_position ), vector_cast<Scalar>( new_block_position ) + Block::SIZE );
 
-            // TODO: Need to check if the Block intersects with the Player.
-
-            if ( block_it.block_ && block_it.block_->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
+            if ( !gmtl::intersect( player_bounds, block_bounds ) )
             {
-                block_it.block_->set_material( material_selection_ );
-                world.mark_chunk_for_update( block_it.chunk_ ); 
+                // TODO: Need to create a Chunk if the Block does not yet exist.
+
+                if ( block_it.block_ && block_it.block_->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
+                {
+                    block_it.block_->set_material( material_selection_ );
+                    world.mark_chunk_for_update( block_it.chunk_ ); 
+                }
             }
         }
     }
