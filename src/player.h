@@ -104,16 +104,16 @@ private:
     void do_secondary_fire( const float step_time, World& world );
     bool get_target_block( const Scalar max_distance, World& world, TargetBlock& target ) const;
 
-    Vector3f get_acceleration();
+    Vector3f get_acceleration( const World& world, const bool swimming );
+    bool is_swimming( const World& world ) const;
     bool find_collision( const World& world, const Vector3f& movement, BlockCollision& collision );
     void resolve_collision( const Vector3f& movement, const Vector3f& dv, const BlockCollision& collision, Vector3f& acceleration );
 
-    // TODO: Make get_potential_obstructions() take a LineSegF argument instead of origin+movement?
     void get_potential_obstructions(
         const World& world,
-        const Vector3f& origin,
-        const Vector3f& movement,
-        const Vector3f& sweep_size,
+        const gmtl::LineSegf& sweep,
+        const Vector3f& swept_box_size,
+        const BlockCollisionMode collision_mode,
         PotentialObstructionSet& potential_obstructions
     ) const;
 
@@ -126,8 +126,10 @@ private:
         NOCLIP_FAST_MOVE_FACTOR = 5.0f,
         GROUND_ACCELERATION = 35.0f,
         AIR_ACCELERATION = 10.0f,
+        SWIMMING_ACCELERATION = 35.0f,
         GRAVITY_ACCELERATION = -30.0f,
         WALKING_SPEED = 5.0f,
+        SWIMMING_SPEED = 3.0f,
         JUMP_VELOCITY = 10.0f,
         PRIMARY_FIRE_DISTANCE = 3.0f,
         SECONDARY_FIRE_DISTANCE = 3.0f;

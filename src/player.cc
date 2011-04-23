@@ -23,8 +23,10 @@ const float
     Player::NOCLIP_FAST_MOVE_FACTOR,
     Player::GROUND_ACCELERATION,
     Player::AIR_ACCELERATION,
+    Player::SWIMMING_ACCELERATION,
     Player::GRAVITY_ACCELERATION,
     Player::WALKING_SPEED,
+    Player::SWIMMING_SPEED,
     Player::JUMP_VELOCITY,
     Player::PRIMARY_FIRE_DISTANCE,
     Player::SECONDARY_FIRE_DISTANCE;
@@ -112,11 +114,14 @@ void Player::do_one_step_clip( const float step_time, const World& world )
     debug_collisions_.clear();
 #endif
 
-    Vector3f acceleration = get_acceleration();
+    const bool swimming = is_swimming( world );
+    Vector3f acceleration = get_acceleration( world, swimming );
     feet_contacting_block_ = false;
     Scalar time_simulated = 0.0f;
 
-    // TODO: Is a maximum of 3 step slices sufficient?
+    // A maximum of three integrator steps are simulated here, with the reasoning that
+    // three steps can correctly resolve a collision occuring in the pocket-style corner
+    // formed by three blocks.
 
     for ( int steps = 0; steps < 3 && time_simulated < step_time; ++steps )
     {
@@ -140,7 +145,7 @@ void Player::do_one_step_clip( const float step_time, const World& world )
         }
     }
 
-    if ( feet_contacting_block_ )
+    if ( !swimming && feet_contacting_block_ )
     {
         const long now = SDL_GetTicks();
 
@@ -201,14 +206,15 @@ void Player::do_secondary_fire( const float step_time, World& world )
 
 bool Player::get_target_block( const Scalar max_distance, World& world, TargetBlock& target ) const
 {
-    const Vector3f
-        segment_begin = get_eye_position(),
-        segment_end = segment_begin + get_eye_direction() * max_distance;
-
-    const gmtl::LineSegf segment = gmtl::LineSegf( gmtl::Point3f( segment_begin ), gmtl::Point3f( segment_end ) );
-
+    const gmtl::LineSegf sweep( get_eye_position(), Vector3f( get_eye_direction() * max_distance ) );
     PotentialObstructionSet potential_obstructions;
-    get_potential_obstructions( world, segment.mOrigin, segment.mDir, Vector3f(), potential_obstructions );
+    get_potential_obstructions(
+        world,
+        sweep,
+        Vector3f(),
+        BLOCK_COLLISION_MODE_SOLID,
+        potential_obstructions
+    );
 
     Scalar normalized_hit_time = std::numeric_limits<Scalar>::max();
     bool target_block_found;
@@ -225,7 +231,7 @@ bool Player::get_target_block( const Scalar max_distance, World& world, TargetBl
             normalized_time_out;
 
         const bool intersected =
-            gmtl::intersect( segment, block_bounds, num_hits, normalized_time_in, normalized_time_out );
+            gmtl::intersect( sweep, block_bounds, num_hits, normalized_time_in, normalized_time_out );
 
         if ( intersected && normalized_time_in < normalized_hit_time )
         {
@@ -238,7 +244,7 @@ bool Player::get_target_block( const Scalar max_distance, World& world, TargetBl
     if ( target_block_found )
     {
         const Vector3f
-            intersection_position = segment.mOrigin + normalized_hit_time * segment.mDir,
+            intersection_position = sweep.mOrigin + normalized_hit_time * sweep.mDir,
             block_centroid = vector_cast<Scalar>( target.block_position_ ) + 0.5f * vector_cast<Scalar>( Block::SIZE ),
             centroid_to_intersection = intersection_position - block_centroid;
 
@@ -250,30 +256,85 @@ bool Player::get_target_block( const Scalar max_distance, World& world, TargetBl
     return target_block_found;
 }
 
-Vector3f Player::get_acceleration()
+Vector3f Player::get_acceleration( const World& world, const bool swimming )
 {
-    const Vector2f current_velocity( velocity_[0], velocity_[2] );
-    const Vector2f forward_direction( gmtl::Math::sin( yaw_ ), gmtl::Math::cos( yaw_ ) );
-    const Vector2f strafe_direction( -forward_direction[1], forward_direction[0] );
+    Vector3f
+        target_velocity,
+        acceleration;
 
-    Vector2f target_velocity;
-    if ( requesting_move_forward_ ) target_velocity += forward_direction;
-    if ( requesting_move_backward_ ) target_velocity -= forward_direction;
-    if ( requesting_strafe_left_ ) target_velocity -= strafe_direction;
-    if ( requesting_strafe_right_ ) target_velocity += strafe_direction;
-    gmtl::normalize( target_velocity );
-    target_velocity *= WALKING_SPEED;
+    Scalar
+        max_acceleration,
+        target_speed;
 
-    Vector2f acceleration_direction = ( target_velocity - current_velocity );
+    const Scalar strafe_angle = yaw_ + gmtl::Math::PI_OVER_2;
+    const Vector3f strafe_direction( gmtl::Math::sin( strafe_angle ), 0.0f, gmtl::Math::cos( strafe_angle ) );
+    if ( requesting_strafe_left_ ) target_velocity += strafe_direction;
+    if ( requesting_strafe_right_ ) target_velocity -= strafe_direction;
+
+    if ( swimming )
+    {
+        if ( requesting_move_forward_ ) target_velocity += get_eye_direction();
+        if ( requesting_move_backward_ ) target_velocity -= get_eye_direction();
+        if ( requesting_jump_ ) target_velocity += Vector3f( 0.0f, 1.0f, 0.0f );
+        if ( requesting_crouch_ ) target_velocity -= Vector3f( 0.0f, 1.0f, 0.0f );
+
+        gmtl::normalize( target_velocity );
+        target_velocity *= SWIMMING_SPEED;
+        target_speed = SWIMMING_SPEED;
+        max_acceleration = SWIMMING_ACCELERATION;
+    }
+    else
+    {
+        const Vector3f forward_direction( gmtl::Math::sin( yaw_ ), 0.0f, gmtl::Math::cos( yaw_ ) );
+
+        if ( requesting_move_forward_ ) target_velocity += forward_direction;
+        if ( requesting_move_backward_ ) target_velocity -= forward_direction;
+
+        gmtl::normalize( target_velocity );
+        target_velocity *= WALKING_SPEED;
+        target_velocity[1] = velocity_[1];
+        acceleration[1] = GRAVITY_ACCELERATION;
+        target_speed = WALKING_SPEED;
+        max_acceleration = ( feet_contacting_block_ ? GROUND_ACCELERATION : AIR_ACCELERATION );
+    }
+
+    Vector3f acceleration_direction = ( target_velocity - velocity_ );
     const Scalar velocity_difference = gmtl::length( acceleration_direction );
     gmtl::normalize( acceleration_direction );
 
     const Scalar acceleration_power =
-        ( feet_contacting_block_ ? GROUND_ACCELERATION : AIR_ACCELERATION ) *
-        std::min( velocity_difference / WALKING_SPEED, 1.0f );
+        max_acceleration * std::min( velocity_difference / target_speed, 1.0f );
 
-    const Vector2f acceleration = acceleration_direction * acceleration_power;
-    return Vector3f( acceleration[0], GRAVITY_ACCELERATION, acceleration[1] );
+    acceleration += acceleration_direction * acceleration_power;
+    return acceleration;
+}
+
+bool Player::is_swimming( const World& world ) const
+{
+    PotentialObstructionSet potential_obstructions;
+    get_potential_obstructions(
+        world,
+        gmtl::LineSegf( position_, Vector3f() ),
+        vector_cast<Scalar>( SIZE ),
+        BLOCK_COLLISION_MODE_FLUID,
+        potential_obstructions
+    );
+
+    BOOST_FOREACH( const PotentialObstruction& obstruction, potential_obstructions )
+    {
+        const Vector3f block_position = obstruction.block_position_;
+        const Block& block = *obstruction.block_;
+        const AABoxf
+            player_bounds = get_aabb(),
+            block_bounds( block_position, block_position + Block::SIZE );
+
+        if ( gmtl::intersect( player_bounds, block_bounds ) )
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 bool Player::find_collision( const World& world, const Vector3f& movement, BlockCollision& collision )
@@ -285,7 +346,13 @@ bool Player::find_collision( const World& world, const Vector3f& movement, Block
     collision.block_position_ = Vector3f();
 
     PotentialObstructionSet potential_obstructions;
-    get_potential_obstructions( world, vector_cast<Scalar>( position_ ), movement, vector_cast<Scalar>( SIZE ), potential_obstructions );
+    get_potential_obstructions(
+        world,
+        gmtl::LineSegf( position_, movement ),
+        SIZE,
+        BLOCK_COLLISION_MODE_SOLID,
+        potential_obstructions
+    );
 
     // Determine whether each potential obstruction actually intersects with the Player's AABB at
     // some point in its movement.  If there are multiple potential collisions, only return the
@@ -461,9 +528,9 @@ Vector3f Player::get_eye_direction() const
 
 void Player::get_potential_obstructions(
     const World& world,
-    const Vector3f& origin,
-    const Vector3f& sweep,
-    const Vector3f& sweep_size,
+    const gmtl::LineSegf& sweep,
+    const Vector3f& swept_box_size,
+    const BlockCollisionMode collision_mode,
     PotentialObstructionSet& potential_obstructions
 ) const
 {
@@ -471,15 +538,18 @@ void Player::get_potential_obstructions(
     // and collects all of the Blocks that the bounding box might intersect with along the way.
     // Right now it's overzealous, and probably returns more Blocks than it really needs to.
 
-    const float sweep_length_squared = gmtl::lengthSquared( sweep );
-    const Vector3f unit_sweep = sweep / gmtl::Math::sqrt( sweep_length_squared );
+    const float
+        sweep_length_squared = gmtl::lengthSquared( sweep.mDir ),
+        sweep_length =  gmtl::Math::sqrt( sweep_length_squared );
+
+    const Vector3f unit_sweep = ( sweep_length == 0.0f ) ? Vector3f() : sweep.mDir / sweep_length;
     Vector3f sweep_step;
 
-    while ( gmtl::lengthSquared( sweep_step ) < sweep_length_squared )
+    do
     {
         const AABoxi index_bounds(
-            vector_cast<int>( pointwise_floor( Vector3f( origin + sweep_step - Block::SIZE ) ) ),
-            vector_cast<int>( pointwise_ceil( Vector3f( origin + sweep_step + Block::SIZE + sweep_size ) ) )
+            vector_cast<int>( pointwise_floor( Vector3f( sweep.mOrigin + sweep_step - Block::SIZE ) ) ),
+            vector_cast<int>( pointwise_ceil( Vector3f( sweep.mOrigin + sweep_step + Block::SIZE + swept_box_size ) ) )
         );
 
         for ( int x = index_bounds.getMin()[0]; x < index_bounds.getMax()[0]; ++x )
@@ -491,7 +561,7 @@ void Player::get_potential_obstructions(
                     const Vector3i block_position( x, y, z );
                     const Block* block = world.get_block( block_position ).block_;
 
-                    if ( block && block->get_collision_mode() == BLOCK_COLLISION_MODE_SOLID )
+                    if ( block && block->get_collision_mode() == collision_mode )
                     {
                         potential_obstructions.insert(
                             PotentialObstruction( vector_cast<Scalar>( block_position ), block )
@@ -503,6 +573,7 @@ void Player::get_potential_obstructions(
 
         sweep_step += unit_sweep;
     }
+    while ( gmtl::lengthSquared( sweep_step ) < sweep_length_squared );
 }
 
 void Player::noclip_move_forward( const Scalar movement_units )

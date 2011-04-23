@@ -138,7 +138,7 @@ void GameApplication::handle_key_down_event( const int key, const int mod )
 {
     switch ( key )
     {
-        case SDLK_LSHIFT:
+        case SDLK_LCTRL:
             player_.request_fast_move( true );
             break;
 
@@ -162,7 +162,7 @@ void GameApplication::handle_key_down_event( const int key, const int mod )
             player_.request_jump( true );
             break;
 
-        case SDLK_q:
+        case SDLK_LSHIFT:
             player_.request_crouch( true );
             break;
 
@@ -179,7 +179,7 @@ void GameApplication::handle_key_up_event( const int key, const int mod )
 {
     switch ( key )
     {
-        case SDLK_LSHIFT:
+        case SDLK_LCTRL:
             player_.request_fast_move( false );
             break;
 
@@ -203,7 +203,7 @@ void GameApplication::handle_key_up_event( const int key, const int mod )
             player_.request_jump( false );
             break;
 
-        case SDLK_q:
+        case SDLK_LSHIFT:
             player_.request_crouch( false );
             break;
 
