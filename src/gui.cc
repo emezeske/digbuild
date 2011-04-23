@@ -17,7 +17,7 @@
 
 Gui::Gui( SDL_Surface* screen )
 {
-    if ( AG_InitCore( "Digbuild", 0 ) == -1 ||
+    if ( AG_InitCore( "DigBuild", 0 ) == -1 ||
          AG_InitVideoSDL( screen, AG_VIDEO_OVERLAY ) == -1 )
     {
         throw std::runtime_error( std::string( "Error intializing GUI: " ) + AG_GetError() );

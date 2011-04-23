@@ -807,6 +807,13 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
     // TODO: Use an ARB_occlusion_query to avoid rendering fully occluded chunks?
 
+    // TODO: The main performance bottleneck here, particularly when rendering translucent
+    //       materials, is switching textures (which necessitates splitting geometry between
+    //       multiple calls to glDrawElements()).  Huge speedups could be seen by grouping
+    //       multiple materials into a single texture and adjusting the coordinates to select
+    //       materials.  That way, multiple materials could be drawn with a single call
+    //       to glDrawElements().
+
     BOOST_FOREACH( const MaterialRendererMap::value_type& material_renderer_it, material_chunks )
     {
         const BlockMaterial material = material_renderer_it.first;

@@ -119,11 +119,6 @@ bool light_would_be_affected( const Vector3i& current, const Vector3i& incoming 
 
 struct ColorLightStrategy
 {
-    static bool skip_source_block()
-    {
-        return false;
-    }
-
     static Vector3i get_light( const Block& block )
     {
         return block.get_light_level();
@@ -137,11 +132,6 @@ struct ColorLightStrategy
 
 struct SunLightStrategy
 {
-    static bool skip_source_block()
-    {
-        return true;
-    }
-
     static Vector3i get_light( const Block& block )
     {
         return block.get_sunlight_level();
@@ -185,7 +175,7 @@ typedef std::queue<FloodFillBlock> FloodFillQueue;
 // so that if flood_fill_light() is called many times, they will not have to be
 // allocated repeatedly.  This gives a significant (and measured) performance gain.
 template <typename LightStrategy, typename NeighborStrategy>
-void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
+void flood_fill_light( const bool skip_source_block, FloodFillQueue& queue, BlockV& blocks_visited )
 {
     bool source_block = true;
 
@@ -200,7 +190,7 @@ void flood_fill_light( FloodFillQueue& queue, BlockV& blocks_visited )
             blocks_visited.push_back( &block );
             block.set_visited( true );
 
-            if ( !LightStrategy::skip_source_block() || !source_block )
+            if ( !skip_source_block || !source_block )
             {
                 Vector3i filtered_light_level = flood_block.second;
                 filter_light( filtered_light_level, block );
@@ -382,7 +372,7 @@ void Chunk::apply_lighting_to_self()
         if ( block.is_sunlight_source() )
         {
             sun_flood_queue.push( std::make_pair( block_it, block.get_sunlight_level() ) );
-            flood_fill_light<SunLightStrategy, InternalNeighborStrategy>( sun_flood_queue, blocks_visited );
+            flood_fill_light<SunLightStrategy, InternalNeighborStrategy>( true, sun_flood_queue, blocks_visited );
         }
 
         if ( block.is_light_source() )
@@ -391,7 +381,7 @@ void Chunk::apply_lighting_to_self()
                 vector_cast<int>(
                     pointwise_round( Vector3f( block.get_color() * Scalar( Block::MAX_LIGHT_COMPONENT_LEVEL ) ) ) );
             color_flood_queue.push( std::make_pair( block_it, light_color ) );
-            flood_fill_light<ColorLightStrategy, InternalNeighborStrategy>( color_flood_queue, blocks_visited );
+            flood_fill_light<ColorLightStrategy, InternalNeighborStrategy>( false, color_flood_queue, blocks_visited );
         }
     }
 }
@@ -423,13 +413,13 @@ void Chunk::apply_lighting_to_neighbors()
         if ( block.get_sunlight_level() != Block::MIN_LIGHT_LEVEL )
         {
             sun_flood_queue.push( std::make_pair( block_it, block.get_sunlight_level() ) );
-            flood_fill_light<SunLightStrategy, ExternalNeighborStrategy>( sun_flood_queue, blocks_visited );
+            flood_fill_light<SunLightStrategy, ExternalNeighborStrategy>( true, sun_flood_queue, blocks_visited );
         }
 
         if ( block.get_light_level() != Block::MIN_LIGHT_LEVEL )
         {
             color_flood_queue.push( std::make_pair( block_it, block.get_light_level() ) );
-            flood_fill_light<ColorLightStrategy, ExternalNeighborStrategy>( color_flood_queue, blocks_visited );
+            flood_fill_light<ColorLightStrategy, ExternalNeighborStrategy>( true, color_flood_queue, blocks_visited );
         }
     }
 }
@@ -615,13 +605,14 @@ void Chunk::calculate_vertex_lighting(
     const Vector3f average_lighting = vector_cast<Scalar>( total_lighting ) / Scalar( num_contributors );
     const Vector3f average_sunlighting = vector_cast<Scalar>( total_sunlighting ) / Scalar( num_contributors );
     const int ambient_occlusion_power = NUM_NEIGHBORS - neighbor_ab_contributes - num_contributors;
+    const int power_base = Block::MAX_LIGHT_COMPONENT_LEVEL + 2 * ambient_occlusion_power;
     
     for ( int i = 0; i < Vector3i::Size; ++i )
     {
         // Don't bother computing the attenuation if the lighting is nearly zero.
         if ( average_lighting[i] > gmtl::GMTL_EPSILON )
         {
-            const Scalar power = Block::MAX_LIGHT_COMPONENT_LEVEL - average_lighting[i] + ambient_occlusion_power * 2;
+            const Scalar power = power_base - average_lighting[i];
             vertex_lighting[i] = get_lighting_attenuation( power );
         }
         else vertex_lighting[i] = 0.0f;
@@ -629,7 +620,7 @@ void Chunk::calculate_vertex_lighting(
         // TODO: Remove duplication.
         if ( average_sunlighting[i] > gmtl::GMTL_EPSILON )
         {
-            const Scalar power = Block::MAX_LIGHT_COMPONENT_LEVEL - average_sunlighting[i] + ambient_occlusion_power * 2;
+            const Scalar power = power_base - average_sunlighting[i];
             vertex_sunlighting[i] = get_lighting_attenuation( power );
         }
         else vertex_sunlighting[i] = 0.0f;
