@@ -6,11 +6,6 @@
 
 #include "chunk.h"
 
-#define FOREACH_BLOCK( x_name, y_name, z_name )\
-    for ( int x_name = 0; x_name < Chunk::SIZE_X; ++x_name )\
-        for ( int y_name = 0; y_name < Chunk::SIZE_Y; ++y_name )\
-            for ( int z_name = 0; z_name < Chunk::SIZE_Z; ++z_name )
-
 //////////////////////////////////////////////////////////////////////////////////
 // Local definitions:
 //////////////////////////////////////////////////////////////////////////////////

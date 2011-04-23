@@ -111,18 +111,15 @@ RendererMaterialManager::RendererMaterialManager() :
         new Shader( SHADER_DIRECTORY + "/block.vertex.glsl", SHADER_DIRECTORY + "/block.fragment.glsl" )
     );
 
-    materials_.resize( BLOCK_MATERIAL_SIZE );
-    materials_[BLOCK_MATERIAL_GRASS].reset      ( new RendererMaterial( "grass",       default_block_shader ) );
-    materials_[BLOCK_MATERIAL_DIRT].reset       ( new RendererMaterial( "dirt",        default_block_shader ) );
-    materials_[BLOCK_MATERIAL_CLAY].reset       ( new RendererMaterial( "clay",        default_block_shader ) );
-    materials_[BLOCK_MATERIAL_STONE].reset      ( new RendererMaterial( "stone",       default_block_shader ) );
-    materials_[BLOCK_MATERIAL_BEDROCK].reset    ( new RendererMaterial( "bedrock",     default_block_shader ) );
-    materials_[BLOCK_MATERIAL_MAGMA].reset      ( new RendererMaterial( "magma",       default_block_shader ) );
-    materials_[BLOCK_MATERIAL_TREE_TRUNK].reset ( new RendererMaterial( "tree-trunk",  default_block_shader ) );
-    materials_[BLOCK_MATERIAL_TREE_LEAF].reset  ( new RendererMaterial( "tree-leaf",   default_block_shader ) );
-    materials_[BLOCK_MATERIAL_GLASS_CLEAR].reset( new RendererMaterial( "glass-clear", default_block_shader ) );
-    materials_[BLOCK_MATERIAL_GLASS_RED].reset  ( new RendererMaterial( "glass-red",   default_block_shader ) );
-    materials_[BLOCK_MATERIAL_WATER].reset      ( new RendererMaterial( "water",       default_block_shader ) );
+    materials_.resize( NUM_BLOCK_MATERIALS );
+
+    FOREACH_BLOCK_MATERIAL( material )
+    {
+        if ( material != BLOCK_MATERIAL_AIR )
+        {
+            load_material( material, default_block_shader );
+        }
+    }
 }
 
 void RendererMaterialManager::configure_block_material( const Camera& camera, const Sky& sky, const BlockMaterial material )
@@ -194,4 +191,10 @@ void RendererMaterialManager::deconfigure_block_material()
     }
 
     current_material_ = BLOCK_MATERIAL_AIR;
+}
+
+void RendererMaterialManager::load_material( const BlockMaterial material, ShaderSP shader )
+{
+    const std::string& name = get_block_material_attributes( material ).name_;
+    materials_[material].reset( new RendererMaterial( name, shader ) );
 }

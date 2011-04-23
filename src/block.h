@@ -15,6 +15,7 @@ enum BlockMaterial
     BLOCK_MATERIAL_GRASS,
     BLOCK_MATERIAL_DIRT,
     BLOCK_MATERIAL_CLAY,
+    BLOCK_MATERIAL_MUD,
     BLOCK_MATERIAL_STONE,
     BLOCK_MATERIAL_BEDROCK,
     BLOCK_MATERIAL_MAGMA,
@@ -23,8 +24,13 @@ enum BlockMaterial
     BLOCK_MATERIAL_GLASS_CLEAR,
     BLOCK_MATERIAL_GLASS_RED,
     BLOCK_MATERIAL_WATER,
-    BLOCK_MATERIAL_SIZE
+    NUM_BLOCK_MATERIALS
 };
+
+#define FOREACH_BLOCK_MATERIAL( iterator_name )\
+    for ( BlockMaterial iterator_name = BLOCK_MATERIAL_AIR;\
+          iterator_name != NUM_BLOCK_MATERIALS;\
+          iterator_name = BlockMaterial( int( iterator_name ) + 1 ) )
 
 enum BlockCollisionMode
 {
@@ -69,7 +75,7 @@ struct BlockMaterialAttributes
 
 inline const BlockMaterialAttributes& get_block_material_attributes( const BlockMaterial material )
 {
-    static const BlockMaterialAttributes attributes[BLOCK_MATERIAL_SIZE] =
+    static const BlockMaterialAttributes attributes[NUM_BLOCK_MATERIALS] =
     {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         //                    | name          | trans  | emits | color                        | collision 
@@ -78,6 +84,7 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
         BlockMaterialAttributes( "grass",       false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "dirt",        false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "clay",        false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "mud",         false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "stone",       false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "bedrock",     false, false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "magma",       false, true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
@@ -88,7 +95,7 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
         BlockMaterialAttributes( "water",       true,  false, Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_FLUID )
     };
 
-    assert( material >= 0 && material < BLOCK_MATERIAL_SIZE );
+    assert( material >= 0 && material < NUM_BLOCK_MATERIALS );
     return attributes[material];
 }
 

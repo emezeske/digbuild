@@ -75,7 +75,7 @@ void Player::select_next_material()
 {
     const int material = material_selection_ + 1;
 
-    if ( material == BLOCK_MATERIAL_SIZE )
+    if ( material == NUM_BLOCK_MATERIALS )
     {
         material_selection_ = BlockMaterial( 0 );
     }
@@ -86,7 +86,7 @@ void Player::select_previous_material()
 {
     if ( material_selection_ == BLOCK_MATERIAL_AIR )
     {
-        material_selection_ = BlockMaterial( BLOCK_MATERIAL_SIZE - 1 );
+        material_selection_ = BlockMaterial( NUM_BLOCK_MATERIALS - 1 );
     }
     else material_selection_ = BlockMaterial( material_selection_ - 1 );
 }

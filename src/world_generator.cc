@@ -1,6 +1,7 @@
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/variate_generator.hpp>
 #include <boost/random/linear_congruential.hpp>
+#include <boost/foreach.hpp>
 
 #include "random.h"
 #include "world_generator.h"
@@ -110,6 +111,7 @@ void generate_chunk_column(
                 bottom = top;
             }
 
+            // TODO: Separate this out into another function.
             const unsigned height = std::max( bottom, SEA_LEVEL );
             heights[x][z] = height;
 
@@ -122,6 +124,14 @@ void generate_chunk_column(
                     if ( y <= SEA_LEVEL )
                     {
                         block.set_material( BLOCK_MATERIAL_WATER );
+                    }
+                }
+                else if ( block.get_material() == BLOCK_MATERIAL_GRASS ||
+                          block.get_material() == BLOCK_MATERIAL_DIRT )
+                {
+                    if ( y <= SEA_LEVEL )
+                    {
+                        block.set_material( BLOCK_MATERIAL_MUD );
                     }
                 }
                 else break;

@@ -64,6 +64,8 @@ struct RendererMaterialManager
 
 protected:
 
+    void load_material( const BlockMaterial material, ShaderSP shader );
+
     BlockMaterial current_material_;
 
     ShaderSP current_shader_;
