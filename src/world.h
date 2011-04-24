@@ -81,27 +81,33 @@ struct World
     const Sky& get_sky() const { return sky_; }
     const ChunkMap& get_chunks() const { return chunks_; }
 
-    BlockIterator get_block( const Vector3i& position ) const
+    Vector3i get_block_index( const Vector3i& block_position ) const
     {
         // Use std::div() instead of '%' to ensure rounding towards zero.
         const std::div_t
-            div_x = std::div( position[0], Chunk::SIZE_X ),
-            div_y = std::div( position[1], Chunk::SIZE_Y ),
-            div_z = std::div( position[2], Chunk::SIZE_Z );
+            div_x = std::div( block_position[0], Chunk::SIZE_X ),
+            div_y = std::div( block_position[1], Chunk::SIZE_Y ),
+            div_z = std::div( block_position[2], Chunk::SIZE_Z );
 
-        BlockIterator result;
-        result.index_ = Vector3i( div_x.rem, div_y.rem, div_z.rem );
+        Vector3i block_index = Vector3i( div_x.rem, div_y.rem, div_z.rem );
 
         // Wrap negative remainders back into the correct block index range.
-        for ( int i = 0; i < 3; ++i )
+        for ( int i = 0; i < Vector3i::Size; ++i )
         {
-            if ( result.index_[i] < 0 )
+            if ( block_index[i] < 0 )
             {
-                result.index_[i] += Chunk::SIZE[i];
+                block_index[i] += Chunk::SIZE[i];
             }
         }
 
-        const Vector3i chunk_position = position - result.index_;
+        return block_index;
+    }
+
+    BlockIterator get_block( const Vector3i& block_position ) const
+    {
+        BlockIterator result;
+        result.index_ = get_block_index( block_position );
+        const Vector3i chunk_position = block_position - result.index_;
         ChunkMap::const_iterator chunk_it = chunks_.find( chunk_position );
 
         if ( chunk_it != chunks_.end() )
@@ -111,6 +117,25 @@ struct World
         }
 
         return result;
+    }
+
+    // This function should be used when an existing column of Chunks is not tall enough.
+    void extend_chunk_column( const Vector3i& position )
+    {
+        const Vector3i base_position( position[0], 0, position[2] );
+        ChunkMap::const_iterator base_it = chunks_.find( base_position );
+        assert( base_it != chunks_.end() );
+        Chunk* column_top = base_it->second->get_column_top();
+        assert( column_top );
+
+        while ( column_top->get_position()[1] < position[1] )
+        {
+            const int new_top_height = column_top->get_position()[1] + Chunk::SIZE_Y;
+            const Vector3i new_top_position( position[0], new_top_height, position[2] );
+            ChunkSP new_top( new Chunk( new_top_position ) );
+            chunk_stitch_into_map( new_top, chunks_ );
+            column_top = new_top.get();
+        }
     }
 
     void mark_chunk_for_update( Chunk* chunk )

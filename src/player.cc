@@ -190,7 +190,6 @@ void Player::do_secondary_fire( const float step_time, World& world )
         if ( get_target_block( SECONDARY_FIRE_DISTANCE, world, target ) )
         {
             const Vector3i new_block_position = target.block_position_ + target.face_direction_;
-            BlockIterator block_it = world.get_block( new_block_position );
 
             const AABoxf
                 player_bounds = get_aabb(),
@@ -198,9 +197,17 @@ void Player::do_secondary_fire( const float step_time, World& world )
 
             if ( !gmtl::intersect( player_bounds, block_bounds ) )
             {
-                // TODO: Need to create a Chunk if the Block does not yet exist.
+                BlockIterator block_it = world.get_block( new_block_position );
 
-                if ( block_it.block_ && block_it.block_->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
+                if ( !block_it.block_ )
+                {
+                    const Vector3i new_block_index = world.get_block_index( new_block_position );
+                    world.extend_chunk_column( new_block_position - new_block_index );
+                    block_it = world.get_block( new_block_position );
+                    assert( block_it.block_ );
+                }
+
+                if ( block_it.block_->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
                 {
                     block_it.block_->set_material( material_selection_ );
                     world.mark_chunk_for_update( block_it.chunk_ ); 
@@ -223,7 +230,7 @@ bool Player::get_target_block( const Scalar max_distance, World& world, TargetBl
     );
 
     Scalar normalized_hit_time = std::numeric_limits<Scalar>::max();
-    bool target_block_found;
+    bool target_block_found = false;
 
     BOOST_FOREACH( const PotentialObstruction& obstruction, potential_obstructions )
     {

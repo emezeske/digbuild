@@ -209,6 +209,6 @@ typedef std::vector<Chunk*> ChunkV;
 typedef std::map<Vector3i, ChunkSP, VectorLess<Vector3i> > ChunkMap;
 
 void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks );
-void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks );
+void chunk_unstitch_from_map( ChunkSP chunk, ChunkMap& chunks );
 
 #endif // CHUNK_H

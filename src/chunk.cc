@@ -644,7 +644,7 @@ void chunk_stitch_into_map( ChunkSP chunk, ChunkMap& chunks )
     chunks[chunk->get_position()] = chunk;
 }
 
-void chunk_unstich_from_map( ChunkSP chunk, ChunkMap& chunks )
+void chunk_unstitch_from_map( ChunkSP chunk, ChunkMap& chunks )
 {
     FOREACH_SURROUNDING( x, y, z )
     {
