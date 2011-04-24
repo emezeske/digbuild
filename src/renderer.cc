@@ -173,7 +173,7 @@ void ChunkVertexBuffer::render_no_bind()
     glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 44 ) );
 
     TextureStateGuard texture_coord_array_guard3( GL_TEXTURE3, GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 4, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 56 ) );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 56 ) );
 
     draw_elements();
 }

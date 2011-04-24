@@ -6,8 +6,6 @@
 
 * Make crouching prevent the player from walking off cliffs.
 
-* Fix the weird darkened corners on Nvidia chipsets.
-
 * Make new parts of the world automatically load.
 
 * Sound!
