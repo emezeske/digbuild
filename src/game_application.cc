@@ -61,6 +61,8 @@ void GameApplication::main_loop()
 
         process_events();
 
+        // TODO: Revisit this.  Maybe don't lock the framerate, but do lock the simulation rate.
+
         if ( seconds_until_next_frame <= 0.0 )
         {
             frame_timer.reset();

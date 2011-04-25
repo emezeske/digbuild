@@ -29,48 +29,48 @@ private:
     Vector2i size_;
 };
 
-struct RendererMaterial
-{
-    RendererMaterial( const std::string& name, ShaderSP shader );
-
-    const Texture& get_texture() const { return texture_; }
-    const Texture& get_specular_map() const { return specular_map_; }
-    const Texture& get_bump_map() const { return bump_map_; }
-    const ShaderSP get_shader() const { return shader_; }
-
-private:
-
-    Texture
-        texture_,
-        specular_map_,
-        bump_map_;
-
-    ShaderSP shader_;
-};
-
-typedef boost::shared_ptr<RendererMaterial> RendererMaterialSP;
-typedef std::vector<RendererMaterialSP> RendererMaterialV;
-
-struct RendererMaterialManager
+struct RendererMaterialManager : public boost::noncopyable
 {
     static const std::string
         TEXTURE_DIRECTORY,
         SHADER_DIRECTORY;
 
-    RendererMaterialManager();
+    static const size_t
+        TEXTURE_SIZE          = 512,
+        BUMP_MAP_SIZE         = 512,
+        SPECULAR_MAP_SIZE     = 512,
+        TEXTURE_CHANNELS      = 4,
+        BUMP_MAP_CHANNELS     = 3,
+        SPECULAR_MAP_CHANNELS = 1;
 
-    void configure_block_material( const Camera& camera, const Sky& sky, const BlockMaterial material );
-    void deconfigure_block_material();
+    RendererMaterialManager();
+    ~RendererMaterialManager();
+
+    void configure_materials( const Camera& camera, const Sky& sky );
+    void deconfigure_materials();
 
 protected:
 
-    void load_material( const BlockMaterial material, ShaderSP shader );
+    void read_texture_data(
+        const std::string& filename,
+        const int size,
+        const int num_colors,
+        std::vector<unsigned char>& texture_data
+    );
 
-    BlockMaterial current_material_;
+    void create_texture_array(
+        const std::string& filename_postfix,
+        const int texture_size,
+        const int texture_channels,
+        GLuint& id
+    );
 
-    ShaderSP current_shader_;
+    GLuint
+        texture_array_id_,
+        bump_map_array_id_,
+        specular_map_array_id_;
 
-    RendererMaterialV materials_;
+    ShaderSP material_shader_;
 };
 
 #endif // RENDERER_MATERIAL_H

@@ -37,6 +37,11 @@ void set_buffer_data( const GLenum target, const std::vector<T>& vertices, const
     glBufferData( target, vertices.size() * sizeof( T ), &vertices[0], usage );
 }
 
+bool face_material_order( const BlockFace& a, const BlockFace& b )
+{
+    return a.material_ < b.material_;
+}
+
 } // anonymous namespace
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -167,13 +172,13 @@ void ChunkVertexBuffer::render_no_bind()
     glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 24 ) );
 
     TextureStateGuard texture_coord_array_guard1( GL_TEXTURE1, GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 2, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 36 ) );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 36 ) );
 
     TextureStateGuard texture_coord_array_guard2( GL_TEXTURE2, GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 44 ) );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 48 ) );
 
     TextureStateGuard texture_coord_array_guard3( GL_TEXTURE3, GL_TEXTURE_COORD_ARRAY );
-    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 56 ) );
+    glTexCoordPointer( 3, GL_FLOAT, sizeof( BlockVertex ), reinterpret_cast<void*>( 60 ) );
 
     draw_elements();
 }
@@ -188,12 +193,11 @@ const unsigned SortableChunkVertexBuffer::VERTICES_PER_FACE;
 // Function definitions for SortableChunkVertexBuffer:
 //////////////////////////////////////////////////////////////////////////////////
 
-SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockMaterialV& materials, const BlockVertexV& vertices ) :
-    ChunkVertexBuffer( vertices, GL_STATIC_DRAW, GL_DYNAMIC_DRAW ),
-    materials_( materials )
+SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockVertexV& vertices ) :
+    ChunkVertexBuffer( vertices, GL_STATIC_DRAW, GL_DYNAMIC_DRAW )
 {
-    assert( materials_.size() > 0 );
-    assert( materials_.size() == vertices.size() / VERTICES_PER_FACE );
+    assert( vertices.size() > 0 );
+    assert( vertices.size() % VERTICES_PER_FACE == 0 );
 
     for ( size_t i = 0; i < vertices.size(); i += VERTICES_PER_FACE )
     {
@@ -211,62 +215,37 @@ SortableChunkVertexBuffer::SortableChunkVertexBuffer( const BlockMaterialV& mate
         // neighboring Blocks with different translucent materials won't Z fight.
         const BlockVertex& v = vertices[i];
         centroid -= 0.1f * Vector3f( v.nx_, v.ny_, v.nz_ );
-
         centroids_.push_back( centroid );
     }
-
-    assert( materials_.size() == centroids_.size() );
 }
 
-void SortableChunkVertexBuffer::render( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager )
+void SortableChunkVertexBuffer::render( const Camera& camera )
 {
     DistanceIndexV distance_indices;
-    distance_indices.reserve( materials_.size() );
+    distance_indices.reserve( centroids_.size() );
 
     // Since these faces are translucent, they must be rendered strictly in back to front order.
-    // As an optimization, if adjacent depth-sorted faces use the same material, the indices of
-    // their vertices are combined into a single glDrawElements() call.
 
-    for ( unsigned i = 0; i < materials_.size(); ++i )
+    for ( unsigned i = 0; i < centroids_.size(); ++i )
     {
         const Vector3f camera_to_centroid = camera.get_position() - centroids_[i];
-        // First, the faces are sorted by the radius of their axis-aligned, camera-centered,
-        // bounding box.  This gives a rough but fast ordering.
-        const int ccbb_radius = max_component_magnitude( vector_cast<int>( camera_to_centroid ) );
-        // Next, the faces are sorted by their actual distance to the camera.  This gives
-        // a slow but accurate ordering.
         const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
-        distance_indices.push_back( boost::make_tuple( ccbb_radius, distance_squared, i ) );
+        distance_indices.push_back( std::make_pair( distance_squared, i ) );
     }
 
     std::sort( distance_indices.begin(), distance_indices.end() );
-    render_sorted( distance_indices, camera, sky, material_manager );
+    render_sorted( distance_indices );
 }
 
-void SortableChunkVertexBuffer::render_sorted(
-    const DistanceIndexV distance_indices,
-    const Camera& camera,
-    const Sky& sky,
-    RendererMaterialManager& material_manager
-)
+void SortableChunkVertexBuffer::render_sorted( const DistanceIndexV distance_indices )
 {
     BindGuard bind_guard( *this );
-    BlockMaterial current_material = materials_[distance_indices.rbegin()->get<2>()];
     IndexV indices;
     indices.reserve( distance_indices.size() * 6 );
 
     BOOST_REVERSE_FOREACH( const DistanceIndex& distance_index, distance_indices )
     {
-        const unsigned face_index = distance_index.get<2>();
-        const BlockMaterial material = materials_[face_index];
-
-        if ( material != current_material )
-        {
-            render_indices( indices, camera, sky, current_material, material_manager );
-            indices.clear();
-            current_material = material;
-        }
-
+        const unsigned face_index = distance_index.second;
         const VertexBuffer::Index vertex_index = face_index * VERTICES_PER_FACE;
 
         indices.push_back( vertex_index + 0 );
@@ -278,23 +257,8 @@ void SortableChunkVertexBuffer::render_sorted(
         indices.push_back( vertex_index + 1 );
     }
 
-    if ( !indices.empty() )
-    {
-        render_indices( indices, camera, sky, current_material, material_manager );
-    }
-}
-
-void SortableChunkVertexBuffer::render_indices(
-    const IndexV& indices,
-    const Camera& camera,
-    const Sky& sky,
-    const BlockMaterial material,
-    RendererMaterialManager& material_manager
-)
-{
     set_buffer_data( GL_ELEMENT_ARRAY_BUFFER, indices, GL_DYNAMIC_DRAW );
     num_elements_ = indices.size();
-    material_manager.configure_block_material( camera, sky, material );
     render_no_bind();
 }
 
@@ -355,22 +319,19 @@ ChunkRenderer::ChunkRenderer( const Vector3f& centroid, const AABoxf& aabb ) :
 {
 }
 
-void ChunkRenderer::render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager )
+void ChunkRenderer::render_opaque()
 {
-    ChunkVertexBufferMap::iterator vbo_it = opaque_vbos_.find( material );
-    
-    if ( vbo_it != opaque_vbos_.end() )
+    if ( opaque_vbo_ )
     {
-        ChunkVertexBuffer& vbo = *vbo_it->second;
-        vbo.render();
+        opaque_vbo_->render();
     }
 }
 
-void ChunkRenderer::render_translucent( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager )
+void ChunkRenderer::render_translucent( const Camera& camera )
 {
     if ( translucent_vbo_ )
     {
-        translucent_vbo_->render( camera, sky, material_manager );
+        translucent_vbo_->render( camera );
     }
 }
 
@@ -381,14 +342,18 @@ void ChunkRenderer::render_aabb()
 
 void ChunkRenderer::rebuild( const Chunk& chunk )
 {
-    const BlockFaceV& faces = chunk.get_external_faces();
+    BlockFaceV faces = chunk.get_external_faces();
     num_triangles_ = faces.size() * 2; // Two triangles per (square) face.
 
-    typedef std::map<BlockMaterial, BlockVertexV> MaterialVertexMap;
-    MaterialVertexMap opaque_vertices;
+    BlockVertexV
+        opaque_vertices,
+        translucent_vertices;
 
-    BlockMaterialV translucent_materials;
-    BlockVertexV translucent_vertices;
+    // Although each vertex specifies its own texture ID, and thus the faces can be drawn in
+    // any order, it makes sense to group them together by texture, under the assumption that
+    // this will be more friendly to the GPU's texture cache.
+
+    std::sort( faces.begin(), faces.end(), face_material_order );
 
     BOOST_FOREACH( const BlockFace& face, faces )
     {
@@ -396,28 +361,20 @@ void ChunkRenderer::rebuild( const Chunk& chunk )
 
         if ( get_block_material_attributes( material ).translucent_ )
         {
-            translucent_materials.push_back( material );
             get_vertices_for_face( face, translucent_vertices );
         }
-        else get_vertices_for_face( face, opaque_vertices[material] );
+        else get_vertices_for_face( face, opaque_vertices );
     }
 
-    opaque_vbos_.clear();
-    opaque_materials_.clear();
-
-    BOOST_FOREACH( const MaterialVertexMap::value_type& it, opaque_vertices )
+    if ( !opaque_vertices.empty() )
     {
-        const BlockMaterial material = it.first;
-        const BlockVertexV& vertices = it.second;
-
-        ChunkVertexBufferSP vbo( new ChunkVertexBuffer( vertices ) );
-        opaque_vbos_[material] = vbo;
-        opaque_materials_.insert( material );
+        opaque_vbo_.reset( new ChunkVertexBuffer( opaque_vertices ) );
     }
+    else opaque_vbo_.reset();
 
-    if ( !translucent_materials.empty() )
+    if ( !translucent_vertices.empty() )
     {
-        translucent_vbo_.reset( new SortableChunkVertexBuffer( translucent_materials, translucent_vertices ) );
+        translucent_vbo_.reset( new SortableChunkVertexBuffer( translucent_vertices ) );
     }
     else translucent_vbo_.reset();
 }
@@ -427,11 +384,12 @@ void ChunkRenderer::get_vertices_for_face( const BlockFace& face, BlockVertexV& 
     const BlockFace::Vertex* v = face.vertices_;
     const Vector3f& n = face.normal_;
     const Vector3f& t = face.tangent_;
+    const Scalar m = face.material_;
 
-    vertices.push_back( BlockVertex( v[0].position_, n, t, Vector2f( 0.0f, 0.0f ), v[0].lighting_, v[0].sunlighting_ ) );
-    vertices.push_back( BlockVertex( v[1].position_, n, t, Vector2f( 1.0f, 0.0f ), v[1].lighting_, v[1].sunlighting_ ) );
-    vertices.push_back( BlockVertex( v[2].position_, n, t, Vector2f( 1.0f, 1.0f ), v[2].lighting_, v[2].sunlighting_ ) );
-    vertices.push_back( BlockVertex( v[3].position_, n, t, Vector2f( 0.0f, 1.0f ), v[3].lighting_, v[3].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[0].position_, n, t, Vector3f( 0.0f, 0.0f, m ), v[0].lighting_, v[0].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[1].position_, n, t, Vector3f( 1.0f, 0.0f, m ), v[1].lighting_, v[1].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[2].position_, n, t, Vector3f( 1.0f, 1.0f, m ), v[2].lighting_, v[2].sunlighting_ ) );
+    vertices.push_back( BlockVertex( v[3].position_, n, t, Vector3f( 0.0f, 1.0f, m ), v[3].lighting_, v[3].sunlighting_ ) );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -714,15 +672,14 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
     typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
     typedef std::vector<DistanceChunkPair> DistanceChunkPairV;
-    DistanceChunkPairV translucent_chunks;
+
+    DistanceChunkPairV
+        opaque_chunks,
+        translucent_chunks;
 
 #ifdef DEBUG_CHUNKS
     DistanceChunkPairV debug_chunks;
 #endif
-
-    // TODO: While using a std::map of std::sets is convenient here, it is not particularly fast.
-    typedef std::map<BlockMaterial, DistanceChunkPairV> MaterialRendererMap;
-    MaterialRendererMap material_chunks;
 
     num_chunks_drawn_ = 0;
     num_triangles_drawn_ = 0;
@@ -737,12 +694,8 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
             const Vector3f camera_to_centroid = camera.get_position() - chunk_renderer.get_centroid();
             const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
             const DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
-            const BlockMaterialSet& materials = chunk_renderer.get_opaque_materials();
 
-            BOOST_FOREACH( BlockMaterial material, materials )
-            {
-                material_chunks[material].push_back( distance_chunk );
-            }
+            opaque_chunks.push_back( distance_chunk );
 
             if ( chunk_renderer.has_translucent_materials() )
             {
@@ -752,62 +705,43 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 #ifdef DEBUG_CHUNKS
             debug_chunks.push_back( distance_chunk );
 #endif
-
             ++num_chunks_drawn_;
             num_triangles_drawn_ += chunk_renderer.get_num_triangles();
         }
     }
 
+    material_manager_.configure_materials( camera, sky );
+
     glEnable( GL_CULL_FACE );
     glEnable( GL_DEPTH_TEST );
     glDepthFunc( GL_LEQUAL );
-    glEnable( GL_BLEND );
-    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
 
-    // Group together all of the geometry by material type, and then render it from
-    // front to back.  Grouping by material decreases the number of shader/texture swaps,
-    // and rendering front to back results in many of the farthest chunks being fully occluded,
-    // and thus their fragments will be rejected without running any expensive fragment shaders.
+    // The opaque materials are rendered first, in front-to-back order.  This results in
+    // many of the farthest chunks being fully occluded, and thus their fragments will be
+    // rejected without running any expensive fragment shaders.
 
-    // TODO: Use an ARB_occlusion_query to avoid rendering fully occluded chunks?
+    std::sort( opaque_chunks.begin(), opaque_chunks.end() );
 
-    // TODO: The main performance bottleneck here, particularly when rendering translucent
-    //       materials, is switching textures (which necessitates splitting geometry between
-    //       multiple calls to glDrawElements()).  Huge speedups could be seen by grouping
-    //       multiple materials into a single texture and adjusting the coordinates to select
-    //       materials.  That way, multiple materials could be drawn with a single call
-    //       to glDrawElements().
-
-    BOOST_FOREACH( const MaterialRendererMap::value_type& material_renderer_it, material_chunks )
+    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks )
     {
-        const BlockMaterial material = material_renderer_it.first;
-        DistanceChunkPairV chunk_renderers = material_renderer_it.second;
-
-        std::sort( chunk_renderers.begin(), chunk_renderers.end() );
-        material_manager_.configure_block_material( camera, sky, material );
-
-        BOOST_FOREACH( const DistanceChunkPair& chunk_renderer_it, chunk_renderers )
-        {
-            chunk_renderer_it.second->render_opaque( material, material_manager_ );
-        }
+        it.second->render_opaque();
     }
 
     glDisable( GL_CULL_FACE );
     glDepthMask( GL_FALSE );
 
-    // Now draw the translucent parts of the Chunks from farthest to nearest.  Since they have
-    // to be rendered strictly in back to front order, we can't perform material grouping on them
-    // like with the opaque materials.
+    // Now draw the translucent parts of the Chunks from back to front.
 
     std::sort( translucent_chunks.begin(), translucent_chunks.end() );
 
     BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks )
     {
-        it.second->render_translucent( camera, sky, material_manager_ );
+        it.second->render_translucent( camera );
     }
 
+    material_manager_.deconfigure_materials();
+
 #ifdef DEBUG_CHUNKS
-    material_manager_.deconfigure_block_material();
     glEnable( GL_CULL_FACE );
     glEnable( GL_POLYGON_OFFSET_FILL );
     glPolygonOffset( 1.0f, 3.0f );
@@ -815,7 +749,7 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
     std::sort( debug_chunks.begin(), debug_chunks.end() );
 
-    BOOST_REVERSE_FOREACH( const DistanceChunkPairV::value_type& it, debug_chunks )
+    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, debug_chunks )
     {
         it.second->render_aabb();
     }
@@ -827,9 +761,6 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
     glDepthMask( GL_TRUE );
     glDisable( GL_DEPTH_TEST );
-    glDisable( GL_BLEND );
-
-    material_manager_.deconfigure_block_material();
 }
 
 #ifdef DEBUG_COLLISIONS

@@ -8,7 +8,7 @@ varying vec3 tangent_sun_direction;
 varying vec3 tangent_camera_direction;
 varying vec3 sun_lighting;
 varying vec3 base_lighting;
-varying vec2 texture_coordinates;
+varying vec3 texture_coordinates;
 varying float fog_depth;
 
 void main()
@@ -41,7 +41,7 @@ void main()
     vec3 ambient_light = vec3( 0.06f, 0.06f, 0.06f ) + 0.50f * sun_lighting + 0.45f * moon_lighting;
     base_lighting = ambient_light + light_level + moon_diffuse;
 
-    texture_coordinates = gl_MultiTexCoord1.st;
+    texture_coordinates = gl_MultiTexCoord1.stp;
     
     vec4 eye_position = gl_ModelViewMatrix * gl_Vertex;
     fog_depth = abs( eye_position.z / eye_position.w );

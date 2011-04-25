@@ -5,10 +5,6 @@
 
 #include <set>
 
-#include <boost/tuple/tuple.hpp>
-#include <boost/tuple/tuple_comparison.hpp>
-#include <boost/utility.hpp>
-
 #include "camera.h"
 #include "sdl_gl_window.h"
 #include "world.h"
@@ -77,25 +73,25 @@ struct BlockVertex
         const Vector3f& position,
         const Vector3f& normal,
         const Vector3f& tangent,
-        const Vector2f& texcoords,
+        const Vector3f& texcoords,
         const Vector3f& lighting,
         const Vector3f& sunlighting
     ) :
         x_( position[0] ), y_( position[1] ), z_( position[2] ),
         nx_( normal[0] ), ny_( normal[1] ), nz_( normal[2] ),
         tx_( tangent[0] ), ty_( tangent[1] ), tz_( tangent[2] ),
-        s_( texcoords[0] ), t_( texcoords[1] ),
+        s_( texcoords[0] ), t_( texcoords[1] ), p_( texcoords[2] ),
         lr_( lighting[0] ), lg_( lighting[1] ), lb_( lighting[2] ),
         slr_( sunlighting[0] ), slg_( sunlighting[1] ), slb_( sunlighting[2] )
     {
     }
 
-    GLfloat x_, y_, z_;
-    GLfloat nx_, ny_, nz_;
-    GLfloat tx_, ty_, tz_;
-    GLfloat s_, t_;
-    GLfloat lr_, lg_, lb_;
-    GLfloat slr_, slg_, slb_;
+    GLfloat x_, y_, z_;       // Position
+    GLfloat nx_, ny_, nz_;    // Normal
+    GLfloat tx_, ty_, tz_;    // Tangent
+    GLfloat s_, t_, p_;       // Texture coordinates
+    GLfloat lr_, lg_, lb_;    // Light color
+    GLfloat slr_, slg_, slb_; // Sunlight color
 
 } __attribute__( ( packed ) );
 
@@ -114,40 +110,23 @@ struct ChunkVertexBuffer : public VertexBuffer
 };
 
 typedef boost::shared_ptr<ChunkVertexBuffer> ChunkVertexBufferSP;
-typedef std::map<BlockMaterial, ChunkVertexBufferSP> ChunkVertexBufferMap;
-typedef std::vector<BlockMaterial> BlockMaterialV;
 typedef std::vector<Vector3f> Vector3fV;
 
 struct SortableChunkVertexBuffer : public ChunkVertexBuffer
 {
-    SortableChunkVertexBuffer( const BlockMaterialV& materials, const BlockVertexV& vertices );
+    SortableChunkVertexBuffer( const BlockVertexV& vertices );
 
-    void render( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager );
+    void render( const Camera& camera );
 
 private:
 
     static const unsigned VERTICES_PER_FACE = 4;
 
-    typedef boost::tuple<int, Scalar, unsigned> DistanceIndex;
+    typedef std::pair<Scalar, unsigned> DistanceIndex;
     typedef std::vector<DistanceIndex> DistanceIndexV;
     typedef std::vector<VertexBuffer::Index> IndexV;
 
-    void render_sorted(
-        const DistanceIndexV distance_indices,
-        const Camera& camera,
-        const Sky& sky,
-        RendererMaterialManager& material_manager
-    );
-
-    void render_indices(
-        const IndexV& indices,
-        const Camera& camera,
-        const Sky& sky,
-        const BlockMaterial material,
-        RendererMaterialManager& material_manager
-    );
-
-    BlockMaterialV materials_;
+    void render_sorted( const DistanceIndexV distance_indices );
 
     Vector3fV centroids_;
 };
@@ -166,12 +145,11 @@ struct ChunkRenderer
 {
     ChunkRenderer( const Vector3f& centroid = Vector3f(), const AABoxf& aabb = AABoxf() );
 
-    void render_opaque( const BlockMaterial material, RendererMaterialManager& material_manager );
-    void render_translucent( const Camera& camera, const Sky& sky, RendererMaterialManager& material_manager );
+    void render_opaque();
+    void render_translucent( const Camera& camera );
     void render_aabb();
     void rebuild( const Chunk& chunk );
 
-    const BlockMaterialSet& get_opaque_materials() const { return opaque_materials_; }
     bool has_translucent_materials() const { return translucent_vbo_; }
     const Vector3f& get_centroid() const { return centroid_; }
     const AABoxf& get_aabb() const { return aabb_; }
@@ -181,9 +159,7 @@ protected:
 
     void get_vertices_for_face( const BlockFace& face, BlockVertexV& vertices ) const;
 
-    BlockMaterialSet opaque_materials_;
-
-    ChunkVertexBufferMap opaque_vbos_;
+    ChunkVertexBufferSP opaque_vbo_;
 
     SortableChunkVertexBufferSP translucent_vbo_;
 

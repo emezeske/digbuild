@@ -22,7 +22,7 @@ int main( int argc, char **argv )
         game.main_loop();
         result =  0;
     }
-    catch ( const std::exception& e ) { LOG( "Error: " << e.what() ); }
+    catch ( const std::exception& e ) { LOG( "Error: " << e.what() << "." ); }
 
     return result;
 }
