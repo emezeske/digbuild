@@ -18,7 +18,7 @@ int main( int argc, char **argv )
     try
     {
         SDL_GL_Window window( SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_BPP, SCREEN_FLAGS, "DigBuild" );
-        GameApplication game( window, 60 );
+        GameApplication game( window );
         game.main_loop();
         result =  0;
     }

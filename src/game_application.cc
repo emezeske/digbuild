@@ -16,9 +16,8 @@
 // Function definitions for GameApplication:
 //////////////////////////////////////////////////////////////////////////////////
 
-GameApplication::GameApplication( SDL_GL_Window &window, const unsigned fps_limit ) :
+GameApplication::GameApplication( SDL_GL_Window &window ) :
     run_( false ),
-    fps_limit_( fps_limit ),
     fps_last_time_( 0 ),
     fps_frame_count_( 0 ),
     mouse_sensitivity_( 0.005f ),
@@ -55,21 +54,17 @@ void GameApplication::main_loop()
 
     while ( run_ )
     {
-        const double
-            step_time_seconds = frame_timer.get_seconds_elapsed(),
-            seconds_until_next_frame = 1.0f / fps_limit_ - step_time_seconds;
-
+        const double elapsed = frame_timer.get_seconds_elapsed();
         process_events();
+        handle_chunk_changes();
 
-        // TODO: Revisit this.  Maybe don't lock the framerate, but do lock the simulation rate.
-
-        if ( seconds_until_next_frame <= 0.0 )
+        if ( elapsed >= FRAME_INTERVAL )
         {
-            frame_timer.reset();
-            do_one_step( float( step_time_seconds ) );
+            do_one_step( elapsed );
+            schedule_chunk_update();
             render();
+            frame_timer.reset();
         }
-        else do_delay( seconds_until_next_frame );
     }
 }
 
@@ -283,7 +278,18 @@ void GameApplication::toggle_gui_focus()
     gui_focused_ = !gui_focused_;
 }
 
-void GameApplication::handle_chunk_updates()
+void GameApplication::schedule_chunk_update()
+{
+    World::ChunkGuard chunk_guard( world_.get_chunk_lock(), boost::defer_lock );
+
+    if ( chunk_guard.try_lock() )
+    {
+        updated_chunks_ = world_.get_updated_chunks();
+        chunk_updater_.schedule( boost::bind( &World::update_chunks, boost::ref( world_ ) ) );
+    }
+}
+
+void GameApplication::handle_chunk_changes()
 {
     if ( !updated_chunks_.empty() )
     {
@@ -304,11 +310,6 @@ void GameApplication::handle_chunk_updates()
 
 void GameApplication::do_one_step( const float step_time )
 {
-    // Hopefully, handle_chunk_updates() will end up being called during the frame
-    // delay, but it's called here as well, in case the rendering loop is FPS capped
-    // and there was no delay.
-    handle_chunk_updates();
-
     World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
 
     player_.do_one_step( step_time, world_ );
@@ -344,33 +345,6 @@ void GameApplication::do_one_step( const float step_time )
 
     world_.mark_chunk_for_update( block_it.chunk_ );
 #endif
-
-    if ( !world_.is_chunk_update_in_progress() )
-    {
-        chunk_updater_.wait();
-        updated_chunks_ = world_.get_updated_chunks();
-        chunk_updater_.schedule( boost::bind( &World::update_chunks, boost::ref( world_ ) ) );
-    }
-}
-
-void GameApplication::do_delay( const float delay_time )
-{
-    long delay_ms = long( delay_time * 1000.0 );
-    const long begin_ticks = SDL_GetTicks();
-
-    // If any Chunks need to be sent down to the Renderer, do so here while we're
-    // supposed to be delaying.  It would be a shame to spend this time sleeping,
-    // when we could be doing useful work.
-    handle_chunk_updates();
-
-    // Count any time we spent updating Chunks toward the delay.
-    delay_ms -= SDL_GetTicks() - begin_ticks;
-
-    if ( delay_ms >= 0 )
-    {
-        // FIXME: Commenting this out makes things MUCH smoother (at least with VSYNC enabled).
-        // SDL_Delay( delay_ms );
-    }
 }
 
 void GameApplication::render()

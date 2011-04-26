@@ -13,12 +13,14 @@
 
 struct GameApplication
 {
-    GameApplication( SDL_GL_Window &window, const unsigned fps_limit );
+    GameApplication( SDL_GL_Window &window );
     ~GameApplication();
 
     void main_loop();
 
 protected:
+
+    static const double FRAME_INTERVAL = 1.0 / 60.0;
 
     void process_events();
     void handle_event( SDL_Event& event );
@@ -32,16 +34,15 @@ protected:
     void toggle_fullscreen();
     void toggle_gui_focus();
 
-    void handle_chunk_updates();
+    void schedule_chunk_update();
+    void handle_chunk_changes();
 
     void do_one_step( const float step_time );
-    void do_delay( const float delay_time );
     void render();
 
     bool run_;
 
     unsigned
-        fps_limit_,
         fps_last_time_,
         fps_frame_count_;
 

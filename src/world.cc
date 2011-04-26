@@ -287,7 +287,6 @@ void Sky::do_one_step( const float step_time )
 //////////////////////////////////////////////////////////////////////////////////
 
 World::World( const uint64_t world_seed ) :
-    chunk_update_in_progress_( false ),
     generator_( world_seed ),
     sky_( world_seed ),
     worker_pool_( hardware_concurrency() ),
@@ -345,8 +344,6 @@ void World::update_chunks()
     {
         return;
     }
-
-    chunk_update_in_progress_ = true;
 
     // If a Chunk is modified, it is not sufficient to simply rebuild the lighting/geometry
     // for that Chunk.  Lighting can travel up to 16 blocks, so a change to one Chunk might
@@ -425,7 +422,6 @@ void World::update_chunks()
     // TODO: Only add Chunks that were DEFINITELY modified to updated_chunks_.  This will
     //       save time because they won't need to be sent to the graphics card.
     updated_chunks_ = possibly_modified_chunks;
-    chunk_update_in_progress_ = false;
 }
 
 void World::reset_lighting_unordered( ChunkGuard& chunk_guard, const ChunkSet& chunks )

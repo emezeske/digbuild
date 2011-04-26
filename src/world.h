@@ -151,11 +151,9 @@ struct World
     // ones were affected.
     void update_chunks();
 
-    bool is_chunk_update_in_progress() const { return chunk_update_in_progress_; }
-
+    // Precondition: you must hold the Chunk lock before calling this!
     ChunkSet get_updated_chunks()
     {
-        assert( !is_chunk_update_in_progress() );
         ChunkSet result = updated_chunks_;
         updated_chunks_.clear();
         return result;
