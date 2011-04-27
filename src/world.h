@@ -2,7 +2,6 @@
 #define WORLD_H
 
 #include <cstdlib>
-#include <set>
 
 #include <boost/threadpool.hpp>
 
@@ -68,15 +67,13 @@ protected:
         moon_angle_;
 };
 
-typedef std::set<Chunk*> ChunkSet;
-
 struct World
 {
     typedef boost::unique_lock<boost::mutex> ChunkGuard;
 
     World( const uint64_t world_seed );
 
-    void do_one_step( float step_time );
+    void do_one_step( float step_time, const Vector3f& player_position );
 
     const Sky& get_sky() const { return sky_; }
     const ChunkMap& get_chunks() const { return chunks_; }
@@ -165,6 +162,8 @@ struct World
 
 protected:
 
+    static const float SIMULATION_INTERVAL = 1.0;
+
     Chunk* get_chunk( const Vector3i& position )
     {
         ChunkMap::const_iterator it = chunks_.find( position );
@@ -184,13 +183,13 @@ protected:
         chunks_needing_update_,
         updated_chunks_;
 
-    bool chunk_update_in_progress_;
-
     WorldGenerator generator_;
 
     Sky sky_;
 
     ChunkMap chunks_;
+
+    float time_since_simulation_;
 
     boost::threadpool::pool worker_pool_;
 

@@ -289,6 +289,7 @@ void Sky::do_one_step( const float step_time )
 World::World( const uint64_t world_seed ) :
     generator_( world_seed ),
     sky_( world_seed ),
+    time_since_simulation_( 0.0f ),
     worker_pool_( hardware_concurrency() ),
     outstanding_jobs_( 0 )
 {
@@ -330,9 +331,45 @@ World::World( const uint64_t world_seed ) :
     update_geometry( chunk_guard, chunks );
 }
 
-void World::do_one_step( const float step_time )
+void World::do_one_step( const float step_time, const Vector3f& player_position )
 {
     sky_.do_one_step( step_time );
+
+    time_since_simulation_ += step_time;
+
+    if ( time_since_simulation_ > SIMULATION_INTERVAL )
+    {
+        time_since_simulation_ = 0.0f;
+
+        const Vector3i player_block_position = vector_cast<int>( pointwise_round( player_position ) );
+        const Vector3i player_chunk_position = player_block_position - get_block_index( player_block_position );
+
+        BlockV blocks_visited;
+        ChunkSet chunks_modified;
+
+        FOREACH_SURROUNDING( x, y, z )
+        {
+            const Vector3i position =
+                player_chunk_position + pointwise_product( Chunk::SIZE, Vector3i( x, y, z ) );
+
+            Chunk* chunk = get_chunk( position );
+
+            if ( chunk )
+            {
+                chunk->simulate( blocks_visited, chunks_modified );
+            }
+        }
+
+        BOOST_FOREACH( Block* block, blocks_visited )
+        {
+            block->set_visited( false );
+        }
+
+        BOOST_FOREACH( Chunk* chunk, chunks_modified )
+        {
+            mark_chunk_for_update( chunk );
+        }
+    }
 }
 
 void World::update_chunks()

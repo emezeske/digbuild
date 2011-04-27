@@ -48,7 +48,7 @@ protected:
 
     Scalar mouse_sensitivity_;
 
-    SDL_GL_Window &window_;
+    SDL_GL_Window& window_;
 
     bool gui_focused_;
 

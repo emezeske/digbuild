@@ -210,6 +210,14 @@ void Player::do_secondary_fire( const float step_time, World& world )
                 if ( block_it.block_->get_collision_mode() != BLOCK_COLLISION_MODE_SOLID )
                 {
                     block_it.block_->set_material( material_selection_ );
+
+                    // FIXME: For testing:
+                    if ( material_selection_ == BLOCK_MATERIAL_WATER ||
+                         material_selection_ == BLOCK_MATERIAL_LAVA )
+                    {
+                        BlockDataFlowable( *block_it.block_ ).make_source();
+                    }
+
                     world.mark_chunk_for_update( block_it.chunk_ ); 
                 }
             }

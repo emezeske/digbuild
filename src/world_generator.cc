@@ -65,7 +65,7 @@ void generate_chunk_column(
 
             const std::pair<BlockMaterial, Scalar> layers[] = 
             {
-                std::make_pair( BLOCK_MATERIAL_MAGMA,   1.0f                             ),
+                std::make_pair( BLOCK_MATERIAL_LAVA,   1.0f                             ),
                 std::make_pair( BLOCK_MATERIAL_BEDROCK, 20.0f + ( total_height ) * 0.25f ),
                 std::make_pair( BLOCK_MATERIAL_STONE,   52.0f + ( total_height ) * 1.00f ),
                 std::make_pair( BLOCK_MATERIAL_CLAY,    58.0f + ( total_height ) * 1.00f ),
@@ -93,7 +93,7 @@ void generate_chunk_column(
                         Scalar( relative_position[1] ) / Scalar( RegionFeatures::TRILINEAR_BOX_SIZE[2] )
                     );
 
-                    if ( material != BLOCK_MATERIAL_MAGMA )
+                    if ( material != BLOCK_MATERIAL_LAVA )
                     {
                         const Scalar
                             densityA = features.get_box( 0 ).interpolate( box_position ),
@@ -105,7 +105,11 @@ void generate_chunk_column(
                         }
                         else block.set_material( material );
                     }
-                    else block.set_material( material );
+                    else
+                    {
+                        block.set_material( BLOCK_MATERIAL_LAVA );
+                        BlockDataFlowable( block ).make_source();
+                    }
                 }
 
                 bottom = top;
@@ -124,6 +128,7 @@ void generate_chunk_column(
                     if ( y <= SEA_LEVEL )
                     {
                         block.set_material( BLOCK_MATERIAL_WATER );
+                        BlockDataFlowable( block ).make_source();
                     }
                 }
                 else if ( block.get_material() == BLOCK_MATERIAL_GRASS ||

@@ -18,7 +18,7 @@ enum BlockMaterial
     BLOCK_MATERIAL_MUD,
     BLOCK_MATERIAL_STONE,
     BLOCK_MATERIAL_BEDROCK,
-    BLOCK_MATERIAL_MAGMA,
+    BLOCK_MATERIAL_LAVA,
     BLOCK_MATERIAL_TREE_TRUNK,
     BLOCK_MATERIAL_TREE_LEAF,
     BLOCK_MATERIAL_GLASS_CLEAR,
@@ -96,7 +96,7 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
         BlockMaterialAttributes( "Mud",            "mud",          false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Stone",          "stone",        false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Bedrock",        "bedrock",      false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Magma",          "magma",        false,     true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Lava",           "lava",         false,     true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Tree Trunk",     "tree-trunk",   false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Tree Leaf",      "tree-leaf",    false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Glass (Clear)",  "glass-clear",  true,      false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
@@ -136,7 +136,8 @@ struct Block
         light_level_b_( 0 ),
         sunlight_level_r_( 0 ),
         sunlight_level_g_( 0 ),
-        sunlight_level_b_( 0 )
+        sunlight_level_b_( 0 ),
+        data_( 0 )
     {
     }
 
@@ -145,6 +146,7 @@ struct Block
         assert( material >= std::numeric_limits<uint8_t>::min() );
         assert( material <= std::numeric_limits<uint8_t>::max() );
         material_ = material;
+        data_ = 0;
     }
 
     BlockMaterial get_material() const { return BlockMaterial( material_ ); }
@@ -187,6 +189,16 @@ struct Block
         return Vector3i( sunlight_level_r_, sunlight_level_g_, sunlight_level_b_ );
     }
 
+    void set_data( const uint8_t data )
+    {
+        data_ = data;
+    }
+
+    uint8_t get_data() const
+    {
+        return data_;
+    }
+
 private:
 
     bool light_level_valid( const int light_level ) const
@@ -216,7 +228,10 @@ private:
     uint8_t sunlight_level_r_ : 4;
     uint8_t sunlight_level_g_ : 4;
     uint8_t sunlight_level_b_ : 4;
+    uint8_t data_             : 8; // Material-specific data.
 };
+
+typedef std::vector<Block*> BlockV;
 
 struct BlockFace
 {
@@ -261,5 +276,52 @@ struct BlockFace
 };
 
 typedef std::vector<BlockFace> BlockFaceV;
+
+struct BlockDataFlowable
+{
+    BlockDataFlowable( Block& block ) : 
+        block_( block )
+    {
+        assert( block_.get_material() == BLOCK_MATERIAL_WATER ||
+                block_.get_material() == BLOCK_MATERIAL_LAVA );
+    }
+
+    // TODO: Right now there's nothing really special about a "source".
+    void make_source()
+    {
+        block_.set_data( MAX_FLOW_LEVEL );
+    }
+
+    int get_flow_level() const
+    {
+        return block_.get_data();
+    }
+
+    void set_flow_level( const int flow_level )
+    {
+        assert( flow_level <= MAX_FLOW_LEVEL );
+        assert( flow_level >= 0 );
+        block_.set_data( flow_level );
+    }
+
+    bool add_flow_level( const int flow_level )
+    {
+        assert( flow_level <= MAX_FLOW_LEVEL );
+        assert( flow_level >= 0 );
+
+        if ( flow_level > get_flow_level() )
+        {
+            block_.set_data( flow_level );
+            return true;
+        }
+        else return false;
+    }
+
+protected:
+
+    static const int MAX_FLOW_LEVEL = 0x08;
+
+    Block& block_;
+};
 
 #endif // BLOCK_H

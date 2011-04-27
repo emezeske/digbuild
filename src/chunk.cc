@@ -161,7 +161,6 @@ struct InternalNeighborStrategy
     }
 };
 
-typedef std::vector<Block*> BlockV;
 typedef std::pair<const BlockIterator, const Vector3i> FloodFillBlock;
 typedef std::queue<FloodFillBlock> FloodFillQueue;
 
@@ -255,6 +254,82 @@ Chunk::Chunk( const Vector3i& position ) :
 {
     memset( neighbors_, 0, sizeof( neighbors_ ) );
     get_neighbor_impl( Vector3i( 0, 0, 0 ) ) = this;
+}
+
+bool Chunk::flow_block_to_neighbor( const Block& block, const Vector3i& block_index, const CardinalRelation relation, const int flow_level, BlockV& blocks_visited, ChunkSet& chunks_modified )
+{
+    // TODO: If this neighbor does not exist, but it IS in an existing column,
+    //       extend that column and flow into it.
+
+    bool flowed = false;
+    const BlockIterator it = get_block_neighbor( block_index, cardinal_relation_vector( relation ) );
+
+    if ( it.block_ )
+    {
+        Block& neighbor = *it.block_;
+
+        if ( neighbor.get_material() == BLOCK_MATERIAL_AIR )
+        {
+            neighbor.set_material( block.get_material() );
+            BlockDataFlowable( neighbor ).set_flow_level( flow_level );
+            flowed = true;
+        }
+        else if ( ( block.get_material() == BLOCK_MATERIAL_WATER &&
+                    neighbor.get_material() == BLOCK_MATERIAL_LAVA ) ||
+                  ( block.get_material() == BLOCK_MATERIAL_LAVA &&
+                    neighbor.get_material() == BLOCK_MATERIAL_WATER ) )
+        {
+            neighbor.set_material( BLOCK_MATERIAL_BEDROCK );
+            flowed = true;
+        }
+        else if ( block.get_material() == neighbor.get_material() )
+        {
+            flowed = BlockDataFlowable( neighbor ).add_flow_level( flow_level );
+        }
+
+        if ( flowed )
+        {
+            // FIXME: not needed for third case
+            blocks_visited.push_back( it.block_ );
+            neighbor.set_visited( true );
+            chunks_modified.insert( it.chunk_ );
+        }
+    }
+
+    return flowed;
+}
+
+void Chunk::simulate( BlockV& blocks_visited, ChunkSet& chunks_modified )
+{
+    FOREACH_BLOCK( x, y, z )
+    {
+        const Vector3i index( x, y, z );
+        Block& block = get_block( index );
+
+        if ( ( block.get_material() == BLOCK_MATERIAL_WATER ||
+               block.get_material() == BLOCK_MATERIAL_LAVA ) &&
+             !block.is_visited() )
+        {
+            const int flow = BlockDataFlowable( block ).get_flow_level();
+
+            if ( flow > 0 )
+            {
+                // TODO: An accurate way to model this would be to calculate the resistance of flow
+                //       in each direction, and then to divide the current flow between each
+                //       direction proportionally.  I think that might be too slow, though...
+
+                if ( !flow_block_to_neighbor( block, index, CARDINAL_RELATION_BELOW, flow, blocks_visited, chunks_modified ) )
+                {
+                    const int attenuated_flow = flow - 1;
+
+                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_NORTH, attenuated_flow, blocks_visited, chunks_modified );
+                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_SOUTH, attenuated_flow, blocks_visited, chunks_modified );
+                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_EAST, attenuated_flow, blocks_visited, chunks_modified );
+                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_WEST, attenuated_flow, blocks_visited, chunks_modified );
+                }
+            }
+        }
+    }
 }
 
 void Chunk::reset_lighting()

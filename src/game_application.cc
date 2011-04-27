@@ -313,7 +313,7 @@ void GameApplication::do_one_step( const float step_time )
     World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
 
     player_.do_one_step( step_time, world_ );
-    world_.do_one_step( step_time );
+    world_.do_one_step( step_time, player_.get_position() );
     gui_.do_one_step( step_time );
 
 #ifdef DEBUG_CHUNK_UPDATES

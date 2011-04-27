@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <map>
+#include <set>
 #include <boost/shared_ptr.hpp>
 #include <boost/utility.hpp>
 
@@ -21,6 +22,8 @@
             for ( int z_name = -1; z_name <= 1; ++z_name )
 
 struct Chunk;
+
+typedef std::set<Chunk*> ChunkSet;
 
 struct BlockIterator
 {
@@ -132,6 +135,9 @@ struct Chunk : public boost::noncopyable
         return get_extreme( CARDINAL_RELATION_ABOVE );
     }
 
+    // TODO: move, make private
+    bool flow_block_to_neighbor( const Block& block, const Vector3i& block_index, const CardinalRelation relation, const int flow_level, BlockV& blocks_visited, ChunkSet& chunks_modified );
+    void simulate( BlockV& blocks_visited, ChunkSet& chunks_modified );
     void reset_lighting();
     void unset_nop_sunlight_sources();
     void apply_lighting_to_self();
