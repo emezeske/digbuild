@@ -256,47 +256,90 @@ Chunk::Chunk( const Vector3i& position ) :
     get_neighbor_impl( Vector3i( 0, 0, 0 ) ) = this;
 }
 
-bool Chunk::flow_block_to_neighbor( const Block& block, const Vector3i& block_index, const CardinalRelation relation, const int flow_level, BlockV& blocks_visited, ChunkSet& chunks_modified )
+Chunk::BlockFlow Chunk::get_possible_flow( const Block& block, const Vector3i& block_index, const CardinalRelation relation )
 {
-    // TODO: If this neighbor does not exist, but it IS in an existing column,
+    BlockFlow possible_flow;
+    possible_flow.first = get_block_neighbor( block_index, cardinal_relation_vector( relation ) );
+
+    // TODO: If the neighbor block does not exist, but it IS in an existing column,
     //       extend that column and flow into it.
+    possible_flow.second = 0.0f;
 
-    bool flowed = false;
-    const BlockIterator it = get_block_neighbor( block_index, cardinal_relation_vector( relation ) );
-
-    if ( it.block_ )
+    if ( possible_flow.first.block_ )
     {
-        Block& neighbor = *it.block_;
+        Block& neighbor = *possible_flow.first.block_;
 
         if ( neighbor.get_material() == BLOCK_MATERIAL_AIR )
         {
-            neighbor.set_material( block.get_material() );
-            BlockDataFlowable( neighbor ).set_flow_level( flow_level );
-            flowed = true;
+            possible_flow.second = 1.0f;
         }
         else if ( ( block.get_material() == BLOCK_MATERIAL_WATER &&
                     neighbor.get_material() == BLOCK_MATERIAL_LAVA ) ||
                   ( block.get_material() == BLOCK_MATERIAL_LAVA &&
                     neighbor.get_material() == BLOCK_MATERIAL_WATER ) )
         {
-            neighbor.set_material( BLOCK_MATERIAL_BEDROCK );
-            flowed = true;
+            possible_flow.second = 1.0f / BlockDataFlowable::MAX_FLOW_LEVEL;
         }
         else if ( block.get_material() == neighbor.get_material() )
         {
-            flowed = BlockDataFlowable( neighbor ).add_flow_level( flow_level );
-        }
+            possible_flow.second = 1.0f;
 
-        if ( flowed )
-        {
-            // FIXME: not needed for third case
-            blocks_visited.push_back( it.block_ );
-            neighbor.set_visited( true );
-            chunks_modified.insert( it.chunk_ );
+            if ( relation != CARDINAL_RELATION_BELOW )
+            {
+                possible_flow.second -=
+                    Scalar( BlockDataFlowable( neighbor ).get_flow_level() ) / BlockDataFlowable::MAX_FLOW_LEVEL;
+            }
         }
     }
 
-    return flowed;
+    return possible_flow;
+}
+
+void Chunk::flow_block(
+    const Block& block,
+    const BlockFlow& neighbor_flow,
+    const Scalar remaining_flow,
+    BlockV& blocks_visited,
+    ChunkSet& chunks_modified
+)
+{
+    // TODO: If this neighbor does not exist, but it IS in an existing column,
+    //       extend that column and flow into it.
+
+    if ( neighbor_flow.first.block_ )
+    {
+        Block& neighbor_block = *neighbor_flow.first.block_;
+        const int flow_level = static_cast<int>( roundf( neighbor_flow.second * remaining_flow ) );
+        bool visited = false;
+
+        if ( neighbor_block.get_material() == BLOCK_MATERIAL_AIR )
+        {
+            neighbor_block.set_material( block.get_material() );
+            BlockDataFlowable( neighbor_block ).set_flow_level( flow_level );
+            visited = true;
+        }
+        else if ( ( block.get_material() == BLOCK_MATERIAL_WATER &&
+                    neighbor_block.get_material() == BLOCK_MATERIAL_LAVA ) ||
+                  ( block.get_material() == BLOCK_MATERIAL_LAVA &&
+                    neighbor_block.get_material() == BLOCK_MATERIAL_WATER ) )
+        {
+            neighbor_block.set_material( BLOCK_MATERIAL_BEDROCK );
+            visited = true;
+        }
+        else if ( block.get_material() == neighbor_block.get_material() )
+        {
+            BlockDataFlowable neighbor_flowable( neighbor_block );
+            const int flow = std::max( neighbor_flowable.get_flow_level(), flow_level );
+            neighbor_flowable.set_flow_level( flow );
+        }
+
+        if ( visited )
+        {
+            neighbor_block.set_visited( true );
+            blocks_visited.push_back( &neighbor_block );
+            chunks_modified.insert( neighbor_flow.first.chunk_ );
+        }
+    }
 }
 
 void Chunk::simulate( BlockV& blocks_visited, ChunkSet& chunks_modified )
@@ -310,22 +353,46 @@ void Chunk::simulate( BlockV& blocks_visited, ChunkSet& chunks_modified )
                block.get_material() == BLOCK_MATERIAL_LAVA ) &&
              !block.is_visited() )
         {
-            const int flow = BlockDataFlowable( block ).get_flow_level();
+            BlockDataFlowable block_flow( block );
+            Scalar remaining_flow = block_flow.get_flow_level();
+            const BlockFlow down_flow = get_possible_flow( block, index, CARDINAL_RELATION_BELOW );
 
-            if ( flow > 0 )
+            if ( down_flow.second >= gmtl::GMTL_EPSILON )
             {
-                // TODO: An accurate way to model this would be to calculate the resistance of flow
-                //       in each direction, and then to divide the current flow between each
-                //       direction proportionally.  I think that might be too slow, though...
+                // Any flow that goes downward is consumed here, and will not be allocated
+                // towards possible laterally adjacent blocks.
+                flow_block( block, down_flow, remaining_flow, blocks_visited, chunks_modified );
+                remaining_flow -= down_flow.second * remaining_flow;
+            }
 
-                if ( !flow_block_to_neighbor( block, index, CARDINAL_RELATION_BELOW, flow, blocks_visited, chunks_modified ) )
+            if ( remaining_flow > gmtl::GMTL_EPSILON )
+            {
+                const BlockFlow neighbor_flows[4] =
                 {
-                    const int attenuated_flow = flow - 1;
+                    get_possible_flow( block, index, CARDINAL_RELATION_NORTH ),
+                    get_possible_flow( block, index, CARDINAL_RELATION_SOUTH ),
+                    get_possible_flow( block, index, CARDINAL_RELATION_EAST ),
+                    get_possible_flow( block, index, CARDINAL_RELATION_WEST )
+                };
 
-                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_NORTH, attenuated_flow, blocks_visited, chunks_modified );
-                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_SOUTH, attenuated_flow, blocks_visited, chunks_modified );
-                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_EAST, attenuated_flow, blocks_visited, chunks_modified );
-                    flow_block_to_neighbor( block, index, CARDINAL_RELATION_WEST, attenuated_flow, blocks_visited, chunks_modified );
+                // TODO: Divying up the remaining flow as follows seems like a more
+                //       accurate way to simulate the fluid, but it tends to attenuate
+                //       the flow very quickly...
+                //
+                // Scalar total_flow = 0.0f;
+                //
+                // for ( int i = 0; i < 4; ++i )
+                // {
+                //     total_flow += neighbor_flows[i].second;
+                // }
+                //
+                // remaining_flow /= total_flow;
+
+                remaining_flow -= 1;
+
+                for ( int i = 0; i < 4; ++i )
+                {
+                    flow_block( block, neighbor_flows[i], remaining_flow, blocks_visited, chunks_modified );
                 }
             }
         }

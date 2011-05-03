@@ -162,7 +162,7 @@ struct World
 
 protected:
 
-    static const float SIMULATION_INTERVAL = 1.0;
+    static const float SIMULATION_INTERVAL = 0.1;
 
     Chunk* get_chunk( const Vector3i& position )
     {

@@ -279,6 +279,8 @@ typedef std::vector<BlockFace> BlockFaceV;
 
 struct BlockDataFlowable
 {
+    static const int MAX_FLOW_LEVEL = 0x08;
+
     BlockDataFlowable( Block& block ) : 
         block_( block )
     {
@@ -304,22 +306,7 @@ struct BlockDataFlowable
         block_.set_data( flow_level );
     }
 
-    bool add_flow_level( const int flow_level )
-    {
-        assert( flow_level <= MAX_FLOW_LEVEL );
-        assert( flow_level >= 0 );
-
-        if ( flow_level > get_flow_level() )
-        {
-            block_.set_data( flow_level );
-            return true;
-        }
-        else return false;
-    }
-
 protected:
-
-    static const int MAX_FLOW_LEVEL = 0x08;
 
     Block& block_;
 };

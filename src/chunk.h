@@ -136,7 +136,16 @@ struct Chunk : public boost::noncopyable
     }
 
     // TODO: move, make private
-    bool flow_block_to_neighbor( const Block& block, const Vector3i& block_index, const CardinalRelation relation, const int flow_level, BlockV& blocks_visited, ChunkSet& chunks_modified );
+    typedef std::pair<BlockIterator, Scalar> BlockFlow;
+    BlockFlow get_possible_flow( const Block& block, const Vector3i& block_index, const CardinalRelation relation );
+    void flow_block(
+        const Block& block,
+        const BlockFlow& neighbor_flow,
+        const Scalar remaining_flow,
+        BlockV& blocks_visited,
+        ChunkSet& chunks_modified
+    );
+
     void simulate( BlockV& blocks_visited, ChunkSet& chunks_modified );
     void reset_lighting();
     void unset_nop_sunlight_sources();
