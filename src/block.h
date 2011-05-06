@@ -96,7 +96,7 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
         BlockMaterialAttributes( "Mud",            "mud",          false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Stone",          "stone",        false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Bedrock",        "bedrock",      false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Lava",           "lava",         false,     true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Lava",           "lava",         true ,     true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_FLUID ),
         BlockMaterialAttributes( "Tree Trunk",     "tree-trunk",   false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Tree Leaf",      "tree-leaf",    false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
         BlockMaterialAttributes( "Glass (Clear)",  "glass-clear",  true,      false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
