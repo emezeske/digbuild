@@ -195,7 +195,8 @@ void Player::do_secondary_fire( const float step_time, World& world )
                 player_bounds = get_aabb(),
                 block_bounds( vector_cast<Scalar>( new_block_position ), vector_cast<Scalar>( new_block_position ) + Block::SIZE );
 
-            if ( !gmtl::intersect( player_bounds, block_bounds ) )
+            if ( get_block_material_attributes( material_selection_ ).collision_mode_ == BLOCK_COLLISION_MODE_FLUID ||
+                 !gmtl::intersect( player_bounds, block_bounds ) )
             {
                 BlockIterator block_it = world.get_block( new_block_position );
 
