@@ -183,14 +183,14 @@ void flood_fill_light( const bool skip_source_block, FloodFillQueue& queue, Bloc
         {
             blocks_visited.push_back( &block );
             block.set_visited( true );
+            Vector3i light_level = flood_block.second;
 
             if ( !skip_source_block || !source_block )
             {
-                Vector3i filtered_light_level = flood_block.second;
-                filter_light( filtered_light_level, block );
+                filter_light( light_level, block );
 
                 Vector3i block_light_level = LightStrategy::get_light( block );
-                if ( !mix_light( block_light_level, filtered_light_level ) )
+                if ( !mix_light( block_light_level, light_level ) )
                 {
                     continue; // The incoming light had no effect on this block.
                 }
@@ -199,8 +199,7 @@ void flood_fill_light( const bool skip_source_block, FloodFillQueue& queue, Bloc
             }
             else source_block = false;
 
-            Vector3i attenuated_light_level = flood_block.second;
-            if ( attenuate_light( attenuated_light_level ) )
+            if ( attenuate_light( light_level ) )
             {
                 continue; // The light has been attenuated down to zero.
             }
@@ -215,9 +214,9 @@ void flood_fill_light( const bool skip_source_block, FloodFillQueue& queue, Bloc
                      neighbor.block_->is_translucent() )
                 {
                     if ( light_would_be_affected(
-                             LightStrategy::get_light( *neighbor.block_ ), attenuated_light_level ) )
+                             LightStrategy::get_light( *neighbor.block_ ), light_level ) )
                     {
-                        queue.push( std::make_pair( neighbor, attenuated_light_level ) );
+                        queue.push( std::make_pair( neighbor, light_level ) );
                     }
                 }
             }
@@ -252,7 +251,11 @@ const Vector3i Chunk::SIZE( SIZE_X, SIZE_Y, SIZE_Z );
 Chunk::Chunk( const Vector3i& position ) :
     position_( position )
 {
-    memset( neighbors_, 0, sizeof( neighbors_ ) );
+    FOREACH_SURROUNDING( x, y, z )
+    {
+        get_neighbor_impl( Vector3i( x, y, z ) ) = 0;
+    }
+
     get_neighbor_impl( Vector3i( 0, 0, 0 ) ) = this;
 }
 
@@ -411,7 +414,7 @@ void Chunk::reset_lighting()
 
             Vector3i sunlight_level = Block::MIN_LIGHT_LEVEL;
             bool sunlight_above = false;
-           
+
             if ( !block_above )
             {
                 sunlight_above = true;
@@ -428,13 +431,16 @@ void Chunk::reset_lighting()
                 Block& block = get_block( Vector3i( x, y, z ) );
                 block.set_light_level( Block::MIN_LIGHT_LEVEL );
 
-                if ( sunlight_above && block.is_translucent() )
+                if ( sunlight_above )
                 {
-                    filter_light( sunlight_level, block );
-                    block.set_sunlight_source( true );
-                    block.set_sunlight_level( sunlight_level );
+                    if ( block.is_translucent() )
+                    {
+                        filter_light( sunlight_level, block );
+                        block.set_sunlight_source( true );
+                        block.set_sunlight_level( sunlight_level );
+                    }
+                    else sunlight_above = false;
                 }
-                else sunlight_above = false;
 
                 if ( !sunlight_above )
                 {
@@ -496,6 +502,8 @@ void Chunk::unset_nop_sunlight_sources()
 
 void Chunk::apply_lighting_to_self()
 {
+    return; // FIXME For debugging.
+
     FloodFillQueue sun_flood_queue;
     FloodFillQueue color_flood_queue;
     BlockV blocks_visited;
@@ -525,6 +533,8 @@ void Chunk::apply_lighting_to_self()
 
 void Chunk::apply_lighting_to_neighbors()
 {
+    return; // FIXME For debugging.
+
     FloodFillQueue sun_flood_queue;
     FloodFillQueue color_flood_queue;
     BlockV blocks_visited;

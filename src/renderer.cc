@@ -742,6 +742,7 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     material_manager_.deconfigure_materials();
 
 #ifdef DEBUG_CHUNKS
+    glEnable( GL_BLEND );
     glEnable( GL_CULL_FACE );
     glEnable( GL_POLYGON_OFFSET_FILL );
     glPolygonOffset( 1.0f, 3.0f );
@@ -757,6 +758,7 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
     glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
     glDisable( GL_POLYGON_OFFSET_FILL );
     glDisable( GL_CULL_FACE );
+    glDisable( GL_BLEND );
 #endif
 
     glDepthMask( GL_TRUE );

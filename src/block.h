@@ -86,27 +86,27 @@ inline const BlockMaterialAttributes& get_block_material_attributes( const Block
 {
     static const BlockMaterialAttributes attributes[NUM_BLOCK_MATERIALS] =
     {
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //                       name,             texture,        transmits, emits, color,                          collision-mode
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        BlockMaterialAttributes( "Air",            "wtf",          true,      false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_NONE ),
-        BlockMaterialAttributes( "Grass",          "grass",        false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Dirt",           "dirt",         false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Clay",           "clay",         false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Mud",            "mud",          false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Stone",          "stone",        false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Bedrock",        "bedrock",      false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Lava",           "lava",         true ,     true,  Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_FLUID ),
-        BlockMaterialAttributes( "Tree Trunk",     "tree-trunk",   false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Tree Leaf",      "tree-leaf",    false,     false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Clear)",  "glass-clear",  true,      false, Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Red)",    "glass-red",    true,      false, Vector3f( 1.0f,  0.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Orange)", "glass-orange", true,      false, Vector3f( 1.0f,  0.5f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Yellow)", "glass-yellow", true,      false, Vector3f( 1.0f,  1.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Green)",  "glass-green",  true,      false, Vector3f( 0.0f,  1.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Blue)",   "glass-blue",   true,      false, Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Glass (Violet)", "glass-violet", true,      false, Vector3f( 1.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
-        BlockMaterialAttributes( "Water",          "water",        true,      false, Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_FLUID )
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        //                       name,             texture,        translucent, light-source, color,                          collision-mode
+        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        BlockMaterialAttributes( "Air",            "wtf",          true,        false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_NONE ),
+        BlockMaterialAttributes( "Grass",          "grass",        false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Dirt",           "dirt",         false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Clay",           "clay",         false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Mud",            "mud",          false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Stone",          "stone",        false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Bedrock",        "bedrock",      false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Lava",           "lava",         true ,       true,         Vector3f( 0.93f, 0.26f, 0.0f ), BLOCK_COLLISION_MODE_FLUID ),
+        BlockMaterialAttributes( "Tree Trunk",     "tree-trunk",   false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Tree Leaf",      "tree-leaf",    false,       false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Clear)",  "glass-clear",  true,        false,        Vector3f( 1.0f,  1.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Red)",    "glass-red",    true,        false,        Vector3f( 1.0f,  0.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Orange)", "glass-orange", true,        false,        Vector3f( 1.0f,  0.5f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Yellow)", "glass-yellow", true,        false,        Vector3f( 1.0f,  1.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Green)",  "glass-green",  true,        false,        Vector3f( 0.0f,  1.0f,  0.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Blue)",   "glass-blue",   true,        false,        Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Glass (Violet)", "glass-violet", true,        false,        Vector3f( 1.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_SOLID ),
+        BlockMaterialAttributes( "Water",          "water",        true,        false,        Vector3f( 0.0f,  0.0f,  1.0f ), BLOCK_COLLISION_MODE_FLUID )
     };
 
     assert( material >= 0 && material < NUM_BLOCK_MATERIALS );
@@ -230,6 +230,9 @@ private:
     uint8_t sunlight_level_b_ : 4;
     uint8_t data_             : 8; // Material-specific data.
 };
+
+// TODO: Move debug output operators to a common header file?
+std::ostream& operator<<( std::ostream& s, const Block& block );
 
 typedef std::vector<Block*> BlockV;
 

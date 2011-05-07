@@ -54,7 +54,7 @@ struct Sky
 
 protected:
 
-    static const Scalar DAY_CYCLE_SPEED = 0.01f;
+    static const Scalar DAY_CYCLE_SPEED = 0.001f;
 
     StarV stars_;
 
