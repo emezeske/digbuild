@@ -450,60 +450,10 @@ void Chunk::reset_lighting()
             }
         }
     }
-
-    unset_nop_sunlight_sources();
-}
-
-void Chunk::unset_nop_sunlight_sources()
-{
-    // Unset sunlight sources that will not contribute any lighting, because they
-    // are surrounded by other equivalent sunlight sources.  This saves time later,
-    // in apply_lighting_to_xxx(), because these sources will not have to be considered.
-    for ( int x = 0; x < SIZE_X; ++x )
-    {
-        for ( int z = 0; z < SIZE_Z; ++z )
-        {
-            for ( int y = SIZE_Y - 1; y >= 0; --y )
-            {
-                const Vector3i index( x, y, z );
-                Block& block = get_block( index );
-
-                if ( block.is_sunlight_source() )
-                {
-                    bool is_surrounded = true;
-                    Vector3i attenuated_sunlight_level = block.get_sunlight_level();
-                    attenuate_light( attenuated_sunlight_level );
-
-                    FOREACH_CARDINAL_RELATION( relation )
-                    {
-                        const Block* neighbor =
-                            maybe_get_block( index + cardinal_relation_vector( relation ) );
-
-                        if ( neighbor &&
-                             ( !neighbor->is_sunlight_source() ||
-                               light_would_be_affected(
-                                   neighbor->get_sunlight_level(), attenuated_sunlight_level ) ) )
-                        {
-                            is_surrounded = false;
-                            break;
-                        }
-                    }
-
-                    if ( is_surrounded )
-                    {
-                        block.set_sunlight_source( false );
-                    }
-                }
-                else break;
-            }
-        }
-    }
 }
 
 void Chunk::apply_lighting_to_self()
 {
-    return; // FIXME For debugging.
-
     FloodFillQueue sun_flood_queue;
     FloodFillQueue color_flood_queue;
     BlockV blocks_visited;
@@ -533,8 +483,6 @@ void Chunk::apply_lighting_to_self()
 
 void Chunk::apply_lighting_to_neighbors()
 {
-    return; // FIXME For debugging.
-
     FloodFillQueue sun_flood_queue;
     FloodFillQueue color_flood_queue;
     BlockV blocks_visited;
