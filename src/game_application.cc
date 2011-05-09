@@ -282,10 +282,21 @@ void GameApplication::schedule_chunk_update()
 {
     World::ChunkGuard chunk_guard( world_.get_chunk_lock(), boost::defer_lock );
 
-    if ( chunk_guard.try_lock() )
+    boost::xtime not_long;
+    not_long.sec = 0;
+    not_long.nsec = 0;
+
+    // If we can acquire the Chunk lock, AND the Chunk updater thread is not currently
+    // executing an update, then it's okay to queue up a new update.
+
+    if ( chunk_guard.try_lock() && chunk_updater_.wait( not_long ) )
     {
         updated_chunks_ = world_.get_updated_chunks();
-        chunk_updater_.schedule( boost::bind( &World::update_chunks, boost::ref( world_ ) ) );
+
+        if ( world_.chunk_update_needed() )
+        {
+            chunk_updater_.schedule( boost::bind( &World::update_chunks, boost::ref( world_ ) ) );
+        }
     }
 }
 

@@ -375,7 +375,7 @@ void World::do_one_step( const float step_time, const Vector3f& player_position 
 void World::update_chunks()
 {
     ChunkGuard chunk_guard( chunk_lock_ );
-    assert( updated_chunks_.empty() ); // FIXME: I have seen this assertion fail.
+    assert( updated_chunks_.empty() );
 
     if ( chunks_needing_update_.empty() )
     {

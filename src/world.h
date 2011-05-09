@@ -141,6 +141,11 @@ struct World
         chunks_needing_update_.insert( chunk );
     }
 
+    bool chunk_update_needed() const
+    {
+        return !chunks_needing_update_.empty();
+    }
+
     // This function updates the Chunk lighting and geometry for all of the Chunks that
     // have been marked for update.  Since this might be a time-consuming process, it
     // periodically yields its execution for e.g. the rendering loop to continue.  When
