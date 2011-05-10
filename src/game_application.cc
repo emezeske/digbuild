@@ -378,13 +378,14 @@ void GameApplication::do_one_step( const float step_time )
 
 void GameApplication::render()
 {
+    DebugInfoWindow& debug_info_window = gui_.get_debug_info_window();
     ++fps_frame_count_;
     const unsigned now = SDL_GetTicks();
 
     if ( fps_last_time_ + 1000 < now )
     {
         fps_last_time_ = now;
-        gui_.set_engine_fps( fps_frame_count_ );
+        debug_info_window.set_engine_fps( fps_frame_count_ );
         fps_frame_count_ = 0;
     }
 
@@ -398,8 +399,9 @@ void GameApplication::render()
     renderer_.render( window_, camera, world_ );
 #endif
 
-    gui_.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
-    gui_.set_current_material( get_block_material_attributes( player_.get_material_selection() ).name_ );
+    debug_info_window.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
+    debug_info_window.set_current_material( get_block_material_attributes( player_.get_material_selection() ).name_ );
+
     gui_.render();
 
     SDL_GL_SwapBuffers();
