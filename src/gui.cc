@@ -41,7 +41,7 @@ Gui::Gui( SDL_Surface* screen )
         throw std::runtime_error( std::string( "Error intializing GUI: " ) + AG_GetError() );
     }
 
-    AG_Window *window = AG_WindowNew( 0 );
+    AG_Window *window = AG_WindowNewNamed( 0, "Debug Info" );
     AG_WindowSetCaption( window, "Engine Stats" );
 
     fps_label_ = AG_LabelNewS( window, 0, "FPS: 0" );
