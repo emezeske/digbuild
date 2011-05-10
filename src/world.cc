@@ -1,3 +1,21 @@
+///////////////////////////////////////////////////////////////////////////
+// Copyright 2011 Evan Mezeske.
+//
+// This file is part of Digbuild.
+// 
+// Digbuild is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 2.
+// 
+// Digbuild is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+// 
+// You should have received a copy of the GNU General Public License
+// along with Digbuild.  If not, see <http://www.gnu.org/licenses/>.
+///////////////////////////////////////////////////////////////////////////
+
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/uniform_real.hpp>
 #include <boost/random/uniform_on_sphere.hpp>
@@ -346,6 +364,12 @@ void World::do_one_step( const float step_time, const Vector3f& player_position 
 
         BlockV blocks_visited;
         ChunkSet chunks_modified;
+
+        // TODO: Right now, only the Chunks that are immediately surrounding the Player's position
+        //       are simulated.  The simulated area should be extended outwards.
+
+        // TODO: Consider performing the simulation of multiple Chunks in parallel, using the same
+        //       approach as the lighting (apply to self, apply to neighbors).
 
         FOREACH_SURROUNDING( x, y, z )
         {
