@@ -26,13 +26,26 @@
 
 #include <boost/shared_ptr.hpp>
 
-// TODO: Consider abstracting out some of the get_window() stuff.
+struct Window
+{
+    Window( const std::string& name, const bool overlay, const int flags = DEFAULT_FLAGS );
+    virtual ~Window();
 
-struct DebugInfoWindow
+    virtual AG_Window* get_window();
+
+protected:
+
+    static const int DEFAULT_FLAGS =
+        AG_WINDOW_NORESIZE |
+        AG_WINDOW_NOMAXIMIZE |
+        AG_WINDOW_NOMINIMIZE;
+
+    AG_Window* window_;
+};
+
+struct DebugInfoWindow : public Window
 {
     DebugInfoWindow();
-
-    AG_Window* get_window();
 
     void set_engine_fps( const unsigned fps );
     void set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn );
@@ -40,7 +53,6 @@ struct DebugInfoWindow
 
 protected:
 
-    AG_Window* window_;
     AG_Label* fps_label_;
     AG_Label* chunks_label_;
     AG_Label* triangles_label_;
@@ -49,31 +61,58 @@ protected:
 
 typedef boost::shared_ptr<DebugInfoWindow> DebugInfoWindowSP;
 
-struct MainMenuWindow
+struct InputSettingsWindow : public Window
 {
-    MainMenuWindow( DebugInfoWindowSP debug_info_window );
+    InputSettingsWindow();
 
-    AG_Window* get_window();
+protected:
+};
+
+typedef boost::shared_ptr<InputSettingsWindow> InputSettingsWindowSP;
+
+struct GraphicsSettingsWindow : public Window
+{
+    GraphicsSettingsWindow();
+
+protected:
+};
+
+typedef boost::shared_ptr<GraphicsSettingsWindow> GraphicsSettingsWindowSP;
+
+struct GameApplication;
+
+struct MainMenuWindow : public Window
+{
+    MainMenuWindow( GameApplication& application );
+
+    DebugInfoWindow& get_debug_info_window();
 
 protected:
         
+    static void resume( AG_Event* event );
     static void show_window( AG_Event* event );
     static void quit( AG_Event* event );
 
-    AG_Window* window_;
     AG_Label* fps_label_;
 
     DebugInfoWindowSP debug_info_window_;
+    InputSettingsWindowSP input_settings_window_;
+    GraphicsSettingsWindowSP graphics_settings_window_;
 };
 
 typedef boost::shared_ptr<MainMenuWindow> MainMenuWindowSP;
 
 struct Gui
 {
-    Gui( SDL_Surface* screen );
+    Gui( GameApplication& application, SDL_Surface* screen );
     ~Gui();
 
-    DebugInfoWindow& get_debug_info_window();
+    MainMenuWindow& get_main_menu_window();
+
+    // "Stashing" the Gui hides all of the windows that are not marked as overlay
+    // windows.  "Unstashing" it returns all stashed windows to their previous state.
+    void stash();
+    void unstash();
 
     void handle_event( SDL_Event& sdl_event );
     void do_one_step( const float step_time );
@@ -81,7 +120,6 @@ struct Gui
 
 protected:
 
-    DebugInfoWindowSP debug_info_window_;
     MainMenuWindowSP main_menu_window_;
 };
 

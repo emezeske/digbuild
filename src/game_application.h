@@ -35,6 +35,8 @@ struct GameApplication
     ~GameApplication();
 
     void main_loop();
+    void stop();
+    void toggle_gui_focus();
 
 protected:
 
@@ -50,7 +52,6 @@ protected:
     void handle_mouse_up_event( const int button, const int x, const int y, const int xrel, const int yrel );
 
     void toggle_fullscreen();
-    void toggle_gui_focus();
 
     void schedule_chunk_update();
     void handle_chunk_changes();

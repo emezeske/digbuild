@@ -44,7 +44,7 @@ GameApplication::GameApplication( SDL_GL_Window &window ) :
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
     world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
-    gui_( window_.get_screen() ),
+    gui_( *this, window_.get_screen() ),
     chunk_updater_( 1 )
 {
     World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
@@ -57,6 +57,8 @@ GameApplication::GameApplication( SDL_GL_Window &window ) :
     }
 
     SCOPE_TIMER_END
+
+    gui_.stash();
 }
 
 GameApplication::~GameApplication()
@@ -86,6 +88,24 @@ void GameApplication::main_loop()
     }
 }
 
+void GameApplication::stop()
+{
+    run_ = false;
+}
+
+void GameApplication::toggle_gui_focus()
+{
+    SDL_ShowCursor( SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE ? SDL_DISABLE : SDL_ENABLE );
+    SDL_WM_GrabInput( SDL_WM_GrabInput( SDL_GRAB_QUERY ) == SDL_GRAB_ON ? SDL_GRAB_OFF : SDL_GRAB_ON );
+    gui_focused_ = !gui_focused_;
+
+    if ( gui_focused_ )
+    {
+        gui_.unstash();
+    }
+    else gui_.stash();
+}
+
 void GameApplication::process_events()
 {
     SDL_Event event;
@@ -101,7 +121,7 @@ void GameApplication::handle_event( SDL_Event &event )
     switch ( event.type )
     {
         case SDL_KEYDOWN:
-            if ( event.key.keysym.sym == SDLK_e )
+            if ( event.key.keysym.sym == SDLK_ESCAPE )
             {
                 toggle_gui_focus();
                 return;
@@ -109,13 +129,12 @@ void GameApplication::handle_event( SDL_Event &event )
             break;
 
         case SDL_VIDEORESIZE:
-            std::cout << "w: " << event.resize.w << ", h: " << event.resize.h << std::endl;
             window_.reshape_window( event.resize.w, event.resize.h );
             gui_.handle_event( event );
             return;
 
         case SDL_QUIT:
-            run_ = false;
+            stop();
             break;
     }
 
@@ -222,10 +241,6 @@ void GameApplication::handle_key_up_event( const int key, const int mod )
             player_.request_crouch( false );
             break;
 
-        case SDLK_ESCAPE:
-            run_ = false;
-            break;
-
         case SDLK_F11:
             toggle_fullscreen();
             break;
@@ -287,13 +302,6 @@ void GameApplication::toggle_fullscreen()
     {
         LOG( "Unable to toggle fullscreen: " << SDL_GetError() );
     }
-}
-
-void GameApplication::toggle_gui_focus()
-{
-    SDL_ShowCursor( SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE ? SDL_DISABLE : SDL_ENABLE );
-    SDL_WM_GrabInput( SDL_WM_GrabInput( SDL_GRAB_QUERY ) == SDL_GRAB_ON ? SDL_GRAB_OFF : SDL_GRAB_ON );
-    gui_focused_ = !gui_focused_;
 }
 
 void GameApplication::schedule_chunk_update()
@@ -378,7 +386,7 @@ void GameApplication::do_one_step( const float step_time )
 
 void GameApplication::render()
 {
-    DebugInfoWindow& debug_info_window = gui_.get_debug_info_window();
+    DebugInfoWindow& debug_info_window = gui_.get_main_menu_window().get_debug_info_window();
     ++fps_frame_count_;
     const unsigned now = SDL_GetTicks();
 

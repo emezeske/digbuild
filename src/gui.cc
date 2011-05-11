@@ -31,71 +31,27 @@
 #include <boost/foreach.hpp>
 
 #include "gui.h"
+#include "game_application.h"
 
 //////////////////////////////////////////////////////////////////////////////////
-// Local namespace function definitions:
+// Function definitions for Window:
 //////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-
-AG_Window* make_basic_window( const std::string& name )
+Window::Window( const std::string& name, const bool overlay, const int flags )
 {
-    const int flags =
-        AG_WINDOW_NORESIZE |
-        AG_WINDOW_NOMAXIMIZE |
-        AG_WINDOW_NOMINIMIZE;
+    window_ = AG_WindowNewNamedS( flags, name.c_str() );
+    AG_WindowSetCaptionS( window_, name.c_str() );
+    AG_WindowSetPadding( window_, 8, 8, 8, 8 );
 
-    // TODO: Consider NOMOVE/NOCLOSE for the main menu?
-
-    AG_Window *window = AG_WindowNewNamedS( flags, name.c_str() );
-    AG_WindowSetCaptionS( window, name.c_str() );
-    AG_WindowSetPadding( window, 8, 8, 8, 8 );
-    return window;
+    AG_SetInt( window_, "overlay", overlay );
+    AG_SetInt( window_, "previously_visible", false );
 }
 
-} // anonymous namespace
-
-//////////////////////////////////////////////////////////////////////////////////
-// Static function definitions for MainMenuWindow:
-//////////////////////////////////////////////////////////////////////////////////
-
-void MainMenuWindow::show_window( AG_Event* event )
+Window::~Window()
 {
-    AG_Window* window = static_cast<AG_Window*>( AG_PTR_NAMED( "window" ) );
-    AG_WindowShow( window );
 }
 
-void MainMenuWindow::quit( AG_Event* /* event */ )
-{
-    // TODO
-}
-
-//////////////////////////////////////////////////////////////////////////////////
-// Function definitions for MainMenuWindow:
-//////////////////////////////////////////////////////////////////////////////////
-
-MainMenuWindow::MainMenuWindow( DebugInfoWindowSP debug_info_window ) :
-    window_( make_basic_window( "Main Menu" ) ),
-    debug_info_window_( debug_info_window )
-{
-    std::vector<AG_Button*> buttons;
-    // TODO: Pass the correct window_ pointers instead of the main menu window_.
-    buttons.push_back( AG_ButtonNewFn( window_, 0, "Debug Info", &MainMenuWindow::show_window, "%p(window)", debug_info_window->get_window() ) );
-    buttons.push_back( AG_ButtonNewFn( window_, 0, "Keyboard/Mouse Settings", &MainMenuWindow::show_window, "%p(window)", window_ ) );
-    buttons.push_back( AG_ButtonNewFn( window_, 0, "Graphics Settings", &MainMenuWindow::show_window, "%p(window)", window_ ) );
-    buttons.push_back( AG_ButtonNewFn( window_, 0, "Quit", &MainMenuWindow::quit, "%p(window)", this ) );
-
-    BOOST_FOREACH( AG_Button* button, buttons )
-    {
-        AG_ExpandHoriz( button );
-    }
-
-    AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
-    AG_WindowSetPosition( window_, AG_WINDOW_MC, 0 );
-    AG_WindowShow( window_ );
-}
-
-AG_Window* MainMenuWindow::get_window()
+AG_Window* Window::get_window()
 {
     return window_;
 }
@@ -105,7 +61,7 @@ AG_Window* MainMenuWindow::get_window()
 //////////////////////////////////////////////////////////////////////////////////
 
 DebugInfoWindow::DebugInfoWindow() :
-    window_( make_basic_window( "Debug Info" ) )
+    Window( "Debug Info", true )
 {
     fps_label_ = AG_LabelNewS( window_, 0, "FPS: 0" );
     AG_ExpandHoriz( fps_label_ );
@@ -128,11 +84,6 @@ DebugInfoWindow::DebugInfoWindow() :
     AG_WindowShow( window_ );
 }
 
-AG_Window* DebugInfoWindow::get_window()
-{
-    return window_;
-}
-
 void DebugInfoWindow::set_engine_fps( const unsigned fps )
 {
     AG_LabelText( fps_label_, "FPS: %d", fps );
@@ -150,10 +101,84 @@ void DebugInfoWindow::set_current_material( const std::string& current_material 
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Function definitions for InputSettingsWindow:
+//////////////////////////////////////////////////////////////////////////////////
+
+InputSettingsWindow::InputSettingsWindow() :
+    Window( "Input Settings", false )
+{
+    AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for GraphicsSettingsWindow:
+//////////////////////////////////////////////////////////////////////////////////
+
+GraphicsSettingsWindow::GraphicsSettingsWindow() :
+    Window( "Graphics Settings", false )
+{
+    AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Static function definitions for MainMenuWindow:
+//////////////////////////////////////////////////////////////////////////////////
+
+void MainMenuWindow::resume( AG_Event* event )
+{
+    GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
+    application->toggle_gui_focus();
+}
+
+void MainMenuWindow::show_window( AG_Event* event )
+{
+    AG_Window* window = static_cast<AG_Window*>( AG_PTR_NAMED( "window" ) );
+    AG_WindowShow( window );
+}
+
+void MainMenuWindow::quit( AG_Event* event )
+{
+    GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
+    application->stop();
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Function definitions for MainMenuWindow:
+//////////////////////////////////////////////////////////////////////////////////
+
+MainMenuWindow::MainMenuWindow( GameApplication& application ) :
+    Window( "Main Menu", false, Window::DEFAULT_FLAGS | AG_WINDOW_NOCLOSE | AG_WINDOW_NOMOVE ),
+    debug_info_window_( new DebugInfoWindow ),
+    input_settings_window_( new InputSettingsWindow ),
+    graphics_settings_window_( new GraphicsSettingsWindow )
+{
+    std::vector<AG_Button*> buttons;
+    buttons.push_back( AG_ButtonNewFn( window_, 0, "Resume", &MainMenuWindow::resume, "%p(application)", &application ) );
+    buttons.push_back( AG_ButtonNewFn( window_, 0, "Debug Info", &MainMenuWindow::show_window, "%p(window)", debug_info_window_->get_window() ) );
+    buttons.push_back( AG_ButtonNewFn( window_, 0, "Input Settings", &MainMenuWindow::show_window, "%p(window)", input_settings_window_->get_window() ) );
+    buttons.push_back( AG_ButtonNewFn( window_, 0, "Graphics Settings", &MainMenuWindow::show_window, "%p(window)", graphics_settings_window_->get_window() ) );
+    buttons.push_back( AG_ButtonNewFn( window_, 0, "Quit", &MainMenuWindow::quit, "%p(application)", &application ) );
+
+    BOOST_FOREACH( AG_Button* button, buttons )
+    {
+        AG_ExpandHoriz( button );
+    }
+
+    AG_WindowSetGeometry( window_, 0, 0, 300, 150 );
+    AG_WindowSetPosition( window_, AG_WINDOW_MC, 0 );
+    AG_WindowShow( window_ );
+}
+
+DebugInfoWindow& MainMenuWindow::get_debug_info_window()
+{
+    return *debug_info_window_;
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Function definitions for Gui:
 //////////////////////////////////////////////////////////////////////////////////
 
-Gui::Gui( SDL_Surface* screen )
+Gui::Gui( GameApplication& application, SDL_Surface* screen )
 {
     if ( AG_InitCore( "DigBuild", 0 ) == -1 ||
          AG_InitVideoSDL( screen, AG_VIDEO_OVERLAY ) == -1 )
@@ -161,8 +186,7 @@ Gui::Gui( SDL_Surface* screen )
         throw std::runtime_error( std::string( "Error intializing GUI: " ) + AG_GetError() );
     }
 
-    debug_info_window_.reset( new DebugInfoWindow );
-    main_menu_window_.reset( new MainMenuWindow( debug_info_window_ ) );
+    main_menu_window_.reset( new MainMenuWindow( application ) );
 }
 
 Gui::~Gui()
@@ -170,9 +194,9 @@ Gui::~Gui()
     AG_Destroy();
 }
 
-DebugInfoWindow& Gui::get_debug_info_window()
+MainMenuWindow& Gui::get_main_menu_window()
 {
-    return *debug_info_window_;
+    return *main_menu_window_;
 }
 
 void Gui::handle_event( SDL_Event& sdl_event )
@@ -198,6 +222,11 @@ void Gui::do_one_step( const float step_time )
 
 void Gui::render()
 {
+    // TODO: Research whether the AG_LockVFS() and AG_ObjectLock() calls here and
+    //       in the following functions are actually necessary, given that the Gui
+    //       is only used from a single thread.  If it really is necessary, abstract
+    //       it out so that it's not duplicated.
+
     AG_LockVFS( &agDrivers );
     assert( agDriverSw );
 
@@ -215,6 +244,49 @@ void Gui::render()
     }
 
     AG_EndRendering( agDriverSw );
+
+    AG_UnlockVFS( &agDrivers );
+}
+
+void Gui::stash()
+{
+    AG_LockVFS( &agDrivers );
+    assert( agDriverSw );
+
+    AG_Window *window;
+    AG_FOREACH_WINDOW( window, agDriverSw )
+    {
+        AG_ObjectLock( window );
+
+        if ( !AG_GetInt( window, "overlay" ) )
+        {
+            AG_SetInt( window, "previously_visible", AG_WindowIsVisible( window ) );
+            AG_WindowHide( window );
+        }
+
+        AG_ObjectUnlock( window );
+    }
+
+    AG_UnlockVFS( &agDrivers );
+}
+
+void Gui::unstash()
+{
+    AG_LockVFS( &agDrivers );
+    assert( agDriverSw );
+
+    AG_Window *window;
+    AG_FOREACH_WINDOW( window, agDriverSw )
+    {
+        AG_ObjectLock( window );
+
+        if ( !AG_GetInt( window, "overlay" ) && AG_GetInt( window, "previously_visible" ) )
+        {
+            AG_WindowShow( window );
+        }
+
+        AG_ObjectUnlock( window );
+    }
 
     AG_UnlockVFS( &agDrivers );
 }
