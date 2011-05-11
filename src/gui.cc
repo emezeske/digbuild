@@ -34,7 +34,7 @@
 #include "game_application.h"
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for Window:
+// Member function definitions for Window:
 //////////////////////////////////////////////////////////////////////////////////
 
 Window::Window( const std::string& name, const bool overlay, const int flags )
@@ -57,7 +57,7 @@ AG_Window* Window::get_window()
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for DebugInfoWindow:
+// Member function definitions for DebugInfoWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
 DebugInfoWindow::DebugInfoWindow() :
@@ -101,23 +101,43 @@ void DebugInfoWindow::set_current_material( const std::string& current_material 
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for InputSettingsWindow:
+// Static function definitions for InputSettingsWindow:
+//////////////////////////////////////////////////////////////////////////////////
+
+void InputSettingsWindow::set_button( AG_Event* event ) 
+{
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Member function definitions for InputSettingsWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
 InputSettingsWindow::InputSettingsWindow() :
     Window( "Input Settings", false )
 {
     AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
+
+    // TODO: Lots of stuff.
+
+    AG_Box* box1 = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
+    AG_LabelNewS( box1, 0, "Move Forward" );
+    AG_ButtonNewFn( box1, 0, "w", &InputSettingsWindow::set_button, "%p(todo)", 0 );
+
+    AG_Box* box2 = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
+    AG_LabelNewS( box2, 0, "Move Backward" );
+    AG_ButtonNewFn( box2, 0, "s", &InputSettingsWindow::set_button, "%p(todo)", 0 );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for GraphicsSettingsWindow:
+// Member function definitions for GraphicsSettingsWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
 GraphicsSettingsWindow::GraphicsSettingsWindow() :
     Window( "Graphics Settings", false )
 {
     AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
+
+    // TODO: Lots of stuff.
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -143,7 +163,7 @@ void MainMenuWindow::quit( AG_Event* event )
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for MainMenuWindow:
+// Member function definitions for MainMenuWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
 MainMenuWindow::MainMenuWindow( GameApplication& application ) :
@@ -175,7 +195,7 @@ DebugInfoWindow& MainMenuWindow::get_debug_info_window()
 }
 
 //////////////////////////////////////////////////////////////////////////////////
-// Function definitions for Gui:
+// Member function definitions for Gui:
 //////////////////////////////////////////////////////////////////////////////////
 
 Gui::Gui( GameApplication& application, SDL_Surface* screen )

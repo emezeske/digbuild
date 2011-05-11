@@ -66,6 +66,8 @@ struct InputSettingsWindow : public Window
     InputSettingsWindow();
 
 protected:
+        
+    static void set_button( AG_Event* event );
 };
 
 typedef boost::shared_ptr<InputSettingsWindow> InputSettingsWindowSP;
