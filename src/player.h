@@ -42,13 +42,13 @@ struct Player
     Scalar get_yaw() const { return yaw_; }
     AABoxf get_aabb() const { return AABoxf( position_, position_ + SIZE ); }
 
-    void request_fast_move( const bool r ) { requesting_fast_move_ = r; }
     void request_move_forward( const bool r ) { requesting_move_forward_ = r; }
     void request_move_backward( const bool r ) { requesting_move_backward_ = r; }
     void request_strafe_left( const bool r ) { requesting_strafe_left_ = r; }
     void request_strafe_right( const bool r ) { requesting_strafe_right_ = r; }
     void request_jump( const bool r ) { requesting_jump_ = r; }
-    void request_crouch( const bool r ) { requesting_crouch_ = r; }
+    void request_walk( const bool r ) { requesting_walk_ = r; }
+    void request_sprint( const bool r ) { requesting_sprint_ = r; }
     void request_primary_fire( const bool r ) { requesting_primary_fire_ = r; }
     void request_secondary_fire( const bool r ) { requesting_secondary_fire_ = r; }
 
@@ -141,13 +141,14 @@ private:
     static const float
         EYE_HEIGHT = 1.65f,
         NOCLIP_SPEED = 30.0f,
-        NOCLIP_FAST_MOVE_FACTOR = 5.0f,
+        NOCLIP_SPRINT_FACTOR = 5.0f,
         GROUND_ACCELERATION = 35.0f,
         AIR_ACCELERATION = 10.0f,
         SWIMMING_ACCELERATION = 35.0f,
         GRAVITY_ACCELERATION = -30.0f,
         WALKING_SPEED = 5.0f,
         SWIMMING_SPEED = 3.0f,
+        SPRINT_FACTOR = 1.7f,
         JUMP_VELOCITY = 10.0f,
         PRIMARY_FIRE_DISTANCE = 4.0f,
         SECONDARY_FIRE_DISTANCE = 4.0f;
@@ -166,13 +167,13 @@ private:
         yaw_;
 
     bool
-        requesting_fast_move_,
         requesting_move_forward_,
         requesting_move_backward_,
         requesting_strafe_left_,
         requesting_strafe_right_,
         requesting_jump_,
-        requesting_crouch_,
+        requesting_walk_,
+        requesting_sprint_,
         requesting_primary_fire_,
         requesting_secondary_fire_,
         noclip_mode_,

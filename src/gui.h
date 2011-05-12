@@ -26,6 +26,10 @@
 
 #include <boost/shared_ptr.hpp>
 
+#include "player_input.h"
+
+struct GameApplication;
+
 struct Window
 {
     Window( const std::string& name, const bool overlay, const int flags = DEFAULT_FLAGS );
@@ -63,11 +67,13 @@ typedef boost::shared_ptr<DebugInfoWindow> DebugInfoWindowSP;
 
 struct InputSettingsWindow : public Window
 {
-    InputSettingsWindow();
+    InputSettingsWindow( GameApplication& application );
 
 protected:
-        
+
     static void set_button( AG_Event* event );
+
+    void add_input_button( AG_Box* parent, GameApplication& application, const std::string& label, const PlayerInputAction input_action );
 };
 
 typedef boost::shared_ptr<InputSettingsWindow> InputSettingsWindowSP;
@@ -80,8 +86,6 @@ protected:
 };
 
 typedef boost::shared_ptr<GraphicsSettingsWindow> GraphicsSettingsWindowSP;
-
-struct GameApplication;
 
 struct MainMenuWindow : public Window
 {
@@ -116,13 +120,15 @@ struct Gui
     void stash();
     void unstash();
 
-    void handle_event( SDL_Event& sdl_event );
+    void handle_event( const SDL_Event& sdl_event );
     void do_one_step( const float step_time );
     void render();
 
 protected:
 
     MainMenuWindowSP main_menu_window_;
+
+    bool stashed_;
 };
 
 #endif // GUI_H

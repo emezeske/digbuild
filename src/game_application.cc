@@ -40,11 +40,11 @@ GameApplication::GameApplication( SDL_GL_Window &window ) :
     fps_frame_count_( 0 ),
     mouse_sensitivity_( 0.005f ),
     window_( window ),
-    gui_focused_( false ),
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
     world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
     gui_( *this, window_.get_screen() ),
+    input_mode_( INPUT_MODE_PLAYER ),
     chunk_updater_( 1 )
 {
     World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
@@ -93,17 +93,28 @@ void GameApplication::stop()
     run_ = false;
 }
 
-void GameApplication::toggle_gui_focus()
+void GameApplication::set_gui_focus( const bool focus )
 {
-    SDL_ShowCursor( SDL_ShowCursor( SDL_QUERY ) == SDL_ENABLE ? SDL_DISABLE : SDL_ENABLE );
-    SDL_WM_GrabInput( SDL_WM_GrabInput( SDL_GRAB_QUERY ) == SDL_GRAB_ON ? SDL_GRAB_OFF : SDL_GRAB_ON );
-    gui_focused_ = !gui_focused_;
-
-    if ( gui_focused_ )
+    if ( focus )
     {
+        input_mode_ = INPUT_MODE_GUI;
+        SDL_ShowCursor( SDL_ENABLE );
+        SDL_WM_GrabInput( SDL_GRAB_OFF );
         gui_.unstash();
     }
-    else gui_.stash();
+    else
+    {
+        input_mode_ = INPUT_MODE_PLAYER;
+        SDL_ShowCursor( SDL_DISABLE );
+        SDL_WM_GrabInput( SDL_GRAB_ON );
+        gui_.stash();
+    }
+}
+
+void GameApplication::reroute_input( const PlayerInputAction reroute_action )
+{
+    input_mode_ = INPUT_MODE_REROUTE;
+    reroute_action_ = reroute_action;
 }
 
 void GameApplication::process_events()
@@ -116,138 +127,122 @@ void GameApplication::process_events()
     }
 }
 
-void GameApplication::handle_event( SDL_Event &event )
+void GameApplication::handle_event( const SDL_Event& event )
 {
+    if ( handle_universal_event( event ) )
+    {
+        return;
+    }
+
+    switch ( input_mode_ )
+    {
+        case INPUT_MODE_GUI:
+            handle_gui_event( event );
+            break;
+
+        case INPUT_MODE_PLAYER:
+            handle_player_event( event );
+            break;
+
+        case INPUT_MODE_REROUTE:
+            handle_reroute_event( event );
+            break;
+    }
+}
+
+bool GameApplication::handle_universal_event( const SDL_Event& event )
+{
+    bool handled = true;
+
     switch ( event.type )
     {
         case SDL_KEYDOWN:
-            if ( event.key.keysym.sym == SDLK_ESCAPE )
+            if ( event.key.keysym.sym == SDLK_F11 )
             {
-                toggle_gui_focus();
-                return;
+                toggle_fullscreen();
+                return true;
             }
             break;
 
         case SDL_VIDEORESIZE:
             window_.reshape_window( event.resize.w, event.resize.h );
             gui_.handle_event( event );
-            return;
+            return true;
 
         case SDL_QUIT:
             stop();
-            break;
-    }
-
-    if ( gui_focused_ )
-    {
-        gui_.handle_event( event );
-        return;
-    }
-
-    switch ( event.type )
-    {
-        case SDL_KEYDOWN:
-            handle_key_down_event( event.key.keysym.sym, event.key.keysym.mod );
-            break;
-
-        case SDL_KEYUP:
-            handle_key_up_event( event.key.keysym.sym, event.key.keysym.mod );
-            break;
-
-        case SDL_MOUSEMOTION:
-            handle_mouse_motion_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
-            break;
-
-        case SDL_MOUSEBUTTONDOWN:
-            handle_mouse_down_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
-            break;
-
-        case SDL_MOUSEBUTTONUP:
-            handle_mouse_up_event( event.button.button, event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel );
-            break;
-    }
-}
-
-void GameApplication::handle_key_down_event( const int key, const int mod )
-{
-    switch ( key )
-    {
-        case SDLK_LCTRL:
-            player_.request_fast_move( true );
-            break;
-
-        case SDLK_w:
-            player_.request_move_forward( true );
-            break;
-
-        case SDLK_s:
-            player_.request_move_backward( true );
-            break;
-
-        case SDLK_a:
-            player_.request_strafe_left( true );
-            break;
-
-        case SDLK_d:
-            player_.request_strafe_right( true );
-            break;
-
-        case SDLK_SPACE:
-            player_.request_jump( true );
-            break;
-
-        case SDLK_LSHIFT:
-            player_.request_crouch( true );
-            break;
-
-        case SDLK_b:
-            player_.toggle_noclip();
-            break;
+            return true;
 
         default:
             break;
     }
+
+    return false;
 }
 
-void GameApplication::handle_key_up_event( const int key, const int mod )
+void GameApplication::handle_gui_event( const SDL_Event& event )
 {
-    switch ( key )
+    if ( event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE )
     {
-        case SDLK_LCTRL:
-            player_.request_fast_move( false );
+        set_gui_focus( false );
+    }
+    else gui_.handle_event( event );
+}
+
+void GameApplication::handle_player_event( const SDL_Event& event )
+{
+    switch ( event.type )
+    {
+        case SDL_KEYDOWN:
+            if ( event.key.keysym.sym == SDLK_ESCAPE )
+            {
+                set_gui_focus( true );
+            }
+            else handle_input_down_event( PlayerInputBinding( PlayerInputBinding::SOURCE_KEYBOARD, event.key.keysym.sym ) );
             break;
 
-        case SDLK_w:
-            player_.request_move_forward( false );
+        case SDL_KEYUP:
+            handle_input_up_event( PlayerInputBinding( PlayerInputBinding::SOURCE_KEYBOARD, event.key.keysym.sym ) );
             break;
 
-        case SDLK_s:
-            player_.request_move_backward( false );
+        case SDL_MOUSEMOTION:
+            handle_mouse_motion_event( event.motion.xrel, event.motion.yrel );
             break;
 
-        case SDLK_a:
-            player_.request_strafe_left( false );
+        case SDL_MOUSEBUTTONDOWN:
+            handle_input_down_event( PlayerInputBinding( PlayerInputBinding::SOURCE_MOUSE, event.button.button ) );
             break;
 
-        case SDLK_d:
-            player_.request_strafe_right( false );
-            break;
-
-        case SDLK_SPACE:
-            player_.request_jump( false );
-            break;
-
-        case SDLK_LSHIFT:
-            player_.request_crouch( false );
-            break;
-
-        case SDLK_F11:
-            toggle_fullscreen();
+        case SDL_MOUSEBUTTONUP:
+            handle_input_up_event( PlayerInputBinding( PlayerInputBinding::SOURCE_MOUSE, event.button.button ) );
             break;
     }
 }
 
-void GameApplication::handle_mouse_motion_event( const int button, const int x, const int y, const int xrel, const int yrel )
+void GameApplication::handle_reroute_event( const SDL_Event& event )
+{
+    switch ( event.type )
+    {
+        case SDL_KEYDOWN:
+            if ( event.key.keysym.sym != SDLK_ESCAPE )
+            {
+                PlayerInputBinding binding( PlayerInputBinding::SOURCE_KEYBOARD, event.key.keysym.sym );
+                input_router_.set_binding( reroute_action_, binding );
+            }
+            break;
+
+        case SDL_MOUSEBUTTONDOWN:
+            {
+                PlayerInputBinding binding( PlayerInputBinding::SOURCE_MOUSE, event.button.button );
+                input_router_.set_binding( reroute_action_, binding );
+            }
+            break;
+    }
+
+    input_mode_ = INPUT_MODE_GUI;
+}
+
+void GameApplication::handle_mouse_motion_event( const int xrel, const int yrel )
 {
     // When the SDL library is first started, it will generate a mouse motion event with the current
     // position of the cursor.  We ignore it so that the initial camera settings remain intact.
@@ -262,34 +257,121 @@ void GameApplication::handle_mouse_motion_event( const int button, const int x, 
     player_.adjust_direction( mouse_sensitivity_ * Scalar( yrel ), mouse_sensitivity_ * Scalar( -xrel ) );
 }
 
-void GameApplication::handle_mouse_down_event( const int button, const int x, const int y, const int xrel, const int yrel )
+void GameApplication::handle_input_down_event( const PlayerInputBinding& binding )
 {
-    switch ( button )
+    PlayerInputAction action;
+
+    if ( !input_router_.get_action_for_binding( binding, action ) )
     {
-        case SDL_BUTTON_LEFT:
+        return;
+    }
+
+    switch ( action )
+    {
+        case PLAYER_INPUT_ACTION_MOVE_FORWARD:
+            player_.request_move_forward( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_MOVE_BACKWARD:
+            player_.request_move_backward( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_MOVE_LEFT:
+            player_.request_strafe_left( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_MOVE_RIGHT:
+            player_.request_strafe_right( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_JUMP:
+            player_.request_jump( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_WALK:
+            player_.request_walk( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_SPRINT:
+            player_.request_sprint( true );
+            break;
+
+        case PLAYER_INPUT_ACTION_NOCLIP:
+            player_.toggle_noclip();
+            break;
+
+        case PLAYER_INPUT_ACTION_PRIMARY_FIRE:
             player_.request_primary_fire( true );
             break;
-        case SDL_BUTTON_RIGHT:
+
+        case PLAYER_INPUT_ACTION_SECONDARY_FIRE:
             player_.request_secondary_fire( true );
             break;
-        case SDL_BUTTON_WHEELUP:
+
+        case PLAYER_INPUT_ACTION_SELECT_NEXT:
             player_.select_next_material();
             break;
-        case SDL_BUTTON_WHEELDOWN:
+
+        case PLAYER_INPUT_ACTION_SELECT_PREVIOUS:
             player_.select_previous_material();
             break;
     }
 }
 
-void GameApplication::handle_mouse_up_event( const int button, const int x, const int y, const int xrel, const int yrel )
+void GameApplication::handle_input_up_event( const PlayerInputBinding& binding )
 {
-    switch ( button )
+    PlayerInputAction action;
+
+    if ( !input_router_.get_action_for_binding( binding, action ) )
     {
-        case SDL_BUTTON_LEFT:
+        return;
+    }
+
+    switch ( action )
+    {
+        case PLAYER_INPUT_ACTION_MOVE_FORWARD:
+            player_.request_move_forward( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_MOVE_BACKWARD:
+            player_.request_move_backward( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_MOVE_LEFT:
+            player_.request_strafe_left( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_MOVE_RIGHT:
+            player_.request_strafe_right( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_JUMP:
+            player_.request_jump( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_WALK:
+            player_.request_walk( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_SPRINT:
+            player_.request_sprint( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_NOCLIP:
+            break;
+
+        case PLAYER_INPUT_ACTION_PRIMARY_FIRE:
             player_.request_primary_fire( false );
             break;
-        case SDL_BUTTON_RIGHT:
+
+        case PLAYER_INPUT_ACTION_SECONDARY_FIRE:
             player_.request_secondary_fire( false );
+            break;
+
+        case PLAYER_INPUT_ACTION_SELECT_NEXT:
+            break;
+
+        case PLAYER_INPUT_ACTION_SELECT_PREVIOUS:
             break;
     }
 }

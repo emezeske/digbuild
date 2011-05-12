@@ -38,13 +38,14 @@ const Vector3f
 const float
     Player::EYE_HEIGHT,
     Player::NOCLIP_SPEED,
-    Player::NOCLIP_FAST_MOVE_FACTOR,
+    Player::NOCLIP_SPRINT_FACTOR,
     Player::GROUND_ACCELERATION,
     Player::AIR_ACCELERATION,
     Player::SWIMMING_ACCELERATION,
     Player::GRAVITY_ACCELERATION,
     Player::WALKING_SPEED,
     Player::SWIMMING_SPEED,
+    Player::SPRINT_FACTOR,
     Player::JUMP_VELOCITY,
     Player::PRIMARY_FIRE_DISTANCE,
     Player::SECONDARY_FIRE_DISTANCE;
@@ -61,13 +62,13 @@ Player::Player( const Vector3f& position, const Scalar pitch, const Scalar yaw )
     position_( position ),
     pitch_( pitch ),
     yaw_( yaw ),
-    requesting_fast_move_( false ),
     requesting_move_forward_( false ),
     requesting_move_backward_( false ),
     requesting_strafe_left_( false ),
     requesting_strafe_right_( false ),
     requesting_jump_( false ),
-    requesting_crouch_( false ),
+    requesting_walk_( false ),
+    requesting_sprint_( false ),
     requesting_primary_fire_( false ),
     requesting_secondary_fire_( false ),
     noclip_mode_( true ),
@@ -116,14 +117,14 @@ void Player::do_one_step_noclip( const float step_time )
     velocity_ = Vector3f();
 
     Scalar movement_units = step_time * NOCLIP_SPEED;
-    if ( requesting_fast_move_ ) movement_units *= NOCLIP_FAST_MOVE_FACTOR;
+    if ( requesting_sprint_ ) movement_units *= NOCLIP_SPRINT_FACTOR;
 
     if ( requesting_move_forward_ ) noclip_move_forward( movement_units );
     if ( requesting_move_backward_ ) noclip_move_forward( -movement_units );
     if ( requesting_strafe_left_ ) noclip_strafe( movement_units );
     if ( requesting_strafe_right_ ) noclip_strafe( -movement_units );
     if ( requesting_jump_ ) position_ += Vector3f( 0.0f, movement_units, 0.0f );
-    if ( requesting_crouch_ ) position_ -= Vector3f( 0.0f, movement_units, 0.0f );
+    if ( requesting_walk_ ) position_ -= Vector3f( 0.0f, movement_units, 0.0f );
 }
 
 void Player::do_one_step_clip( const float step_time, const World& world )
@@ -316,11 +317,14 @@ Vector3f Player::get_acceleration( const World& world, const bool swimming )
         if ( requesting_move_forward_ ) target_velocity += get_eye_direction();
         if ( requesting_move_backward_ ) target_velocity -= get_eye_direction();
         if ( requesting_jump_ ) target_velocity += Vector3f( 0.0f, 1.0f, 0.0f );
-        if ( requesting_crouch_ ) target_velocity -= Vector3f( 0.0f, 1.0f, 0.0f );
+        if ( requesting_walk_ ) target_velocity -= Vector3f( 0.0f, 1.0f, 0.0f );
+
+        target_speed = SWIMMING_SPEED;
+        if ( requesting_sprint_ ) target_speed *= SPRINT_FACTOR;
 
         gmtl::normalize( target_velocity );
-        target_velocity *= SWIMMING_SPEED;
-        target_speed = SWIMMING_SPEED;
+        target_velocity *= target_speed;
+
         max_acceleration = SWIMMING_ACCELERATION;
     }
     else
@@ -330,11 +334,14 @@ Vector3f Player::get_acceleration( const World& world, const bool swimming )
         if ( requesting_move_forward_ ) target_velocity += forward_direction;
         if ( requesting_move_backward_ ) target_velocity -= forward_direction;
 
-        gmtl::normalize( target_velocity );
-        target_velocity *= WALKING_SPEED;
-        target_velocity[1] = velocity_[1];
-        acceleration[1] = GRAVITY_ACCELERATION;
         target_speed = WALKING_SPEED;
+        if ( requesting_sprint_ ) target_speed *= SPRINT_FACTOR;
+
+        gmtl::normalize( target_velocity );
+        target_velocity *= target_speed;
+        target_velocity[1] = velocity_[1];
+
+        acceleration[1] = GRAVITY_ACCELERATION;
         max_acceleration = ( feet_contacting_block_ ? GROUND_ACCELERATION : AIR_ACCELERATION );
     }
 

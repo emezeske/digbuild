@@ -106,26 +106,38 @@ void DebugInfoWindow::set_current_material( const std::string& current_material 
 
 void InputSettingsWindow::set_button( AG_Event* event ) 
 {
+    GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
+    const PlayerInputAction input_action = static_cast<PlayerInputAction>( AG_INT_NAMED( "input_action" ) );
+
+    // TODO: Probably need to pass a callback to reroute_input() to notify us when it's done?
+
+    application->reroute_input( input_action );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
 // Member function definitions for InputSettingsWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
-InputSettingsWindow::InputSettingsWindow() :
+InputSettingsWindow::InputSettingsWindow( GameApplication& application ) :
     Window( "Input Settings", false )
 {
-    AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
+    AG_WindowSetGeometry( window_, 0, 0, 400, 128 );
 
     // TODO: Lots of stuff.
 
     AG_Box* box1 = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
-    AG_LabelNewS( box1, 0, "Move Forward" );
-    AG_ButtonNewFn( box1, 0, "w", &InputSettingsWindow::set_button, "%p(todo)", 0 );
+    add_input_button( box1, application, "Move Forward", PLAYER_INPUT_ACTION_MOVE_FORWARD );
+    add_input_button( box1, application, "Move Backward", PLAYER_INPUT_ACTION_MOVE_BACKWARD );
 
     AG_Box* box2 = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
-    AG_LabelNewS( box2, 0, "Move Backward" );
-    AG_ButtonNewFn( box2, 0, "s", &InputSettingsWindow::set_button, "%p(todo)", 0 );
+    add_input_button( box2, application, "Move Left", PLAYER_INPUT_ACTION_MOVE_LEFT );
+    add_input_button( box2, application, "Move Right", PLAYER_INPUT_ACTION_MOVE_RIGHT );
+}
+
+void InputSettingsWindow::add_input_button( AG_Box* parent, GameApplication& application, const std::string& label, const PlayerInputAction input_action )
+{
+    AG_LabelNewS( parent, 0, ( label + ":" ).c_str() );
+    AG_ButtonNewFn( parent, 0, "w", &InputSettingsWindow::set_button, "%p(application) %i(input_action)", &application, input_action );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -147,7 +159,7 @@ GraphicsSettingsWindow::GraphicsSettingsWindow() :
 void MainMenuWindow::resume( AG_Event* event )
 {
     GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
-    application->toggle_gui_focus();
+    application->set_gui_focus( false );
 }
 
 void MainMenuWindow::show_window( AG_Event* event )
@@ -169,7 +181,7 @@ void MainMenuWindow::quit( AG_Event* event )
 MainMenuWindow::MainMenuWindow( GameApplication& application ) :
     Window( "Main Menu", false, Window::DEFAULT_FLAGS | AG_WINDOW_NOCLOSE | AG_WINDOW_NOMOVE ),
     debug_info_window_( new DebugInfoWindow ),
-    input_settings_window_( new InputSettingsWindow ),
+    input_settings_window_( new InputSettingsWindow( application ) ),
     graphics_settings_window_( new GraphicsSettingsWindow )
 {
     std::vector<AG_Button*> buttons;
@@ -198,7 +210,8 @@ DebugInfoWindow& MainMenuWindow::get_debug_info_window()
 // Member function definitions for Gui:
 //////////////////////////////////////////////////////////////////////////////////
 
-Gui::Gui( GameApplication& application, SDL_Surface* screen )
+Gui::Gui( GameApplication& application, SDL_Surface* screen ) :
+    stashed_( false )
 {
     if ( AG_InitCore( "DigBuild", 0 ) == -1 ||
          AG_InitVideoSDL( screen, AG_VIDEO_OVERLAY ) == -1 )
@@ -219,7 +232,7 @@ MainMenuWindow& Gui::get_main_menu_window()
     return *main_menu_window_;
 }
 
-void Gui::handle_event( SDL_Event& sdl_event )
+void Gui::handle_event( const SDL_Event& sdl_event )
 {
     assert( agDriverSw );
 
@@ -270,43 +283,53 @@ void Gui::render()
 
 void Gui::stash()
 {
-    AG_LockVFS( &agDrivers );
-    assert( agDriverSw );
-
-    AG_Window *window;
-    AG_FOREACH_WINDOW( window, agDriverSw )
+    if ( !stashed_ )
     {
-        AG_ObjectLock( window );
+        AG_LockVFS( &agDrivers );
+        assert( agDriverSw );
 
-        if ( !AG_GetInt( window, "overlay" ) )
+        AG_Window *window;
+        AG_FOREACH_WINDOW( window, agDriverSw )
         {
-            AG_SetInt( window, "previously_visible", AG_WindowIsVisible( window ) );
-            AG_WindowHide( window );
+            AG_ObjectLock( window );
+
+            if ( !AG_GetInt( window, "overlay" ) )
+            {
+                AG_SetInt( window, "previously_visible", AG_WindowIsVisible( window ) );
+                AG_WindowHide( window );
+            }
+
+            AG_ObjectUnlock( window );
         }
 
-        AG_ObjectUnlock( window );
-    }
+        AG_UnlockVFS( &agDrivers );
 
-    AG_UnlockVFS( &agDrivers );
+        stashed_ = true;
+    }
 }
 
 void Gui::unstash()
 {
-    AG_LockVFS( &agDrivers );
-    assert( agDriverSw );
-
-    AG_Window *window;
-    AG_FOREACH_WINDOW( window, agDriverSw )
+    if ( stashed_ )
     {
-        AG_ObjectLock( window );
+        AG_LockVFS( &agDrivers );
+        assert( agDriverSw );
 
-        if ( !AG_GetInt( window, "overlay" ) && AG_GetInt( window, "previously_visible" ) )
+        AG_Window *window;
+        AG_FOREACH_WINDOW( window, agDriverSw )
         {
-            AG_WindowShow( window );
+            AG_ObjectLock( window );
+
+            if ( !AG_GetInt( window, "overlay" ) && AG_GetInt( window, "previously_visible" ) )
+            {
+                AG_WindowShow( window );
+            }
+
+            AG_ObjectUnlock( window );
         }
 
-        AG_ObjectUnlock( window );
-    }
+        AG_UnlockVFS( &agDrivers );
 
-    AG_UnlockVFS( &agDrivers );
+        stashed_ = false;
+    }
 }

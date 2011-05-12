@@ -28,6 +28,7 @@
 #include "player.h"
 #include "world.h"
 #include "gui.h"
+#include "player_input.h"
 
 struct GameApplication
 {
@@ -36,20 +37,30 @@ struct GameApplication
 
     void main_loop();
     void stop();
-    void toggle_gui_focus();
+    void set_gui_focus( const bool focus );
+    void reroute_input( const PlayerInputAction reroute_action );
 
 protected:
 
     static const double FRAME_INTERVAL = 1.0 / 60.0;
 
+    enum InputMode
+    {
+        INPUT_MODE_GUI,
+        INPUT_MODE_PLAYER,
+        INPUT_MODE_REROUTE
+    };
+
     void process_events();
-    void handle_event( SDL_Event& event );
+    void handle_event( const SDL_Event& event );
+    bool handle_universal_event( const SDL_Event& event );
+    void handle_gui_event( const SDL_Event& event );
+    void handle_player_event( const SDL_Event& event );
+    void handle_reroute_event( const SDL_Event& event );
     void handle_resize_event( const int w, const int h );
-    void handle_key_down_event( const int key, const int mod );
-    void handle_key_up_event( const int key, const int mod );
-    void handle_mouse_motion_event( const int button, const int x, const int y, const int xrel, const int yrel );
-    void handle_mouse_down_event( const int button, const int x, const int y, const int xrel, const int yrel );
-    void handle_mouse_up_event( const int button, const int x, const int y, const int xrel, const int yrel );
+    void handle_mouse_motion_event( const int xrel, const int yrel );
+    void handle_input_down_event( const PlayerInputBinding& binding );
+    void handle_input_up_event( const PlayerInputBinding& binding );
 
     void toggle_fullscreen();
 
@@ -69,8 +80,6 @@ protected:
 
     SDL_GL_Window& window_;
 
-    bool gui_focused_;
-
     Renderer renderer_;
 
     Player player_;
@@ -78,6 +87,14 @@ protected:
     World world_;
 
     Gui gui_;
+
+    bool gui_focused_;
+
+    PlayerInputRouter input_router_;
+
+    InputMode input_mode_;
+
+    PlayerInputAction reroute_action_;
 
     boost::threadpool::pool chunk_updater_;
 
