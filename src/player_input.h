@@ -34,8 +34,14 @@ enum PlayerInputAction
     PLAYER_INPUT_ACTION_PRIMARY_FIRE,
     PLAYER_INPUT_ACTION_SECONDARY_FIRE,
     PLAYER_INPUT_ACTION_SELECT_NEXT,
-    PLAYER_INPUT_ACTION_SELECT_PREVIOUS
+    PLAYER_INPUT_ACTION_SELECT_PREVIOUS,
+    NUM_PLAYER_INPUT_ACTIONS
 };
+
+#define FOREACH_PLAYER_INPUT_ACTION( iterator_name )\
+    for ( PlayerInputAction iterator_name = PLAYER_INPUT_ACTION_MOVE_FORWARD;\
+          iterator_name != NUM_PLAYER_INPUT_ACTIONS;\
+          iterator_name = PlayerInputAction( int( iterator_name ) + 1 ) )
 
 struct PlayerInputBinding
 {
@@ -45,13 +51,13 @@ struct PlayerInputBinding
         SOURCE_KEYBOARD
     };
 
-    PlayerInputBinding( const Source source, const int descriptor );
+    PlayerInputBinding( const Source source = SOURCE_MOUSE, const int descriptor = 0 );
 
     bool operator<( const PlayerInputBinding& other ) const;
 
-protected:
+    std::string describe() const;
 
-    // TODO: SDL_GetKeyName()
+protected:
 
     Source source_;
 
@@ -61,6 +67,8 @@ protected:
 struct PlayerInputRouter
 {
     PlayerInputRouter();
+
+    void reset_to_defaults();
 
     void set_binding( const PlayerInputAction action, const PlayerInputBinding& binding );
 

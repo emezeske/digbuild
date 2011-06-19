@@ -104,14 +104,21 @@ void DebugInfoWindow::set_current_material( const std::string& current_material 
 // Static function definitions for InputSettingsWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
-void InputSettingsWindow::set_button( AG_Event* event ) 
+void InputSettingsWindow::bind_input( AG_Event* event ) 
 {
     GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
-    const PlayerInputAction input_action = static_cast<PlayerInputAction>( AG_INT_NAMED( "input_action" ) );
+    const PlayerInputAction action = static_cast<PlayerInputAction>( AG_INT_NAMED( "action" ) );
 
-    // TODO: Probably need to pass a callback to reroute_input() to notify us when it's done?
+    application->reroute_input( action );
+}
 
-    application->reroute_input( input_action );
+void InputSettingsWindow::reset_to_defaults( AG_Event* event ) 
+{
+    GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
+    InputSettingsWindow* input_settings_window = static_cast<InputSettingsWindow*>( AG_PTR_NAMED( "input_settings_window" ) );
+
+    application->get_input_router().reset_to_defaults();
+    input_settings_window->input_changed( application->get_input_router() );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -121,23 +128,69 @@ void InputSettingsWindow::set_button( AG_Event* event )
 InputSettingsWindow::InputSettingsWindow( GameApplication& application ) :
     Window( "Input Settings", false )
 {
-    AG_WindowSetGeometry( window_, 0, 0, 400, 128 );
+    AG_WindowSetGeometry( window_, 0, 0, 600, 260 );
 
-    // TODO: Lots of stuff.
+    AG_Box* rows[6];
 
-    AG_Box* box1 = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
-    add_input_button( box1, application, "Move Forward", PLAYER_INPUT_ACTION_MOVE_FORWARD );
-    add_input_button( box1, application, "Move Backward", PLAYER_INPUT_ACTION_MOVE_BACKWARD );
+    for ( unsigned i = 0; i < sizeof( rows ) / sizeof( AG_Box* ); ++i )
+    {
+        rows[i] = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
+    }
 
-    AG_Box* box2 = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
-    add_input_button( box2, application, "Move Left", PLAYER_INPUT_ACTION_MOVE_LEFT );
-    add_input_button( box2, application, "Move Right", PLAYER_INPUT_ACTION_MOVE_RIGHT );
+    add_input_button( rows[0], application, "Move Forward", PLAYER_INPUT_ACTION_MOVE_FORWARD );
+    add_input_button( rows[0], application, "Move Backward", PLAYER_INPUT_ACTION_MOVE_BACKWARD );
+
+    add_input_button( rows[1], application, "Move Left", PLAYER_INPUT_ACTION_MOVE_LEFT );
+    add_input_button( rows[1], application, "Move Right", PLAYER_INPUT_ACTION_MOVE_RIGHT );
+
+    add_input_button( rows[2], application, "Jump", PLAYER_INPUT_ACTION_JUMP );
+    add_input_button( rows[2], application, "Walk", PLAYER_INPUT_ACTION_WALK );
+
+    add_input_button( rows[3], application, "Sprint", PLAYER_INPUT_ACTION_SPRINT );
+    add_input_button( rows[3], application, "Noclip", PLAYER_INPUT_ACTION_NOCLIP );
+
+    add_input_button( rows[4], application, "Primary Fire", PLAYER_INPUT_ACTION_PRIMARY_FIRE );
+    add_input_button( rows[4], application, "Secondary Fire", PLAYER_INPUT_ACTION_SECONDARY_FIRE );
+
+    add_input_button( rows[5], application, "Next Material", PLAYER_INPUT_ACTION_SELECT_NEXT );
+    add_input_button( rows[5], application, "Previous Material", PLAYER_INPUT_ACTION_SELECT_PREVIOUS );
+
+    AG_SeparatorNew( window_, AG_SEPARATOR_HORIZ );
+    AG_ButtonNewFn( window_, 0, "Reset to Defaults", &InputSettingsWindow::reset_to_defaults,
+        "%p(application) %p(input_settings_window)", &application, this );
 }
 
-void InputSettingsWindow::add_input_button( AG_Box* parent, GameApplication& application, const std::string& label, const PlayerInputAction input_action )
+void InputSettingsWindow::input_changed( const PlayerInputRouter& router )
 {
-    AG_LabelNewS( parent, 0, ( label + ":" ).c_str() );
-    AG_ButtonNewFn( parent, 0, "w", &InputSettingsWindow::set_button, "%p(application) %i(input_action)", &application, input_action );
+    FOREACH_PLAYER_INPUT_ACTION( action )
+    {
+        AG_ButtonTextS( input_buttons[action], get_binding_name( router, action ).c_str() );
+    }
+}
+
+void InputSettingsWindow::add_input_button( AG_Box* parent, GameApplication& application, const std::string& label, const PlayerInputAction action )
+{
+    AG_Label* ag_label = AG_LabelNewS( parent, 0, ( label + ":" ).c_str() );
+    AG_LabelJustify( ag_label, AG_TEXT_LEFT );
+    AG_LabelSetPadding( ag_label, 16, 0, 0, 0 );
+
+    std::string binding_name = get_binding_name( application.get_input_router(), action );
+    input_buttons[action] = 
+        AG_ButtonNewFn( parent, 0, binding_name.c_str(), &InputSettingsWindow::bind_input,
+            "%p(application) %i(action)", &application, action );
+}
+
+std::string InputSettingsWindow::get_binding_name( const PlayerInputRouter& router, const PlayerInputAction action ) const
+{
+    PlayerInputBinding binding;
+    std::string binding_name = "[none]";
+
+    if ( router.get_binding_for_action( action, binding ) )
+    {
+        binding_name = binding.describe();
+    }
+
+    return binding_name;
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -204,6 +257,11 @@ MainMenuWindow::MainMenuWindow( GameApplication& application ) :
 DebugInfoWindow& MainMenuWindow::get_debug_info_window()
 {
     return *debug_info_window_;
+}
+
+InputSettingsWindow& MainMenuWindow::get_input_settings_window()
+{
+    return *input_settings_window_;
 }
 
 //////////////////////////////////////////////////////////////////////////////////

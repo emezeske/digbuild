@@ -19,6 +19,7 @@
 #include <SDL/SDL.h>
 
 #include "player_input.h"
+#include "log.h"
 
 //////////////////////////////////////////////////////////////////////////////////
 // Member function definitions for PlayerInputBinding:
@@ -45,14 +46,48 @@ bool PlayerInputBinding::operator<( const PlayerInputBinding& other ) const
     return false;
 }
 
+std::string PlayerInputBinding::describe() const
+{
+    std::string description;
+
+    switch ( source_ )
+    {
+        case SOURCE_MOUSE:
+            description += "mouse ";
+            switch ( descriptor_ )
+            {
+                case SDL_BUTTON_LEFT:      description += "left";       break;
+                case SDL_BUTTON_MIDDLE:    description += "middle";     break;
+                case SDL_BUTTON_RIGHT:     description += "right";      break;
+                case SDL_BUTTON_WHEELUP:   description += "wheel down"; break;
+                case SDL_BUTTON_WHEELDOWN: description += "wheel up";   break;
+                default:
+                    description += make_string() << descriptor_;
+                    break;
+            }
+            break;
+
+        case SOURCE_KEYBOARD:
+            description += SDL_GetKeyName( static_cast<SDLKey>( descriptor_ ) );
+            break;
+    }
+
+    return description;
+}
+
 //////////////////////////////////////////////////////////////////////////////////
 // Member function definitions for PlayerInputRouter:
 //////////////////////////////////////////////////////////////////////////////////
 
 PlayerInputRouter::PlayerInputRouter()
 {
-    // TODO: Load these from an INI file. Save them too!
+    // TODO: Load the settings from an INI file. Save them too!
 
+    reset_to_defaults();
+}
+
+void PlayerInputRouter::reset_to_defaults()
+{
     set_binding( PLAYER_INPUT_ACTION_MOVE_FORWARD,    PlayerInputBinding( PlayerInputBinding::SOURCE_KEYBOARD, SDLK_w ) );
     set_binding( PLAYER_INPUT_ACTION_MOVE_BACKWARD,   PlayerInputBinding( PlayerInputBinding::SOURCE_KEYBOARD, SDLK_s ) );
     set_binding( PLAYER_INPUT_ACTION_MOVE_LEFT,       PlayerInputBinding( PlayerInputBinding::SOURCE_KEYBOARD, SDLK_a ) );
@@ -69,15 +104,25 @@ PlayerInputRouter::PlayerInputRouter()
 
 void PlayerInputRouter::set_binding( const PlayerInputAction action, const PlayerInputBinding& binding )
 {
-    // TODO: Decide how to handle unbound keys/duplicate keys.
+    // First, remove any existing actions for the specified binding.  This prevents the same
+    // key from being bound to multiple actions.
 
-    InputMap::left_iterator input_it = input_map_.left.find( action );
+    InputMap::right_iterator binding_it = input_map_.right.find( binding );
 
-    if ( input_it == input_map_.left.end() )
+    if ( binding_it != input_map_.right.end() )
+    {
+        input_map_.right.erase( binding_it );
+    }
+
+    // Now we can map the binding to the action.
+
+    InputMap::left_iterator action_it = input_map_.left.find( action );
+
+    if ( action_it == input_map_.left.end() )
     {
         input_map_.insert( InputMap::value_type( action, binding ) );
     }
-    else input_map_.left.replace_data( input_it, binding );
+    else input_map_.left.replace_data( action_it, binding );
 }
 
 bool PlayerInputRouter::get_binding_for_action( const PlayerInputAction action, PlayerInputBinding& binding ) const

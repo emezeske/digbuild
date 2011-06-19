@@ -40,6 +40,8 @@ struct GameApplication
     void set_gui_focus( const bool focus );
     void reroute_input( const PlayerInputAction reroute_action );
 
+    PlayerInputRouter& get_input_router();
+
 protected:
 
     static const double FRAME_INTERVAL = 1.0 / 60.0;
@@ -86,15 +88,15 @@ protected:
 
     World world_;
 
-    Gui gui_;
-
-    bool gui_focused_;
-
     PlayerInputRouter input_router_;
 
     InputMode input_mode_;
 
     PlayerInputAction reroute_action_;
+
+    Gui gui_;
+
+    bool gui_focused_;
 
     boost::threadpool::pool chunk_updater_;
 

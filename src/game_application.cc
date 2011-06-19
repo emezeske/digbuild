@@ -43,8 +43,8 @@ GameApplication::GameApplication( SDL_GL_Window &window ) :
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
     // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
     world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
-    gui_( *this, window_.get_screen() ),
     input_mode_( INPUT_MODE_PLAYER ),
+    gui_( *this, window_.get_screen() ),
     chunk_updater_( 1 )
 {
     World::ChunkGuard chunk_guard( world_.get_chunk_lock() );
@@ -115,6 +115,11 @@ void GameApplication::reroute_input( const PlayerInputAction reroute_action )
 {
     input_mode_ = INPUT_MODE_REROUTE;
     reroute_action_ = reroute_action;
+}
+
+PlayerInputRouter& GameApplication::get_input_router()
+{
+    return input_router_;
 }
 
 void GameApplication::process_events()
@@ -221,25 +226,32 @@ void GameApplication::handle_player_event( const SDL_Event& event )
 
 void GameApplication::handle_reroute_event( const SDL_Event& event )
 {
+    PlayerInputBinding binding;
+    bool binding_set = false;
+
     switch ( event.type )
     {
         case SDL_KEYDOWN:
             if ( event.key.keysym.sym != SDLK_ESCAPE )
             {
-                PlayerInputBinding binding( PlayerInputBinding::SOURCE_KEYBOARD, event.key.keysym.sym );
-                input_router_.set_binding( reroute_action_, binding );
+                binding = PlayerInputBinding( PlayerInputBinding::SOURCE_KEYBOARD, event.key.keysym.sym );
+                binding_set = true;
             }
+            else input_mode_ = INPUT_MODE_GUI;
             break;
 
         case SDL_MOUSEBUTTONDOWN:
-            {
-                PlayerInputBinding binding( PlayerInputBinding::SOURCE_MOUSE, event.button.button );
-                input_router_.set_binding( reroute_action_, binding );
-            }
+            binding = PlayerInputBinding( PlayerInputBinding::SOURCE_MOUSE, event.button.button );
+            binding_set = true;
             break;
     }
 
-    input_mode_ = INPUT_MODE_GUI;
+    if ( binding_set )
+    {
+        input_router_.set_binding( reroute_action_, binding );
+        input_mode_ = INPUT_MODE_GUI;
+        gui_.get_main_menu_window().get_input_settings_window().input_changed( input_router_ );
+    }
 }
 
 void GameApplication::handle_mouse_motion_event( const int xrel, const int yrel )
@@ -315,6 +327,9 @@ void GameApplication::handle_input_down_event( const PlayerInputBinding& binding
         case PLAYER_INPUT_ACTION_SELECT_PREVIOUS:
             player_.select_previous_material();
             break;
+
+        default:
+            throw std::runtime_error( "Invalid player input action." );
     }
 }
 
@@ -373,6 +388,9 @@ void GameApplication::handle_input_up_event( const PlayerInputBinding& binding )
 
         case PLAYER_INPUT_ACTION_SELECT_PREVIOUS:
             break;
+
+        default:
+            throw std::runtime_error( "Invalid player input action." );
     }
 }
 

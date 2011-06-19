@@ -69,11 +69,17 @@ struct InputSettingsWindow : public Window
 {
     InputSettingsWindow( GameApplication& application );
 
+    void input_changed( const PlayerInputRouter& router );
+
 protected:
 
-    static void set_button( AG_Event* event );
+    static void bind_input( AG_Event* event );
+    static void reset_to_defaults( AG_Event* event );
 
     void add_input_button( AG_Box* parent, GameApplication& application, const std::string& label, const PlayerInputAction input_action );
+    std::string get_binding_name( const PlayerInputRouter& router, const PlayerInputAction action ) const;
+
+    AG_Button* input_buttons[NUM_PLAYER_INPUT_ACTIONS];
 };
 
 typedef boost::shared_ptr<InputSettingsWindow> InputSettingsWindowSP;
@@ -92,6 +98,7 @@ struct MainMenuWindow : public Window
     MainMenuWindow( GameApplication& application );
 
     DebugInfoWindow& get_debug_info_window();
+    InputSettingsWindow& get_input_settings_window();
 
 protected:
         
