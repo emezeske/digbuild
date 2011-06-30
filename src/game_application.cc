@@ -41,8 +41,8 @@ GameApplication::GameApplication( SDL_GL_Window &window ) :
     mouse_sensitivity_( 0.005f ),
     window_( window ),
     player_( Vector3f( 0.0f, 200.0f, 0.0f ), gmtl::Math::PI_OVER_2, gmtl::Math::PI_OVER_4 ),
-    // world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
-    world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
+    world_( time( NULL ) * 91387 + SDL_GetTicks() * 75181 ),
+    // world_( 0xeaafa35aaa8eafdf ), // NOTE: Always use a constant for consistent performance measurements.
     input_mode_( INPUT_MODE_PLAYER ),
     gui_( *this, window_.get_screen() ),
     chunk_updater_( 1 )

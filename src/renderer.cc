@@ -832,7 +832,7 @@ void Renderer::render_collisions( const Player& player )
 void Renderer::render_crosshairs( const SDL_GL_Window& window )
 {
     const Vector2i
-        size = window.get_screen_size(),
+        size = window.get_resolution(),
         center = size / 2;
 
     glMatrixMode( GL_PROJECTION );

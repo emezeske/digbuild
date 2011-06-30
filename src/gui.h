@@ -86,9 +86,15 @@ typedef boost::shared_ptr<InputSettingsWindow> InputSettingsWindowSP;
 
 struct GraphicsSettingsWindow : public Window
 {
-    GraphicsSettingsWindow();
+    GraphicsSettingsWindow( GameApplication& application );
 
 protected:
+
+    static void todo( AG_Event* event );
+
+    void add_label( AG_Box* parent, const std::string& label );
+
+    int draw_distance_;
 };
 
 typedef boost::shared_ptr<GraphicsSettingsWindow> GraphicsSettingsWindowSP;

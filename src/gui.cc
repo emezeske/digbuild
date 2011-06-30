@@ -194,15 +194,66 @@ std::string InputSettingsWindow::get_binding_name( const PlayerInputRouter& rout
 }
 
 //////////////////////////////////////////////////////////////////////////////////
+// Static function definitions for GraphicsSettingsWindow:
+//////////////////////////////////////////////////////////////////////////////////
+
+void GraphicsSettingsWindow::todo( AG_Event* event ) 
+{
+    GameApplication* application = static_cast<GameApplication*>( AG_PTR_NAMED( "application" ) );
+}
+
+//////////////////////////////////////////////////////////////////////////////////
 // Member function definitions for GraphicsSettingsWindow:
 //////////////////////////////////////////////////////////////////////////////////
 
-GraphicsSettingsWindow::GraphicsSettingsWindow() :
+GraphicsSettingsWindow::GraphicsSettingsWindow( GameApplication& application ) :
     Window( "Graphics Settings", false )
 {
-    AG_WindowSetGeometry( window_, 0, 0, 300, 128 );
+    AG_WindowSetGeometry( window_, 0, 0, 600, 128 );
+
+    AG_Box* rows[2];
+
+    for ( unsigned i = 0; i < sizeof( rows ) / sizeof( AG_Box* ); ++i )
+    {
+        rows[i] = AG_BoxNewHoriz( window_, AG_BOX_HFILL | AG_BOX_HOMOGENOUS );
+    }
 
     // TODO: Lots of stuff.
+    // TODO AG_SetEvent
+
+    add_label( rows[0], "Resolution" );
+    AG_UCombo* resolutions = AG_UComboNew( rows[0], AG_UCOMBO_HFILL );
+    AG_UComboSizeHint( resolutions, "Item #1234", 10 );
+    for ( int i = 0; i < 5; ++i )
+    {
+        AG_TlistAdd( resolutions->list, NULL, "Item #%d", i );
+    }
+
+    add_label( rows[0], "Antialiasing" );
+    AG_UCombo* antialiasings = AG_UComboNew( rows[0], AG_UCOMBO_HFILL );
+    AG_UComboSizeHint( antialiasings, "Item #1234", 10 );
+    for ( int i = 0; i < 5; ++i )
+    {
+        AG_TlistAdd( antialiasings->list, NULL, "Item #%d", i );
+    }
+
+    add_label( rows[1], "Vertical Sync" );
+    AG_CheckboxNew( rows[1], 0, "(Enabled)" );
+
+    add_label( rows[1], "Draw Distance" );
+    draw_distance_ = 250;
+    AG_SliderNewIntR( rows[1], AG_SLIDER_HORIZ, AG_SLIDER_HFILL, &draw_distance_, 1, 500 );
+
+    // AG_SeparatorNew( window_, AG_SEPARATOR_HORIZ );
+    // AG_ButtonNewFn( window_, 0, "Apply", &InputSettingsWindow::reset_to_defaults,
+    //     "%p(application) %p(input_settings_window)", &application, this );
+}
+
+void GraphicsSettingsWindow::add_label( AG_Box* parent, const std::string& label )
+{
+    AG_Label* ag_label = AG_LabelNewS( parent, 0, ( label + ":" ).c_str() );
+    AG_LabelJustify( ag_label, AG_TEXT_LEFT );
+    AG_LabelSetPadding( ag_label, 16, 0, 0, 0 );
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -235,7 +286,7 @@ MainMenuWindow::MainMenuWindow( GameApplication& application ) :
     Window( "Main Menu", false, Window::DEFAULT_FLAGS | AG_WINDOW_NOCLOSE | AG_WINDOW_NOMOVE ),
     debug_info_window_( new DebugInfoWindow ),
     input_settings_window_( new InputSettingsWindow( application ) ),
-    graphics_settings_window_( new GraphicsSettingsWindow )
+    graphics_settings_window_( new GraphicsSettingsWindow( application ) )
 {
     std::vector<AG_Button*> buttons;
     buttons.push_back( AG_ButtonNewFn( window_, 0, "Resume", &MainMenuWindow::resume, "%p(application)", &application ) );
@@ -271,7 +322,7 @@ InputSettingsWindow& MainMenuWindow::get_input_settings_window()
 Gui::Gui( GameApplication& application, SDL_Surface* screen ) :
     stashed_( false )
 {
-    if ( AG_InitCore( "DigBuild", 0 ) == -1 ||
+    if ( AG_InitCore( "Digbuild", 0 ) == -1 ||
          AG_InitVideoSDL( screen, AG_VIDEO_OVERLAY ) == -1 )
     {
         throw std::runtime_error( std::string( "Error intializing GUI: " ) + AG_GetError() );

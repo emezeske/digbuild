@@ -21,31 +21,45 @@
 
 #include <GL/glew.h>
 #include <SDL/SDL.h>
+
 #include <string>
+#include <set>
 
 #include "math.h"
 
+typedef std::set<Vector2i, VectorLess<Vector2i> > ResolutionSet;
+
 struct SDL_GL_Window
 {
-    SDL_GL_Window( const int w, const int h, const int bpp, const Uint32 flags, const std::string &title );
+    SDL_GL_Window( const std::string& title );
 
     void reshape_window( const int w, const int h );
     void reshape_window();
 
-    Vector2i get_screen_size() const { return screen_size_; }
-
+    const Vector2i& get_resolution() const { return resolution_; }
+    const ResolutionSet& get_available_resolutions() const { return available_resolutions_; };
     SDL_Surface* get_screen() const { return screen_; }
-
     float get_draw_distance() const { return draw_distance_; }
     void set_draw_distance( const float draw_distance ) { draw_distance_ = draw_distance; }
 
 protected:
 
+    static const int
+        BITS_PER_PIXEL = 32,
+        BYTES_PER_PIXEL = 4,
+        VIDEO_MODE_FLAGS = SDL_OPENGL | SDL_FULLSCREEN;
+
+    static const float
+        DEFAULT_DRAW_DISTANCE = 250.0f;
+
+    void prepare_resolution();
     void init_GL();
 
-    SDL_Surface *screen_;
+    SDL_Surface* screen_;
 
-    Vector2i screen_size_;
+    Vector2i resolution_;
+
+    ResolutionSet available_resolutions_;
 
     int
         screen_bpp_,
