@@ -29,9 +29,8 @@ In the top-level Digbuild directory, run 'scons'.  Depending on where your
 Boost and GMTL header files are installed, you may need to use the following
 options:
 
-    --boost_include_dir=<PATH>
-    --gmtl_include_dir=<PATH>
-    --threadpool_include_dir=<PATH>
+    --boost-include-dir=<PATH>
+    --gmtl-include-dir=<PATH>
 
 The following arguments may also be used to configure the build:
 

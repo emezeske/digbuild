@@ -315,11 +315,9 @@ World::World( const uint64_t world_seed ) :
 
     SCOPE_TIMER_BEGIN( "World generation" )
 
-    // FIXME: for ( int x = 0; x < 3; ++x )
-    for ( int x = 0; x < 1; ++x )
+    for ( int x = 0; x < 3; ++x )
     {
-        // FIXME: for ( int z = 0; z < 3; ++z )
-        for ( int z = 0; z < 1; ++z )
+        for ( int z = 0; z < 3; ++z )
         {
             const Vector2i region_position( x * WorldGenerator::REGION_SIZE, z * WorldGenerator::REGION_SIZE );
             ChunkSPV region = generator_.generate_region( region_position, worker_pool_ );

@@ -47,7 +47,7 @@ protected:
     static const int
         BITS_PER_PIXEL = 32,
         BYTES_PER_PIXEL = 4,
-        VIDEO_MODE_FLAGS = SDL_OPENGL | SDL_FULLSCREEN;
+        VIDEO_MODE_FLAGS = SDL_OPENGL; // FIXME: Make this work with multiple monitors: | SDL_FULLSCREEN;
 
     static const float
         DEFAULT_DRAW_DISTANCE = 250.0f;

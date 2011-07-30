@@ -48,7 +48,7 @@
     
         void read_clock( timespec& t )
         {
-            const int clock_result = clock_gettime( CLOCK_MONOTONIC_RAW, &t );
+            const int clock_result = clock_gettime( CLOCK_MONOTONIC, &t );
     
             if ( clock_result == -1 )
             {
