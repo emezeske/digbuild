@@ -62,7 +62,12 @@ SDL_GL_Window::SDL_GL_Window( const std::string &title ) :
     SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, 1 ); 
 
     // FIXME: Don't hack the resolution here; make this work with multiple monitors.
+#if defined BLAKE
+    resolution_ = Vector2i( 1920, 1200 );
+#elif defined EVAN
     resolution_ = Vector2i( 1024, 768 );
+#endif
+
     screen_ = SDL_SetVideoMode( resolution_[0], resolution_[1], BITS_PER_PIXEL, VIDEO_MODE_FLAGS );
 
     if ( !screen_ )
