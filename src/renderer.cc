@@ -619,7 +619,6 @@ void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f
 //////////////////////////////////////////////////////////////////////////////////
 
 Renderer::Renderer() :
-    num_chunks_drawn_( 0 ),
     num_triangles_drawn_( 0 )
 {
 }
@@ -658,13 +657,27 @@ void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const 
 void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const World& world )
 #endif
 {
+    glDepthMask( GL_TRUE );
     glClear( GL_DEPTH_BUFFER_BIT );
+    glDepthFunc( GL_LEQUAL );
+    glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+    material_manager_.deconfigure_materials();
 
     glPushMatrix();
         camera.rotate();
+        set_render_state_for_sky();
         render_sky( world.get_sky() );
         camera.translate();
-        render_chunks( camera, world.get_sky() );
+        set_render_state_for_rendering_opaque( camera, world.get_sky() );
+        update_frustum_lists( camera );
+        set_render_state_for_depth_buffer_initialization();
+        update_not_occluded_lists();
+        set_render_state_for_rendering_opaque( camera, world.get_sky() );
+        render_visible_opaque_chunks();
+        set_render_state_for_rendering_translucent( camera, world.get_sky() );
+        render_visible_translucent_chunks( camera );
+        glDisable( GL_DEPTH_TEST );
+        material_manager_.deconfigure_materials();
 #ifdef DEBUG_COLLISIONS
         render_collisions( player );
 #endif
@@ -676,182 +689,117 @@ void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const 
 
 void Renderer::render_sky( const Sky& sky )
 {
-    sky_renderer_.render( sky );
+    glDepthMask( GL_FALSE );
+        sky_renderer_.render( sky );
+    glDepthMask( GL_TRUE );
 }
 
-void Renderer::render_chunks( const Camera& camera, const Sky& sky )
+void Renderer::update_frustum_lists( const Camera& camera )
 {
-    // TODO: Decompose this function.
+    // TODO: exploit the temporal stability of chunks-in-frustum
+    opaque_chunks_in_frustum_.clear();
+    translucent_chunks_in_frustum_.clear();
 
-    gmtl::Frustumf view_frustum(
+    gmtl::Frustumf frustum(
         get_opengl_matrix( GL_MODELVIEW_MATRIX ),
         get_opengl_matrix( GL_PROJECTION_MATRIX )
     );
 
-    typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
-    typedef std::vector<DistanceChunkPair> DistanceChunkPairV;
-
-    DistanceChunkPairV
-        opaque_chunks,
-        translucent_chunks;
-
-#ifdef DEBUG_CHUNKS
-    DistanceChunkPairV debug_chunks;
-#endif
-
-    num_chunks_drawn_ = 0;
-    num_chunks_culled_by_occlusion_ = 0;
-    num_triangles_drawn_ = 0;
-
+    // frustum culling, and camera-centroid distance computed for each chunk:
     BOOST_FOREACH( const ChunkRendererMap::value_type& chunk_renderer_it, chunk_renderers_ )
     {
         ChunkRenderer& chunk_renderer = *chunk_renderer_it.second.get();
 
         // TODO: Arrange the chunks into some kind of hierarchy and cull based on that.
-        if ( gmtl::isInVolume( view_frustum, chunk_renderer.get_aabb() ) )
+        if ( gmtl::isInVolume( frustum, chunk_renderer.get_aabb() ) )
         {
-            const Vector3f camera_to_centroid = camera.get_position() - chunk_renderer.get_centroid();
-            const Scalar distance_squared = gmtl::lengthSquared( camera_to_centroid );
+            const Vector3f camera_to_centroid      = camera.get_position() - chunk_renderer.get_centroid();
+            const Scalar distance_squared          = gmtl::lengthSquared( camera_to_centroid );
             const DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
 
-            opaque_chunks.push_back( distance_chunk );
-
             if ( chunk_renderer.has_translucent_materials() )
-            {
-                translucent_chunks.push_back( distance_chunk );
-            }
-
-#ifdef DEBUG_CHUNKS
-            debug_chunks.push_back( distance_chunk );
-#endif
-            ++num_chunks_drawn_;
-            num_triangles_drawn_ += chunk_renderer.get_num_triangles();
+              translucent_chunks_in_frustum_.push_back( distance_chunk );
+            opaque_chunks_in_frustum_.push_back( distance_chunk );
         }
     }
 
-    material_manager_.configure_materials( camera, sky );
+    // sort chunks by distance
+    opaque_chunks_in_frustum_.sort();
+    translucent_chunks_in_frustum_.sort();
+}
 
+void Renderer::set_render_state_for_sky()
+{
+    glDisable( GL_CULL_FACE );
+}
+
+void Renderer::set_render_state_for_depth_buffer_initialization()
+{
+    glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
+    glDepthMask( GL_TRUE );
+    material_manager_.deconfigure_materials();
+}
+
+void Renderer::set_render_state_for_occlusion_queries()
+{
+    glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE );
+    glDepthMask( GL_FALSE );
+    // currently guaranteed to be the case, left in for clarity:
+    //material_manager_.deconfigure_materials();
+}
+
+void Renderer::set_render_state_for_rendering_opaque( const Camera& camera, const Sky& sky )
+{
+    glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+    glDepthMask( GL_TRUE );
     glEnable( GL_CULL_FACE );
     glEnable( GL_DEPTH_TEST );
-    glDepthFunc( GL_LEQUAL );
-
-    // The opaque materials are rendered first, in front-to-back order.  This results in
-    // many of the farthest chunks being fully occluded, and thus their fragments will be
-    // rejected without running any expensive fragment shaders.
-
-    std::sort( opaque_chunks.begin(), opaque_chunks.end() );
-
-    // skip occlusion queries if there are too few blocks to render for it to be useful
-    bool do_occlusion_queries = (opaque_chunks.size() > MAJOR_OCCLUDER_CHUNK_COUNT);
-
-    // a static number of the closest chunks to the camera will be rendered first before we start occlusion queries
-    typedef std::pair<DistanceChunkPairV::iterator,DistanceChunkPairV::iterator> DistanceChunkPairRange; // FIXME move
-    DistanceChunkPairRange major_occluder_chunk_range,
-                           potentially_occluded_chunk_range;
-
-    if( do_occlusion_queries ) {
-        major_occluder_chunk_range       = std::make_pair( opaque_chunks.begin()                             , opaque_chunks.begin() + MAJOR_OCCLUDER_CHUNK_COUNT );
-        potentially_occluded_chunk_range = std::make_pair( opaque_chunks.begin() + MAJOR_OCCLUDER_CHUNK_COUNT, opaque_chunks.end()                                );
-    } else {
-        major_occluder_chunk_range = std::make_pair(opaque_chunks.begin(), opaque_chunks.end() );
-    }
-
-    // render them to initialize the depth buffer so when we start doing occlusion queries they are worthwhile
-    BOOST_FOREACH( const DistanceChunkPair& it, major_occluder_chunk_range )
-    {
-        it.second->render_opaque();
-    }
-
-    // now start occlusion queries for all other chunks
-    //unsigned num_occlusion_queries = opaque_chunks.size() - MAJOR_OCCLUDER_CHUNK_COUNT;
-    GLuint occlusion_queries[MAX_OCCLUSION_QUERIES]; // FIXME move this
-    glGenQueriesARB( MAX_OCCLUSION_QUERIES, occlusion_queries );
-    GLuint samples_not_occluded;
-
-    // obviously we dont want to draw these aabbs to color or depth buffers, so
-    glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE ); glDepthMask( GL_FALSE );
-    // we also dont want any fancy stuff happening per-pixel
-    material_manager_.deconfigure_materials();
-
-    // do an occlusion query for each of the rest of the chunks
-    // using the bounding box (it's possible this could be done more efficiently with 1 or 2 triangles instead of the 12 of the AABB, less geometry to send to the GPU, not certain if it's worth it)
-    unsigned occlusion_query_index = 0,
-             occlusion_query_count = 0,
-             culled_chunk_count = 0;
-    BOOST_FOREACH( const DistanceChunkPair& it, potentially_occluded_chunk_range )
-    {
-        glBeginQueryARB( GL_SAMPLES_PASSED_ARB, occlusion_queries[occlusion_query_index++] );
-        it.second->render_aabb();
-        glEndQueryARB( GL_SAMPLES_PASSED_ARB );
-    }
-    occlusion_query_count = occlusion_query_index;
-
-    glFlush();
-
-    // FIXME OPTIMIZE 
-    // now, this is wasteful ... we are blocking until all the queries return, doing nothing
-    // a little better than this would be polling until most of the queries are done and doing some work on the cpu in parallel
-    // better than that would be see if it's acceptable for occlusion results to be off by one frame
-    GLint occlusion_query_results_available;
-    glGetQueryObjectivARB( occlusion_queries[ occlusion_query_index ], GL_QUERY_RESULT_AVAILABLE_ARB, &occlusion_query_results_available );
-
-    // yay our occlusion queries are done...
-    // get ready to render stuff again
-    glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE ); glDepthMask( GL_TRUE );
     material_manager_.configure_materials( camera, sky );
+}
 
-    // this is a little unsatisfying, the way I am associating the query indices with chunks, there's room for improvement
-    // but this is a first hack-and-slash attempt at occlusion queries
-    // iterate through the occlusion queries,
-    // check how many samples were not occluded, render accordingly
-    // FIXME zero protection against the AABB being clipped by the near plane when the actual geometry would not be, this could produce artifacts because of a false-positive occlusion query
-    DistanceChunkPairV::iterator potentially_occluded_chunk = potentially_occluded_chunk_range.first;
-    for ( unsigned i = 0; i < occlusion_query_index; ++i ) {
-        glGetQueryObjectuivARB( occlusion_queries[i], GL_QUERY_RESULT_ARB, &samples_not_occluded );
-        if ( samples_not_occluded > SAMPLES_NOT_OCCLUDED_THRESHOLD ) {
-            potentially_occluded_chunk->second->render_opaque();
-        } else {
-            ++num_chunks_culled_by_occlusion_;
-        }
-        ++potentially_occluded_chunk;
+void Renderer::set_render_state_for_rendering_translucent( const Camera& camera, const Sky& sky )
+{
+    glDepthMask( GL_FALSE );
+    glDisable( GL_CULL_FACE );
+    // currently guaranteed to be the case, left in for clarity:
+    //material_manager_.configure_materials( camera, sky );
+    //glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
+}
+
+
+
+void Renderer::update_not_occluded_lists()
+{
+    opaque_chunks_not_occluded_.clear(); // TODO OPTIMIZE
+    translucent_chunks_not_occluded_.clear(); // TODO OPTIMIZE
+
+    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks_in_frustum_ )
+    {
+        opaque_chunks_not_occluded_.push_back( it );
     }
 
-    glDisable( GL_CULL_FACE );
-    glDepthMask( GL_FALSE );
+    BOOST_FOREACH( const DistanceChunkPair& it, translucent_chunks_in_frustum_ )
+    {
+        translucent_chunks_not_occluded_.push_back( it );
+    }
+}
 
-    // Now draw the translucent parts of the Chunks from back to front.
-
-    std::sort( translucent_chunks.begin(), translucent_chunks.end() );
-
-    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks )
+void Renderer::render_visible_translucent_chunks( const Camera& camera )
+{
+    // draw translucent parts of the Chunks from back to front
+    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks_not_occluded_ )
     {
         it.second->render_translucent( camera );
     }
+}
 
-    material_manager_.deconfigure_materials();
-
-#ifdef DEBUG_CHUNKS
-    glEnable( GL_BLEND );
-    glEnable( GL_CULL_FACE );
-    glEnable( GL_POLYGON_OFFSET_FILL );
-    glPolygonOffset( 1.0f, 3.0f );
-    glColor4f( 1.0f, 0.0f, 0.0f, 0.3f );
-
-    std::sort( debug_chunks.begin(), debug_chunks.end() );
-
-    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, debug_chunks )
+void Renderer::render_visible_opaque_chunks()
+{
+    // draw opaque parts of the Chunks from front to back
+    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks_not_occluded_ )
     {
-        it.second->render_aabb();
+        it.second->render_opaque();
     }
-
-    glColor4f( 1.0f, 1.0f, 1.0f, 1.0f );
-    glDisable( GL_POLYGON_OFFSET_FILL );
-    glDisable( GL_CULL_FACE );
-    glDisable( GL_BLEND );
-#endif
-
-    glDepthMask( GL_TRUE );
-    glDisable( GL_DEPTH_TEST );
 }
 
 #ifdef DEBUG_COLLISIONS

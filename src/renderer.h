@@ -252,14 +252,23 @@ struct Renderer
     void render( const SDL_GL_Window& window, const Camera& camera, const World& world );
 #endif
 
-    unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
+    unsigned get_num_chunks_drawn() const { return 0; } // FIXME
     unsigned get_num_triangles_drawn() const { return num_triangles_drawn_; }
-    unsigned get_num_chunks_culled_by_occlusion() const { return num_chunks_culled_by_occlusion_; }
+    unsigned get_num_chunks_culled_by_occlusion() const { return 0; } // FIXME
 
 protected:
 
     void render_sky( const Sky& sky );
-    void render_chunks( const Camera& camera, const Sky& sky );
+    void update_frustum_lists( const Camera& camera );
+    void update_not_occluded_lists();
+    void render_visible_opaque_chunks();
+    void render_visible_translucent_chunks( const Camera& camera );
+    void set_render_state_for_sky();
+    void set_render_state_for_depth_buffer_initialization();
+    void set_render_state_for_occlusion_queries();
+    void set_render_state_for_rendering_opaque( const Camera& camera, const Sky& sky );
+    void set_render_state_for_rendering_translucent( const Camera& camera, const Sky& sky );
+
 #ifdef DEBUG_COLLISIONS
     void render_collisions( const Player& player );
 #endif
@@ -273,9 +282,15 @@ protected:
 
     SkyRenderer sky_renderer_;
 
-    unsigned num_chunks_drawn_;
+    typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
+    typedef std::list<DistanceChunkPair> DistanceChunkPairL;
 
-    unsigned num_chunks_culled_by_occlusion_;
+    DistanceChunkPairL opaque_chunks_in_frustum_        ,
+                       translucent_chunks_in_frustum_   ,
+                       opaque_chunks_not_occluded_      ,
+                       translucent_chunks_not_occluded_ ;
+                       //chunks_entering_frustum_  ,
+                       //chunks_leaving_frustum_   ,
 
     unsigned num_triangles_drawn_;
 };
