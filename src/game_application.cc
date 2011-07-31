@@ -507,7 +507,7 @@ void GameApplication::render()
     renderer_.render( window_, camera, world_ );
 #endif
 
-    debug_info_window.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn() );
+    debug_info_window.set_engine_chunk_stats( renderer_.get_num_chunks_drawn(), world_.get_chunks().size(), renderer_.get_num_triangles_drawn(), renderer_.get_num_chunks_drawn() );
     debug_info_window.set_current_material( get_block_material_attributes( player_.get_material_selection() ).name_ );
 
     gui_.render();

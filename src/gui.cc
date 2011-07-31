@@ -71,6 +71,10 @@ DebugInfoWindow::DebugInfoWindow() :
     AG_ExpandHoriz( chunks_label_ );
     AG_WidgetUpdate( chunks_label_ );
 
+    chunks_occluded_label_ = AG_LabelNewS( window_, 0, "Chunks Occluded: 0/0" );
+    AG_ExpandHoriz( chunks_occluded_label_ );
+    AG_WidgetUpdate( chunks_occluded_label_ );
+
     triangles_label_ = AG_LabelNewS( window_, 0, "Triangles: 0" );
     AG_ExpandHoriz( triangles_label_ );
     AG_WidgetUpdate( triangles_label_ );
@@ -89,10 +93,11 @@ void DebugInfoWindow::set_engine_fps( const unsigned fps )
     AG_LabelText( fps_label_, "FPS: %d", fps );
 }
 
-void DebugInfoWindow::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn )
+void DebugInfoWindow::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn, const unsigned chunks_occluded )
 {
-    AG_LabelText( chunks_label_, "Chunks: %d/%d", chunks_drawn, chunks_total );
-    AG_LabelText( triangles_label_, "Triangles: %d", triangles_drawn );
+    AG_LabelText( chunks_label_          , "Chunks: %d/%d"          , chunks_drawn       , chunks_total );
+    AG_LabelText( chunks_occluded_label_ , "Chunks Occluded: %d/%d" , chunks_occluded    , chunks_total );
+    AG_LabelText( triangles_label_       , "Triangles: %d"          , triangles_drawn );
 }
 
 void DebugInfoWindow::set_current_material( const std::string& current_material )
