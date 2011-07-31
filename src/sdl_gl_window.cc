@@ -59,7 +59,7 @@ SDL_GL_Window::SDL_GL_Window( const std::string &title ) :
     SDL_GL_SetAttribute( SDL_GL_MULTISAMPLESAMPLES, 4 );
 
     // TODO: Vsync should be configurable.
-    SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, 1 ); 
+    SDL_GL_SetAttribute( SDL_GL_SWAP_CONTROL, 0 ); 
 
     // FIXME: Don't hack the resolution here; make this work with multiple monitors.
 #if defined BLAKE

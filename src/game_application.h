@@ -44,7 +44,7 @@ struct GameApplication
 
 protected:
 
-    static const double FRAME_INTERVAL = 1.0 / 60.0;
+    static const double FRAME_INTERVAL = 1.0 / 300.0;
 
     enum InputMode
     {
