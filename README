@@ -21,6 +21,8 @@ The following libraries are required to build Digbuild:
     * SDL Image
     * Threadpool (http://threadpool.sourceforge.net)
 
+On Ubuntu 11.04 you can use ubuntu1104.sh to install these.
+
 ###########################################################################
 # BUILDING
 ###########################################################################
