@@ -671,6 +671,7 @@ void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const 
         set_render_state_for_rendering_opaque( camera, world.get_sky() );
         update_frustum_lists( camera );
         set_render_state_for_depth_buffer_initialization();
+        render_depth_buffer_initialization();
         update_not_occluded_lists();
         set_render_state_for_rendering_opaque( camera, world.get_sky() );
         render_visible_opaque_chunks();
@@ -766,8 +767,6 @@ void Renderer::set_render_state_for_rendering_translucent( const Camera& camera,
     //glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 }
 
-
-
 void Renderer::update_not_occluded_lists()
 {
     opaque_chunks_not_occluded_.clear(); // TODO OPTIMIZE
@@ -801,6 +800,22 @@ void Renderer::render_visible_opaque_chunks()
         it.second->render_opaque();
     }
 }
+
+// do a quick pass, rendering just the depth bits
+// for a set of nearby opaque objects
+// which should provide enough occlusion to make hardware occlusion culling effective
+void Renderer::render_depth_buffer_initialization()
+{
+    // draw opaque parts of the Chunks from front to back
+    int i = 0;
+    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks_in_frustum_ )
+    {
+        it.second->render_opaque();
+        if ( i++ > MAJOR_OCCLUDER_CHUNK_COUNT )
+          break;
+    }
+}
+
 
 #ifdef DEBUG_COLLISIONS
 void Renderer::render_collisions( const Player& player )

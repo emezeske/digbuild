@@ -19,7 +19,7 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#define MAJOR_OCCLUDER_CHUNK_COUNT 32
+#define MAJOR_OCCLUDER_CHUNK_COUNT 256
 #define MAX_OCCLUSION_QUERIES 8192
 
 // it might possibly be acceptable to turn this a bit higher than 0, there will be artifacts
@@ -259,20 +259,23 @@ struct Renderer
 protected:
 
     void render_sky( const Sky& sky );
-    void update_frustum_lists( const Camera& camera );
-    void update_not_occluded_lists();
     void render_visible_opaque_chunks();
     void render_visible_translucent_chunks( const Camera& camera );
+    void render_depth_buffer_initialization();
+    void render_crosshairs( const SDL_GL_Window& window );
+#ifdef DEBUG_COLLISIONS
+    void render_collisions( const Player& player );
+#endif
+
     void set_render_state_for_sky();
     void set_render_state_for_depth_buffer_initialization();
     void set_render_state_for_occlusion_queries();
     void set_render_state_for_rendering_opaque( const Camera& camera, const Sky& sky );
     void set_render_state_for_rendering_translucent( const Camera& camera, const Sky& sky );
 
-#ifdef DEBUG_COLLISIONS
-    void render_collisions( const Player& player );
-#endif
-    void render_crosshairs( const SDL_GL_Window& window );
+    void update_frustum_lists( const Camera& camera );
+    void update_not_occluded_lists();
+
     gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 
     RendererMaterialManager material_manager_;
