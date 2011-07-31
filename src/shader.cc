@@ -103,10 +103,9 @@ void Shader::check_shader_status( const GLuint shader, const GLenum status_type 
 
         if ( length > 0 )
         {
-            int written;
             std::vector<char> log( length );
-            glGetShaderInfoLog( shader, length, &written, &log[0] );
-            throw std::runtime_error( "Shader compilation/linking failed: " + std::string( log.begin(), log.end() ) );
+            glGetShaderInfoLog( shader, length, NULL, &log[0] );
+            throw std::runtime_error( "Shader compilation/linking failed: " + std::string( &log[0] ) );
         }
         else throw std::runtime_error( "Shader compilation/linking failed" );
     }

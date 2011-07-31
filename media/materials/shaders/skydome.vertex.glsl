@@ -16,6 +16,8 @@
 // along with Digbuild.  If not, see <http://www.gnu.org/licenses/>.
 ///////////////////////////////////////////////////////////////////////////
 
+#version 130
+
 varying float height;
 
 void main()
