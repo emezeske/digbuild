@@ -700,6 +700,7 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 #endif
 
     num_chunks_drawn_ = 0;
+    num_chunks_culled_by_occlusion_ = 0;
     num_triangles_drawn_ = 0;
 
     BOOST_FOREACH( const ChunkRendererMap::value_type& chunk_renderer_it, chunk_renderers_ )
@@ -740,9 +741,79 @@ void Renderer::render_chunks( const Camera& camera, const Sky& sky )
 
     std::sort( opaque_chunks.begin(), opaque_chunks.end() );
 
-    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks )
+    // skip occlusion queries if there are too few blocks to render for it to be useful
+    bool do_occlusion_queries = (opaque_chunks.size() > MAJOR_OCCLUDER_CHUNK_COUNT);
+
+    // a static number of the closest chunks to the camera will be rendered first before we start occlusion queries
+    typedef std::pair<DistanceChunkPairV::iterator,DistanceChunkPairV::iterator> DistanceChunkPairRange; // FIXME move
+    DistanceChunkPairRange major_occluder_chunk_range,
+                           potentially_occluded_chunk_range;
+
+    if( do_occlusion_queries ) {
+        major_occluder_chunk_range       = std::make_pair( opaque_chunks.begin()                             , opaque_chunks.begin() + MAJOR_OCCLUDER_CHUNK_COUNT );
+        potentially_occluded_chunk_range = std::make_pair( opaque_chunks.begin() + MAJOR_OCCLUDER_CHUNK_COUNT, opaque_chunks.end()                                );
+    } else {
+        major_occluder_chunk_range = std::make_pair(opaque_chunks.begin(), opaque_chunks.end() );
+    }
+
+    // render them to initialize the depth buffer so when we start doing occlusion queries they are worthwhile
+    BOOST_FOREACH( const DistanceChunkPair& it, major_occluder_chunk_range )
     {
         it.second->render_opaque();
+    }
+
+    // now start occlusion queries for all other chunks
+    //unsigned num_occlusion_queries = opaque_chunks.size() - MAJOR_OCCLUDER_CHUNK_COUNT;
+    GLuint occlusion_queries[MAX_OCCLUSION_QUERIES]; // FIXME move this
+    glGenQueriesARB( MAX_OCCLUSION_QUERIES, occlusion_queries );
+    GLuint samples_not_occluded;
+
+    // obviously we dont want to draw these aabbs to color or depth buffers, so
+    glColorMask( GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE ); glDepthMask( GL_FALSE );
+    // we also dont want any fancy stuff happening per-pixel
+    material_manager_.deconfigure_materials();
+
+    // do an occlusion query for each of the rest of the chunks
+    // using the bounding box (it's possible this could be done more efficiently with 1 or 2 triangles instead of the 12 of the AABB, less geometry to send to the GPU, not certain if it's worth it)
+    unsigned occlusion_query_index = 0,
+             occlusion_query_count = 0,
+             culled_chunk_count = 0;
+    BOOST_FOREACH( const DistanceChunkPair& it, potentially_occluded_chunk_range )
+    {
+        glBeginQueryARB( GL_SAMPLES_PASSED_ARB, occlusion_queries[occlusion_query_index++] );
+        it.second->render_aabb();
+        glEndQueryARB( GL_SAMPLES_PASSED_ARB );
+    }
+    occlusion_query_count = occlusion_query_index;
+
+    glFlush();
+
+    // FIXME OPTIMIZE 
+    // now, this is wasteful ... we are blocking until all the queries return, doing nothing
+    // a little better than this would be polling until most of the queries are done and doing some work on the cpu in parallel
+    // better than that would be see if it's acceptable for occlusion results to be off by one frame
+    GLint occlusion_query_results_available;
+    glGetQueryObjectivARB( occlusion_queries[ occlusion_query_index ], GL_QUERY_RESULT_AVAILABLE_ARB, &occlusion_query_results_available );
+
+    // yay our occlusion queries are done...
+    // get ready to render stuff again
+    glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE ); glDepthMask( GL_TRUE );
+    material_manager_.configure_materials( camera, sky );
+
+    // this is a little unsatisfying, the way I am associating the query indices with chunks, there's room for improvement
+    // but this is a first hack-and-slash attempt at occlusion queries
+    // iterate through the occlusion queries,
+    // check how many samples were not occluded, render accordingly
+    // FIXME zero protection against the AABB being clipped by the near plane when the actual geometry would not be, this could produce artifacts because of a false-positive occlusion query
+    DistanceChunkPairV::iterator potentially_occluded_chunk = potentially_occluded_chunk_range.first;
+    for ( unsigned i = 0; i < occlusion_query_index; ++i ) {
+        glGetQueryObjectuivARB( occlusion_queries[i], GL_QUERY_RESULT_ARB, &samples_not_occluded );
+        if ( samples_not_occluded > SAMPLES_NOT_OCCLUDED_THRESHOLD ) {
+            potentially_occluded_chunk->second->render_opaque();
+        } else {
+            ++num_chunks_culled_by_occlusion_;
+        }
+        ++potentially_occluded_chunk;
     }
 
     glDisable( GL_CULL_FACE );

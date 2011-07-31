@@ -19,6 +19,12 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
+#define MAJOR_OCCLUDER_CHUNK_COUNT 32
+#define MAX_OCCLUSION_QUERIES 8192
+
+// it might possibly be acceptable to turn this a bit higher than 0, there will be artifacts
+#define SAMPLES_NOT_OCCLUDED_THRESHOLD 0
+
 #include <GL/glew.h>
 
 #include <set>
@@ -248,6 +254,7 @@ struct Renderer
 
     unsigned get_num_chunks_drawn() const { return num_chunks_drawn_; }
     unsigned get_num_triangles_drawn() const { return num_triangles_drawn_; }
+    unsigned get_num_chunks_culled_by_occlusion() const { return num_chunks_culled_by_occlusion_; }
 
 protected:
 
@@ -267,6 +274,8 @@ protected:
     SkyRenderer sky_renderer_;
 
     unsigned num_chunks_drawn_;
+
+    unsigned num_chunks_culled_by_occlusion_;
 
     unsigned num_triangles_drawn_;
 };
