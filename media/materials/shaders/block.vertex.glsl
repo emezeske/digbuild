@@ -16,6 +16,8 @@
 // along with Digbuild.  If not, see <http://www.gnu.org/licenses/>.
 ///////////////////////////////////////////////////////////////////////////
 
+#version 130
+
 uniform vec3 camera_position;
 uniform vec3 sun_direction;
 uniform vec3 moon_direction;
@@ -52,11 +54,11 @@ void main()
 
     sun_lighting = sunlight_level * sun_light_color;
 
-    float moon_incidence = 0.65f + 0.35f * dot( moon_direction, gl_Normal );
+    float moon_incidence = 0.65 + 0.35 * dot( moon_direction, gl_Normal );
     vec3 moon_lighting = moon_light_color * sunlight_level;
     vec3 moon_diffuse = moon_lighting * moon_incidence;
 
-    vec3 ambient_light = vec3( 0.06f, 0.06f, 0.06f ) + 0.50f * sun_lighting + 0.45f * moon_lighting;
+    vec3 ambient_light = vec3( 0.06, 0.06, 0.06 ) + 0.50 * sun_lighting + 0.45 * moon_lighting;
     base_lighting = ambient_light + light_level + moon_diffuse;
 
     texture_coordinates = gl_MultiTexCoord1.stp;
