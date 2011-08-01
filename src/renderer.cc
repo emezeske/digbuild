@@ -797,7 +797,7 @@ void Renderer::update_chunks_visible_lists()
     // maybe build the list of translucent chunks after occlusion culling is done?
     // I think that makes sense ... the only reason for them to be in separate lists is for translucents to be drawn back to front
     // right now they're split into translucents-in-frustum etc which is pointless I think ... do occlusion queries first on all chunks in frustum, then split the lists and the translucents are already sorted, rev-iterate and voila
-    int num_occlusion_queries = chunks_in_frustum_.size() - MAJOR_OCCLUDER_CHUNK_COUNT;
+    int num_occlusion_queries = chunks_in_frustum_.size();
 
     GLuint * current_occlusion_query = &occlusion_queries_[0];
     glGenQueriesARB( num_occlusion_queries, current_occlusion_query );
@@ -805,8 +805,6 @@ void Renderer::update_chunks_visible_lists()
     int count = 0;
     BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
-        if( ++count < MAJOR_OCCLUDER_CHUNK_COUNT ) // these were rendered to initialize the depth buffer, they are not going to be occluded so skip them
-          continue;
         glBeginQueryARB( GL_SAMPLES_PASSED_ARB, *(current_occlusion_query++) );
         it.second->render_aabb();
         glEndQueryARB( GL_SAMPLES_PASSED_ARB );
@@ -824,9 +822,10 @@ void Renderer::update_chunks_visible_lists()
     current_occlusion_query = &occlusion_queries_[0];
     BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
-        if( ++count < MAJOR_OCCLUDER_CHUNK_COUNT ) // these were rendered to initialize the depth buffer, they are not going to be occluded so skip them
+        if( count++ < ASSUME_NOT_OCCLUDED ) // see comment at define
         {
             queue_chunk_for_rendering( it );
+            current_occlusion_query++;
             continue;
         }
         // get results:
@@ -872,7 +871,7 @@ void Renderer::render_depth_buffer_initialization()
     int i = 0;
     BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
-        if ( ++i > MAJOR_OCCLUDER_CHUNK_COUNT ) break;
+        if ( i++ > MAJOR_OCCLUDER_CHUNK_COUNT ) break;
         it.second->render_opaque();
     }
 }
