@@ -822,7 +822,7 @@ void Renderer::update_chunks_visible_lists()
     current_occlusion_query = &occlusion_queries_[0];
     BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
-        if( count++ < ASSUME_NOT_OCCLUDED ) // see comment at define
+        if( count++ < ASSUME_NOT_OCCLUDED_CHUNK_COUNT ) // see comment at define
         {
             queue_chunk_for_rendering( it );
             current_occlusion_query++;

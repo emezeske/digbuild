@@ -24,7 +24,7 @@
 // the near-clip plane can cause false-negatives on occlusion queries
 // because the AABB gets completely clipped so 0 samples are drawn
 // but the actualy geometry is visible
-#define ASSUME_NOT_OCCLUDED 1
+#define ASSUME_NOT_OCCLUDED_CHUNK_COUNT 1
 
 // it might possibly be acceptable to turn this a bit higher than 0, there will be artifacts
 #define SAMPLES_NOT_OCCLUDED_THRESHOLD 0
