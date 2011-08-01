@@ -52,7 +52,7 @@ struct DebugInfoWindow : public Window
     DebugInfoWindow();
 
     void set_engine_fps( const unsigned fps );
-    void set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn, const unsigned chunks_occluded );
+    void set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn, const unsigned chunks_in_frustum );
     void set_current_material( const std::string& material );
 
 protected:

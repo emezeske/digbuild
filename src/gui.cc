@@ -93,11 +93,11 @@ void DebugInfoWindow::set_engine_fps( const unsigned fps )
     AG_LabelText( fps_label_, "FPS: %d", fps );
 }
 
-void DebugInfoWindow::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn, const unsigned chunks_occluded )
+void DebugInfoWindow::set_engine_chunk_stats( const unsigned chunks_drawn, const unsigned chunks_total, const unsigned triangles_drawn, const unsigned chunks_in_frustum )
 {
-    AG_LabelText( chunks_label_          , "Chunks: %d/%d"          , chunks_drawn       , chunks_total );
-    AG_LabelText( chunks_occluded_label_ , "Chunks Occluded: %d/%d" , chunks_occluded    , chunks_total );
-    AG_LabelText( triangles_label_       , "Triangles: %d"          , triangles_drawn );
+    AG_LabelText( chunks_label_          , "Frustum: %d/%d" , chunks_in_frustum  , chunks_total      ); 
+    AG_LabelText( chunks_occluded_label_ , "Drawn: %d/%d"   , chunks_drawn       , chunks_in_frustum ); 
+    AG_LabelText( triangles_label_       , "Triangles: %d"  , triangles_drawn                        ); 
 }
 
 void DebugInfoWindow::set_current_material( const std::string& current_material )

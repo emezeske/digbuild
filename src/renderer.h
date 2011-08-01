@@ -19,11 +19,14 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#define MAJOR_OCCLUDER_CHUNK_COUNT 256
-#define MAX_OCCLUSION_QUERIES 8192
+#define MAJOR_OCCLUDER_CHUNK_COUNT 64
 
 // it might possibly be acceptable to turn this a bit higher than 0, there will be artifacts
 #define SAMPLES_NOT_OCCLUDED_THRESHOLD 0
+
+// NOTE I'm not sure what would happen if this limit were reached
+// probably Bad Things
+#define MAX_OCCLUSION_QUERIES 8192
 
 #include <GL/glew.h>
 
@@ -244,6 +247,9 @@ struct Renderer
 {
     Renderer();
 
+    typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
+    typedef std::list<DistanceChunkPair> DistanceChunkPairL;
+
     void note_chunk_changes( const Chunk& chunk );
 
 #ifdef DEBUG_COLLISIONS
@@ -252,9 +258,9 @@ struct Renderer
     void render( const SDL_GL_Window& window, const Camera& camera, const World& world );
 #endif
 
-    unsigned get_num_chunks_drawn() const { return 0; } // FIXME
+    unsigned get_num_chunks_drawn() const { return chunks_visible_.size(); }
     unsigned get_num_triangles_drawn() const { return num_triangles_drawn_; }
-    unsigned get_num_chunks_culled_by_occlusion() const { return 0; } // FIXME
+    unsigned get_num_chunks_in_frustum() const { return chunks_in_frustum_.size(); }
 
 protected:
 
@@ -267,6 +273,8 @@ protected:
     void render_collisions( const Player& player );
 #endif
 
+    void queue_chunk_for_rendering( const DistanceChunkPair& chunk );
+
     void set_render_state_for_sky();
     void set_render_state_for_depth_buffer_initialization();
     void set_render_state_for_occlusion_queries();
@@ -274,7 +282,7 @@ protected:
     void set_render_state_for_rendering_translucent( const Camera& camera, const Sky& sky );
 
     void update_frustum_lists( const Camera& camera );
-    void update_not_occluded_lists();
+    void update_chunks_visible_lists();
 
     gmtl::Matrix44f get_opengl_matrix( const GLenum matrix );
 
@@ -285,15 +293,15 @@ protected:
 
     SkyRenderer sky_renderer_;
 
-    typedef std::pair<Scalar, ChunkRenderer*> DistanceChunkPair;
-    typedef std::list<DistanceChunkPair> DistanceChunkPairL;
-
-    DistanceChunkPairL opaque_chunks_in_frustum_        ,
-                       translucent_chunks_in_frustum_   ,
-                       opaque_chunks_not_occluded_      ,
-                       translucent_chunks_not_occluded_ ;
+    DistanceChunkPairL chunks_in_frustum_          ,
+                       chunks_visible_             ,
+                       translucent_chunks_visible_ ;
                        //chunks_entering_frustum_  ,
                        //chunks_leaving_frustum_   ,
+
+    std::vector<GLuint> occlusion_queries_;
+    std::vector<GLuint>::iterator opaque_chunk_occlusion_queries_begin,
+                                  translucent_chunk_occlusion_queries_begin;
 
     unsigned num_triangles_drawn_;
 };

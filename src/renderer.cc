@@ -621,6 +621,7 @@ void SkyRenderer::render_celestial_body( const GLuint texture_id, const Vector3f
 Renderer::Renderer() :
     num_triangles_drawn_( 0 )
 {
+    occlusion_queries_.reserve( MAX_OCCLUSION_QUERIES );
 }
 
 void Renderer::note_chunk_changes( const Chunk& chunk )
@@ -657,28 +658,49 @@ void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const 
 void Renderer::render( const SDL_GL_Window& window, const Camera& camera, const World& world )
 #endif
 {
+    num_triangles_drawn_ = 0;
+
+    // TODO clean up render state changes some more
+    glDepthFunc( GL_LEQUAL );
     glDepthMask( GL_TRUE );
     glClear( GL_DEPTH_BUFFER_BIT );
-    glDepthFunc( GL_LEQUAL );
     glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
     material_manager_.deconfigure_materials();
 
     glPushMatrix();
-        camera.rotate();
-        set_render_state_for_sky();
+
+            camera.rotate();
+
+            set_render_state_for_sky();
+
         render_sky( world.get_sky() );
-        camera.translate();
-        set_render_state_for_rendering_opaque( camera, world.get_sky() );
-        update_frustum_lists( camera );
-        set_render_state_for_depth_buffer_initialization();
+
+            camera.translate();
+
+            set_render_state_for_rendering_opaque( camera, world.get_sky() );
+
+            update_frustum_lists( camera );
+
+            set_render_state_for_depth_buffer_initialization();
+
         render_depth_buffer_initialization();
-        update_not_occluded_lists();
-        set_render_state_for_rendering_opaque( camera, world.get_sky() );
+
+            set_render_state_for_occlusion_queries();
+
+            update_chunks_visible_lists();
+
+            set_render_state_for_rendering_opaque( camera, world.get_sky() );
+
         render_visible_opaque_chunks();
-        set_render_state_for_rendering_translucent( camera, world.get_sky() );
+
+            set_render_state_for_rendering_translucent( camera, world.get_sky() );
+
         render_visible_translucent_chunks( camera );
-        glDisable( GL_DEPTH_TEST );
-        material_manager_.deconfigure_materials();
+
+            glDisable( GL_DEPTH_TEST );
+
+            material_manager_.deconfigure_materials();
+
 #ifdef DEBUG_COLLISIONS
         render_collisions( player );
 #endif
@@ -698,8 +720,7 @@ void Renderer::render_sky( const Sky& sky )
 void Renderer::update_frustum_lists( const Camera& camera )
 {
     // TODO: exploit the temporal stability of chunks-in-frustum
-    opaque_chunks_in_frustum_.clear();
-    translucent_chunks_in_frustum_.clear();
+    chunks_in_frustum_.clear();
 
     gmtl::Frustumf frustum(
         get_opengl_matrix( GL_MODELVIEW_MATRIX ),
@@ -718,15 +739,12 @@ void Renderer::update_frustum_lists( const Camera& camera )
             const Scalar distance_squared          = gmtl::lengthSquared( camera_to_centroid );
             const DistanceChunkPair distance_chunk = std::make_pair( distance_squared, &chunk_renderer );
 
-            if ( chunk_renderer.has_translucent_materials() )
-              translucent_chunks_in_frustum_.push_back( distance_chunk );
-            opaque_chunks_in_frustum_.push_back( distance_chunk );
+            chunks_in_frustum_.push_back( distance_chunk );
         }
     }
 
     // sort chunks by distance
-    opaque_chunks_in_frustum_.sort();
-    translucent_chunks_in_frustum_.sort();
+    chunks_in_frustum_.sort();
 }
 
 void Renderer::set_render_state_for_sky()
@@ -767,26 +785,70 @@ void Renderer::set_render_state_for_rendering_translucent( const Camera& camera,
     //glColorMask( GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE );
 }
 
-void Renderer::update_not_occluded_lists()
+void Renderer::update_chunks_visible_lists()
 {
-    opaque_chunks_not_occluded_.clear(); // TODO OPTIMIZE
-    translucent_chunks_not_occluded_.clear(); // TODO OPTIMIZE
+    chunks_visible_.clear(); // TODO OPTIMIZE
+    translucent_chunks_visible_.clear(); // TODO OPTIMIZE
 
-    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks_in_frustum_ )
+    GLuint samples_not_occluded;
+
+    // FIXME all the chunks in translucent_chunks are also in opaque_chunks ...
+    // so we are doing 2 occlusion queries for the translucent chunks, unnecessarily ... needs refactoring
+    // maybe build the list of translucent chunks after occlusion culling is done?
+    // I think that makes sense ... the only reason for them to be in separate lists is for translucents to be drawn back to front
+    // right now they're split into translucents-in-frustum etc which is pointless I think ... do occlusion queries first on all chunks in frustum, then split the lists and the translucents are already sorted, rev-iterate and voila
+    int num_occlusion_queries = chunks_in_frustum_.size() - MAJOR_OCCLUDER_CHUNK_COUNT;
+
+    GLuint * current_occlusion_query = &occlusion_queries_[0];
+    glGenQueriesARB( num_occlusion_queries, current_occlusion_query );
+
+    int count = 0;
+    BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
-        opaque_chunks_not_occluded_.push_back( it );
+        if( ++count < MAJOR_OCCLUDER_CHUNK_COUNT ) // these were rendered to initialize the depth buffer, they are not going to be occluded so skip them
+          continue;
+        glBeginQueryARB( GL_SAMPLES_PASSED_ARB, *(current_occlusion_query++) );
+        it.second->render_aabb();
+        glEndQueryARB( GL_SAMPLES_PASSED_ARB );
     }
 
-    BOOST_FOREACH( const DistanceChunkPair& it, translucent_chunks_in_frustum_ )
+    GLuint * last_occlusion_query = current_occlusion_query - 1;
+
+    GLint occlusion_query_results_available;
+    // FIXME wasteful, blocking on queries, twiddling our thumbs
+    // insert timing here, guessing it showed 0ms before because of the glFlush()
+    while( ! occlusion_query_results_available )
+      glGetQueryObjectivARB( *last_occlusion_query, GL_QUERY_RESULT_AVAILABLE_ARB, &occlusion_query_results_available );
+
+    count = 0;
+    current_occlusion_query = &occlusion_queries_[0];
+    BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
-        translucent_chunks_not_occluded_.push_back( it );
+        if( ++count < MAJOR_OCCLUDER_CHUNK_COUNT ) // these were rendered to initialize the depth buffer, they are not going to be occluded so skip them
+        {
+            queue_chunk_for_rendering( it );
+            continue;
+        }
+        // get results:
+        glGetQueryObjectuivARB( *(current_occlusion_query++), GL_QUERY_RESULT_ARB, &samples_not_occluded );
+        if ( samples_not_occluded > SAMPLES_NOT_OCCLUDED_THRESHOLD )
+            queue_chunk_for_rendering( it );
     }
+}
+
+void Renderer::queue_chunk_for_rendering( const DistanceChunkPair& distance_chunk_pair )
+{
+    num_triangles_drawn_ += distance_chunk_pair.second->get_num_triangles();
+    // it's visible:
+    chunks_visible_.push_back( distance_chunk_pair );
+    if ( distance_chunk_pair.second->has_translucent_materials() )
+      translucent_chunks_visible_.push_back( distance_chunk_pair );
 }
 
 void Renderer::render_visible_translucent_chunks( const Camera& camera )
 {
     // draw translucent parts of the Chunks from back to front
-    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks_not_occluded_ )
+    BOOST_REVERSE_FOREACH( const DistanceChunkPair& it, translucent_chunks_visible_ )
     {
         it.second->render_translucent( camera );
     }
@@ -795,7 +857,7 @@ void Renderer::render_visible_translucent_chunks( const Camera& camera )
 void Renderer::render_visible_opaque_chunks()
 {
     // draw opaque parts of the Chunks from front to back
-    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks_not_occluded_ )
+    BOOST_FOREACH( const DistanceChunkPair& it, chunks_visible_ )
     {
         it.second->render_opaque();
     }
@@ -808,11 +870,10 @@ void Renderer::render_depth_buffer_initialization()
 {
     // draw opaque parts of the Chunks from front to back
     int i = 0;
-    BOOST_FOREACH( const DistanceChunkPair& it, opaque_chunks_in_frustum_ )
+    BOOST_FOREACH( const DistanceChunkPair& it, chunks_in_frustum_ )
     {
+        if ( ++i > MAJOR_OCCLUDER_CHUNK_COUNT ) break;
         it.second->render_opaque();
-        if ( i++ > MAJOR_OCCLUDER_CHUNK_COUNT )
-          break;
     }
 }
 
