@@ -61,7 +61,39 @@
             current_time_;
     };
 #else
-    #error "TODO: Implement HighResolutionTimer in terms of Window's QueryPerformanceTimer."
+    #include <windows.h>
+    
+    struct HighResolutionTimer
+    {
+        HighResolutionTimer()
+        {
+            LARGE_INTEGER frequency;
+            QueryPerformanceFrequency( &frequency );
+            frequency_ = frequency.QuadPart;
+            QueryPerformanceCounter( &last_time_ );
+        }
+    
+        double get_seconds_elapsed()
+        {
+            QueryPerformanceCounter( &current_time_ );
+    
+            return
+                (current_time_.QuadPart - last_time_.QuadPart) * 1./frequency_;
+        }
+    
+        void reset()
+        {
+            last_time_ = current_time_;
+        }
+    
+    protected:
+    
+        double frequency_;
+        
+        LARGE_INTEGER
+            last_time_,
+            current_time_;
+    };
 #endif
 
 #ifdef DEBUG_TIMERS
